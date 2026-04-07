@@ -437,45 +437,108 @@ async function loadAvailablePseudonyms(){
 }
 
 g('logout-btn').onclick=async function(){
-  await sb.auth.signOut();
+  console.log('[logout] click');
+  // Принудительно показываем экран входа, не дожидаясь ответа сервера
+  // (на случай если signOut зависнет из-за проблем с сетью или realtime)
+  try{
+    stopRealtime();
+    console.log('[logout] realtime stopped');
+  }catch(e){console.error('[logout] stopRealtime error:',e)}
+  try{
+    // Не ждём бесконечно — если за 3 секунды не ответил, форсим выход локально
+    var done=false;
+    var timeout=setTimeout(function(){
+      if(done)return;
+      console.warn('[logout] signOut timeout, forcing local logout');
+      forceLocalLogout();
+    },3000);
+    await sb.auth.signOut();
+    done=true;
+    clearTimeout(timeout);
+    console.log('[logout] signOut completed');
+    // На всякий случай форсим UI — onAuthStateChange должен сработать сам, но подстрахуемся
+    forceLocalLogout();
+  }catch(e){
+    console.error('[logout] signOut error:',e);
+    forceLocalLogout();
+  }
 };
+
+function forceLocalLogout(){
+  currentUser=null;userProfile=null;
+  g('loading').style.display='none';
+  g('auth-screen').style.display='';
+  g('main-app').style.display='none';
+  g('login-btn').disabled=false;
+  g('reg-btn').disabled=false;
+  // Очищаем поля
+  g('login-pass').value='';
+}
 
 // ============================================================================
 // АВТО-ПЕРЕХОД ПО СОСТОЯНИЮ AUTH
 // ============================================================================
 sb.auth.onAuthStateChange(async function(event,session){
-  if(session&&session.user){
-    currentUser=session.user;
-    // Загружаем профиль из таблицы profiles
-    var pr=await sb.from('profiles').select('*').eq('id',currentUser.id).single();
-    if(pr.error||!pr.data){
-      // Профиль не создан — что-то пошло не так
-      console.error('Профиль не найден:',pr.error);
-      toast('Профиль не найден. Обратитесь к организатору.',true);
-      await sb.auth.signOut();
-      return;
+  console.log('[auth] state change:',event,'session:',session?'yes':'no');
+  try{
+    if(session&&session.user){
+      currentUser=session.user;
+      // Загружаем профиль из таблицы profiles
+      var pr=await sb.from('profiles').select('*').eq('id',currentUser.id).single();
+      if(pr.error||!pr.data){
+        console.error('[auth] профиль не найден:',pr.error);
+        toast('Профиль не найден. Обратитесь к организатору.',true);
+        // Не вызываем signOut здесь, чтобы не зациклиться. Просто показываем экран входа.
+        forceLocalLogout();
+        return;
+      }
+      userProfile=pr.data;
+      console.log('[auth] profile loaded, role =',userProfile.role);
+      await startApp();
+    }else{
+      console.log('[auth] no session, showing login screen');
+      currentUser=null;userProfile=null;
+      stopRealtime();
+      g('loading').style.display='none';
+      g('auth-screen').style.display='';
+      g('main-app').style.display='none';
+      g('login-btn').disabled=false;
+      g('reg-btn').disabled=false;
     }
-    userProfile=pr.data;
-    startApp();
-  }else{
-    currentUser=null;userProfile=null;
-    stopRealtime();
+  }catch(ex){
+    console.error('[auth] exception in onAuthStateChange:',ex);
+    // Гарантированно скрываем спиннер, чтобы не зависнуть
     g('loading').style.display='none';
-    g('auth-screen').style.display='';
-    g('main-app').style.display='none';
-    g('login-btn').disabled=false;
-    g('reg-btn').disabled=false;
+    if(!session)g('auth-screen').style.display='';
+    toast('Ошибка авторизации: '+(ex.message||ex),true);
   }
 });
 
 // При первой загрузке проверяем сессию
 (async function(){
-  var s=await sb.auth.getSession();
-  if(!s.data.session){
+  // Страховка: если за 5 секунд ничего не произошло — показываем экран входа
+  var bootTimeout=setTimeout(function(){
+    if(g('loading').style.display!=='none'){
+      console.warn('[boot] timeout, showing login screen');
+      g('loading').style.display='none';
+      g('auth-screen').style.display='';
+    }
+  },5000);
+  try{
+    var s=await sb.auth.getSession();
+    console.log('[boot] initial session:',s.data.session?'yes':'no');
+    if(!s.data.session){
+      g('loading').style.display='none';
+      g('auth-screen').style.display='';
+    }
+    // Если сессия есть, onAuthStateChange сам сработает
+  }catch(e){
+    console.error('[boot] getSession error:',e);
     g('loading').style.display='none';
     g('auth-screen').style.display='';
+  }finally{
+    clearTimeout(bootTimeout);
   }
-  // Если сессия есть, onAuthStateChange сам сработает
 })();
 
 // ============================================================================
