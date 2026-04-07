@@ -370,7 +370,15 @@ g('login-btn').onclick=async function(){
   var email=g('login-email').value.trim(),pass=g('login-pass').value;
   if(!email||!pass){g('login-error').textContent='Заполните все поля';return}
   g('login-btn').disabled=true;g('login-error').textContent='';g('login-info').textContent='';
+  // Сначала чистим любую остаточную локальную сессию,
+  // чтобы Supabase не вернул SIGNED_IN от предыдущего пользователя
+  try{
+    stopRealtime();
+    await sb.auth.signOut({scope:'local'});
+  }catch(e){console.warn('[login] pre-cleanup warn:',e)}
+  console.log('[login] attempting signIn for',email);
   var res=await sb.auth.signInWithPassword({email:email,password:pass});
+  console.log('[login] signIn result:',res.error?'ERROR: '+res.error.message:'OK');
   if(res.error){
     g('login-error').textContent=authErrorRu(res.error);
     g('login-btn').disabled=false;
@@ -452,7 +460,7 @@ g('logout-btn').onclick=async function(){
       console.warn('[logout] signOut timeout, forcing local logout');
       forceLocalLogout();
     },3000);
-    await sb.auth.signOut();
+    await sb.auth.signOut({scope:'local'});
     done=true;
     clearTimeout(timeout);
     console.log('[logout] signOut completed');
