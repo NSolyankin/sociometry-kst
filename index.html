@@ -283,7 +283,38 @@ td:first-child{text-align:left;font-weight:500}
 // ============================================================================
 var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co';
 var SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
-var sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+
+// Создаём клиент Supabase. При проблемах с зависанием библиотеки
+// клиент можно пересоздать функцией recreateClient() ниже.
+var sb=null;
+function createSbClient(){
+  return window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},
+    realtime:{params:{eventsPerSecond:1}}
+  });
+}
+sb=createSbClient();
+
+// Принудительно очищает локальную сессию: выбрасывает клиент,
+// чистит localStorage и создаёт новый. Используется вместо signOut(),
+// который иногда виснет.
+function hardLocalLogout(){
+  console.log('[hardLogout] start');
+  // Чистим все ключи Supabase из localStorage
+  try{
+    var keys=[];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&(k.indexOf('sb-')===0||k.indexOf('supabase')>=0))keys.push(k);
+    }
+    keys.forEach(function(k){console.log('[hardLogout] removing',k);localStorage.removeItem(k)});
+  }catch(e){console.warn('[hardLogout] localStorage error:',e)}
+  // Останавливаем polling
+  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
+  // Пересоздаём клиент
+  try{sb=createSbClient();console.log('[hardLogout] client recreated')}
+  catch(e){console.error('[hardLogout] recreate error:',e)}
+}
 
 var DEFAULT_LABELS=["С кем бы стал делать в первую очередь","С кем бы стал делать во вторую очередь","С кем бы стал делать в третью очередь"];
 var EC=['#1565c0','#43a047','#ab47bc','#ff6f00','#00897b','#d81b60','#5e35b1','#00acc1','#8d6e63','#546e7a'];
@@ -305,7 +336,8 @@ var appTitle='Социометрия';
 var appSubtitle='Клуб Социальных Технологий — группа 161';
 
 // Realtime channels
-var chProfiles=null,chSurveys=null,chResponses=null,chPseudonyms=null;
+// Polling таймер вместо realtime каналов (надёжнее на проблемных сетях)
+var _pollTimer=null;
 
 var _renderTimer=null,_eventsInited=false;
 
@@ -370,20 +402,24 @@ g('login-btn').onclick=async function(){
   var email=g('login-email').value.trim(),pass=g('login-pass').value;
   if(!email||!pass){g('login-error').textContent='Заполните все поля';return}
   g('login-btn').disabled=true;g('login-error').textContent='';g('login-info').textContent='';
-  // Сначала чистим любую остаточную локальную сессию,
-  // чтобы Supabase не вернул SIGNED_IN от предыдущего пользователя
-  try{
-    stopRealtime();
-    await sb.auth.signOut({scope:'local'});
-  }catch(e){console.warn('[login] pre-cleanup warn:',e)}
+  // Перед входом гарантированно чистим локальную сессию,
+  // чтобы не было конфликта с предыдущим пользователем
+  hardLocalLogout();
   console.log('[login] attempting signIn for',email);
-  var res=await sb.auth.signInWithPassword({email:email,password:pass});
-  console.log('[login] signIn result:',res.error?'ERROR: '+res.error.message:'OK');
-  if(res.error){
-    g('login-error').textContent=authErrorRu(res.error);
+  try{
+    var res=await sb.auth.signInWithPassword({email:email,password:pass});
+    console.log('[login] signIn result:',res.error?'ERROR: '+res.error.message:'OK');
+    if(res.error){
+      g('login-error').textContent=authErrorRu(res.error);
+      g('login-btn').disabled=false;
+      return;
+    }
+    // Дальше отработает onAuthStateChange
+  }catch(ex){
+    console.error('[login] exception:',ex);
+    g('login-error').textContent='Сетевая ошибка: '+(ex.message||ex);
     g('login-btn').disabled=false;
   }
-  // Успешный вход обработается через onAuthStateChange ниже
 };
 g('login-pass').onkeydown=function(e){if(e.key==='Enter')g('login-btn').click()};
 
@@ -444,32 +480,13 @@ async function loadAvailablePseudonyms(){
   });
 }
 
-g('logout-btn').onclick=async function(){
+g('logout-btn').onclick=function(){
   console.log('[logout] click');
-  // Принудительно показываем экран входа, не дожидаясь ответа сервера
-  // (на случай если signOut зависнет из-за проблем с сетью или realtime)
-  try{
-    stopRealtime();
-    console.log('[logout] realtime stopped');
-  }catch(e){console.error('[logout] stopRealtime error:',e)}
-  try{
-    // Не ждём бесконечно — если за 3 секунды не ответил, форсим выход локально
-    var done=false;
-    var timeout=setTimeout(function(){
-      if(done)return;
-      console.warn('[logout] signOut timeout, forcing local logout');
-      forceLocalLogout();
-    },3000);
-    await sb.auth.signOut({scope:'local'});
-    done=true;
-    clearTimeout(timeout);
-    console.log('[logout] signOut completed');
-    // На всякий случай форсим UI — onAuthStateChange должен сработать сам, но подстрахуемся
-    forceLocalLogout();
-  }catch(e){
-    console.error('[logout] signOut error:',e);
-    forceLocalLogout();
-  }
+  // Не вызываем sb.auth.signOut — он виснет в supabase-js v2
+  // на проблемных сетях. Вместо этого пересоздаём клиент и чистим localStorage.
+  hardLocalLogout();
+  forceLocalLogout();
+  console.log('[logout] done');
 };
 
 function forceLocalLogout(){
@@ -479,7 +496,6 @@ function forceLocalLogout(){
   g('main-app').style.display='none';
   g('login-btn').disabled=false;
   g('reg-btn').disabled=false;
-  // Очищаем поля
   g('login-pass').value='';
 }
 
@@ -506,7 +522,7 @@ sb.auth.onAuthStateChange(async function(event,session){
     }else{
       console.log('[auth] no session, showing login screen');
       currentUser=null;userProfile=null;
-      stopRealtime();
+      stopPolling();
       g('loading').style.display='none';
       g('auth-screen').style.display='';
       g('main-app').style.display='none';
@@ -550,13 +566,23 @@ sb.auth.onAuthStateChange(async function(event,session){
 })();
 
 // ============================================================================
-// ОСТАНОВКА REALTIME ПОДПИСОК
+// POLLING ВМЕСТО REALTIME
+// Periodically reloads data instead of using WebSocket-based realtime channels,
+// which are unreliable in this environment and can cause client to hang.
 // ============================================================================
-function stopRealtime(){
-  [chProfiles,chSurveys,chResponses,chPseudonyms].forEach(function(c){
-    if(c){try{sb.removeChannel(c)}catch(e){}}
-  });
-  chProfiles=chSurveys=chResponses=chPseudonyms=null;
+function stopPolling(){
+  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
+}
+function startPolling(){
+  stopPolling();
+  _pollTimer=setInterval(async function(){
+    if(!currentUser){stopPolling();return}
+    try{
+      await Promise.all([loadPseudonyms(),loadAllProfiles(),loadAllSurveys()]);
+      // loadAllSurveys уже загружает responses текущего опроса
+      scheduleRender();
+    }catch(e){console.warn('[poll] error:',e)}
+  },10000);
 }
 
 // ============================================================================
@@ -575,8 +601,8 @@ async function startApp(){
     loadAllSurveys()
   ]);
 
-  // Подписываемся на realtime
-  setupRealtime();
+  // Запускаем периодическое обновление вместо realtime-каналов
+  startPolling();
 
   if(!_eventsInited){initEvents();_eventsInited=true}
   scheduleRender();
@@ -593,8 +619,7 @@ async function loadAllProfiles(){
   if(r.error){console.error('loadAllProfiles',r.error);return}
   users={};
   r.data.forEach(function(p){users[p.id]=p});
-  // Обновляем свой профиль
-  if(users[currentUser.id])userProfile=users[currentUser.id];
+  if(currentUser&&users[currentUser.id])userProfile=users[currentUser.id];
 }
 
 async function loadAllSurveys(){
@@ -623,37 +648,6 @@ async function loadResponses(){
   var r=await sb.from('responses').select('*').eq('survey_id',viewSurveyId).order('created_at');
   if(r.error){console.error('loadResponses',r.error);responses=[];return}
   responses=r.data;
-}
-
-// ============================================================================
-// REALTIME-ПОДПИСКИ (аналог Firestore onSnapshot)
-// ============================================================================
-function setupRealtime(){
-  stopRealtime();
-
-  chPseudonyms=sb.channel('rt-pseudonyms')
-    .on('postgres_changes',{event:'*',schema:'public',table:'pseudonyms'},async function(){
-      await loadPseudonyms();scheduleRender();
-    }).subscribe();
-
-  chProfiles=sb.channel('rt-profiles')
-    .on('postgres_changes',{event:'*',schema:'public',table:'profiles'},async function(){
-      await loadAllProfiles();renderHeader();scheduleRender();
-    }).subscribe();
-
-  chSurveys=sb.channel('rt-surveys')
-    .on('postgres_changes',{event:'*',schema:'public',table:'surveys'},async function(){
-      await loadAllSurveys();scheduleRender();
-    }).subscribe();
-
-  chResponses=sb.channel('rt-responses')
-    .on('postgres_changes',{event:'*',schema:'public',table:'responses'},async function(payload){
-      // Перезагружаем только если изменения касаются текущего просматриваемого опроса
-      var sid=payload.new&&payload.new.survey_id||payload.old&&payload.old.survey_id;
-      if(sid===viewSurveyId){
-        await loadResponses();scheduleRender();
-      }
-    }).subscribe();
 }
 
 function renderHeader(){
