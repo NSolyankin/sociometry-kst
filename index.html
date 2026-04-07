@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=yes">
+<title>Социометрия КСТ</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--bg:#f5f1ea;--card:#fffdf8;--border:#e8e0d4;--accent:#8b6f47;--accent2:#6d5635;--text:#2c2c2c;--muted:#999;--tab-bg:#ede8df;--green:#2e7d32;--red:#c0392b;--red-bg:#fce4ec;--red-text:#c62828;--star:#f9a825;--pref:#43a047;--accepted:#78909c;--isolated:#bdbdbd}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%}
+.app{max-width:960px;margin:0 auto;padding:16px 12px 60px}
+.auth-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.06)}
+.auth-title{font-family:Georgia,serif;font-size:28px;font-weight:700;color:#3a3028;margin-bottom:4px;text-align:center}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:24px;text-align:center}
+.auth-field{margin-bottom:16px}
+.auth-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
+.auth-input{width:100%;padding:12px 14px;border:1px solid #d4cbbf;border-radius:8px;font-size:16px;background:#fff;color:#333;outline:none;-webkit-appearance:none}
+.auth-input:focus{border-color:var(--accent)}
+.auth-select{width:100%;padding:12px 14px;border:1px solid #d4cbbf;border-radius:8px;font-size:16px;background:#fff;color:#333;-webkit-appearance:auto;appearance:auto}
+.auth-btn{display:block;width:100%;padding:14px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation;transition:background .2s}
+.auth-btn:hover{background:var(--accent2)}
+.auth-btn:disabled{opacity:.5;cursor:not-allowed}
+.auth-link{display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--accent);cursor:pointer;border:none;background:none}
+.auth-link:hover{text-decoration:underline}
+.auth-error{color:var(--red);font-size:13px;margin-top:8px;text-align:center;min-height:18px}
+.auth-info{color:var(--green);font-size:13px;margin-top:8px;text-align:center;min-height:18px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.header-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.user-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:var(--tab-bg);font-size:13px;font-weight:500;border:1px solid var(--border)}
+.user-role{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);font-weight:700}
+.logout-btn{background:none;border:1px solid #d4cbbf;padding:6px 14px;border-radius:8px;font-size:12px;color:#777;cursor:pointer}
+.et{display:block;font-size:26px;font-weight:700;color:#3a3028;margin-bottom:2px;border:none;background:none;outline:none;width:100%;cursor:text;font-family:Georgia,serif}
+.es{display:block;font-size:13px;color:var(--muted);margin-bottom:12px;border:none;background:none;outline:none;width:100%;cursor:text}
+.et:focus,.es:focus{border-bottom:2px solid var(--accent)}
+.et[readonly],.es[readonly]{cursor:default}
+h2{font-family:Georgia,serif;font-size:20px;font-weight:600;color:#3a3028;margin-bottom:14px}
+h3{font-size:15px;font-weight:600;margin-bottom:10px;color:#3a3028}
+.tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
+.tab{display:inline-block;padding:10px 16px;border:none;cursor:pointer;font-size:14px;font-weight:500;border-radius:8px;background:var(--tab-bg);color:#777;-webkit-appearance:none;appearance:none;touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:all .15s}
+.tab.active{background:var(--accent);color:#fff}
+.tab:hover:not(.active){background:#e0d8cc}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.field{margin-bottom:14px}
+.label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px}
+select,input[type=text],input[type=email],input[type=password]{font-size:16px;padding:12px 14px;border:1px solid #d4cbbf;border-radius:8px;width:100%;background:#fff;color:#333;-webkit-appearance:auto;appearance:auto}
+select:focus,input:focus{outline:none;border-color:var(--accent)}
+.ql{font-size:12px;padding:6px 10px;color:var(--muted);border:1px dashed #ddd;background:transparent;width:100%;border-radius:6px;margin-top:4px}
+.btn{display:inline-block;font-size:14px;font-weight:600;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;text-align:center;transition:all .15s}
+.bp{background:var(--accent);color:#fff}.bp:hover{background:var(--accent2)}
+.bs{background:var(--tab-bg);color:#666;font-size:13px;padding:10px 16px}
+.bd{background:transparent;color:var(--red);border:1px solid var(--red);padding:10px 16px;font-size:13px}
+.bsm{display:inline-block;background:transparent;border:1px solid #d4cbbf;padding:6px 12px;font-size:12px;color:#777;border-radius:6px;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;transition:all .15s}
+.bsm:hover{border-color:var(--accent);color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat{text-align:center;padding:14px 8px;border-radius:10px;background:var(--tab-bg)}
+.sn2{font-size:26px;font-weight:700;color:var(--accent)}
+.sl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--accent);color:#fff;padding:8px 6px;text-align:center;font-weight:600;white-space:nowrap}
+th:first-child{text-align:left;border-radius:8px 0 0 0}th:last-child{border-radius:0 8px 0 0}
+td{padding:7px 6px;border-bottom:1px solid var(--border);text-align:center}
+td:first-child{text-align:left;font-weight:500}
+.bn{display:inline-block;background:var(--red-bg);color:var(--red-text);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.bst{display:inline-block;color:#fff;font-size:11px;padding:3px 9px;border-radius:12px;font-weight:600;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;margin:3px;border-radius:20px;background:#f0ece4;font-size:13px;border:1px solid #e0d8cc}
+.cx{background:none;border:none;cursor:pointer;color:var(--red);font-size:18px;padding:0 4px;touch-action:manipulation;-webkit-appearance:none}
+.me{color:var(--red);font-size:13px;margin-top:8px}
+.mo{color:var(--green);font-size:13px;margin-top:8px;background:#e8f5e9;padding:10px 14px;border-radius:8px}
+.mc{display:inline-block;padding:6px 14px;margin:3px;border-radius:20px;background:#f0ece4;border:1px solid #e0d8cc;font-size:13px}
+.lg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:10px}
+.ll{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-right:3px}
+.cr{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.cr select{flex:1}
+.cr .cl{min-width:60px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase}
+.ab{display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap;align-items:center}
+.page{display:none}.page.active{display:block}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);animation:fadeUp .3s ease}
+.toast.toast-err{background:var(--red)}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--card);border-radius:16px;padding:28px;max-width:440px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto}
+.modal h2{margin-bottom:16px}
+.modal-actions{display:flex;gap:8px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap}
+.voted-check{color:var(--green);font-weight:700}
+.not-voted{color:var(--muted);font-style:italic}
+.survey-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.survey-bar select{max-width:300px;font-size:14px;padding:8px 12px}
+.survey-bar .survey-status{font-size:12px;padding:4px 10px;border-radius:12px;font-weight:600}
+.survey-bar .s-active{background:#e8f5e9;color:var(--green)}
+.survey-bar .s-closed{background:#f5f1ea;color:var(--muted)}
+.survey-item{padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--card);display:flex;justify-content:space-between;align-items:center;transition:all .15s;gap:10px}
+.survey-item .si-clickable{flex:1;cursor:pointer}
+.survey-item:hover{border-color:var(--accent)}
+.survey-item.active-survey{border-color:var(--green);border-width:2px}
+.survey-item .si-name{font-weight:600;font-size:14px}
+.survey-item .si-date{font-size:12px;color:var(--muted)}
+.survey-item .si-status{font-size:11px;padding:3px 8px;border-radius:10px;font-weight:600}
+.docs-block{font-size:14px;line-height:1.7;color:#444}
+.docs-block h3{margin-top:18px;margin-bottom:8px;color:#3a3028}
+.docs-block ul{padding-left:22px;margin-bottom:8px}
+.docs-block li{margin-bottom:4px}
+.role-select{padding:4px 8px;border:1px solid #d4cbbf;border-radius:6px;font-size:12px;background:#fff}
+@media(max-width:600px){.app{padding:12px 8px 60px}.et{font-size:22px}.tab{padding:9px 12px;font-size:13px}.card{padding:16px}th,td{padding:5px 4px;font-size:11px}.cr .cl{min-width:50px;font-size:11px}.stats{gap:6px}.stat{padding:10px 6px}.sn2{font-size:22px}.auth-card{padding:24px 20px}.header{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<div id="loading" class="loading"><div class="spinner"></div><div style="color:#999;font-size:14px">Загрузка...</div></div>
+
+<!-- Auth -->
+<div id="auth-screen" style="display:none"><div class="auth-wrap"><div class="auth-card">
+<div class="auth-title">Социометрия</div><div class="auth-sub">Клуб Социальных Технологий</div>
+<div id="login-form">
+<div class="auth-field"><label class="auth-label">Email</label><input type="email" id="login-email" class="auth-input" placeholder="email@example.com" autocomplete="email"></div>
+<div class="auth-field"><label class="auth-label">Пароль</label><input type="password" id="login-pass" class="auth-input" placeholder="••••••" autocomplete="current-password"></div>
+<button class="auth-btn" id="login-btn">Войти</button>
+<div id="login-error" class="auth-error"></div>
+<div id="login-info" class="auth-info"></div>
+<button class="auth-link" id="show-register">Нет аккаунта? Зарегистрироваться</button>
+<button class="auth-link" id="show-reset">Забыли пароль?</button>
+</div>
+<div id="register-form" style="display:none">
+<div class="auth-field"><label class="auth-label">Email</label><input type="email" id="reg-email" class="auth-input" placeholder="email@example.com" autocomplete="email"></div>
+<div class="auth-field"><label class="auth-label">Пароль (мин. 6 символов)</label><input type="password" id="reg-pass" class="auth-input" placeholder="••••••" autocomplete="new-password"></div>
+<div class="auth-field"><label class="auth-label">Игровое имя</label><select id="reg-name" class="auth-select"><option value="">— Выберите псевдоним —</option></select></div>
+<button class="auth-btn" id="reg-btn">Зарегистрироваться</button><div id="reg-error" class="auth-error"></div>
+<button class="auth-link" id="show-login">Уже есть аккаунт? Войти</button>
+</div>
+<div id="reset-form" style="display:none">
+<div class="auth-field"><label class="auth-label">Email для сброса пароля</label><input type="email" id="reset-email" class="auth-input" placeholder="email@example.com" autocomplete="email"></div>
+<button class="auth-btn" id="reset-btn">Отправить ссылку</button>
+<div id="reset-error" class="auth-error"></div>
+<div id="reset-info" class="auth-info"></div>
+<button class="auth-link" id="show-login-from-reset">← Назад к входу</button>
+</div>
+</div></div></div>
+
+<!-- Main App -->
+<div id="main-app" style="display:none"><div class="app">
+<div class="header">
+<div class="header-left"><span class="user-badge" id="user-badge"></span><span class="user-role" id="user-role"></span></div>
+<button class="logout-btn" id="logout-btn">Выйти</button>
+</div>
+<input type="text" class="et" id="mt"><input type="text" class="es" id="ms">
+
+<!-- Survey selector -->
+<div id="survey-bar" class="survey-bar" style="display:none">
+<span class="label" style="margin:0">Опрос:</span>
+<select id="survey-select"></select>
+<span id="survey-status-badge"></span>
+</div>
+
+<div class="tabs" id="tbar"></div>
+
+<!-- Vote -->
+<div id="p-vote" class="page">
+<div class="stats" id="vote-stats"></div>
+<div id="vote-closed-msg"></div>
+<div class="card" id="vote-card">
+<h2>Голосование</h2>
+<div id="vote-status"></div>
+<div class="label" style="margin-bottom:8px">Позитивные выборы</div>
+<div id="pch"></div>
+<div class="ab"><span style="font-size:12px;color:var(--muted)" id="ci"></span></div>
+<div id="neg-wrap">
+<div class="label">Негативный выбор</div>
+<div class="field"><select id="fn"></select></div>
+<div style="font-size:11px;color:var(--muted);margin-top:-8px;margin-bottom:12px" id="neg-label-display"></div>
+</div>
+<div id="fm"></div>
+<div style="margin-top:16px"><button class="btn bp" id="bsub" style="display:block;width:100%">Сохранить ответ</button></div>
+</div>
+<div id="my-vote-info"></div>
+</div>
+
+<!-- Results -->
+<div id="p-results" class="page">
+<div class="stats" id="rst"></div>
+<div class="card" id="rc">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+<h2 style="margin-bottom:0">Сводная таблица</h2>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="bsm" id="bct" title="Скопировать таблицу">📋</span><span class="bsm" id="bcx" title="Скопировать текст">📝</span><span class="bsm" id="bpr" title="Печать">🖨</span></div>
+</div>
+<div class="tw" id="rt"></div>
+<div style="margin-top:14px;padding:10px 14px;border-radius:8px;background:var(--bg);font-size:12px;line-height:1.8"><strong>Статусы:</strong> <span class="bst" style="background:var(--star)">Звезда</span> 8+ <span class="bst" style="background:var(--pref)">Предпочит.</span> 4–7 <span class="bst" style="background:var(--accepted)">Принятый</span> 1–3 <span class="bst" style="background:var(--isolated)">Изолир.</span> 0 <span class="bst" style="background:#e53935">Отверг.</span> 3+нег.</div>
+</div>
+<div id="mu"></div>
+</div>
+
+<!-- All Responses (organizer) -->
+<div id="p-responses" class="page"><div class="card"><h2>Все ответы</h2><div class="tw" id="all-responses-table"></div></div></div>
+
+<!-- Sociogram (organizer) -->
+<div id="p-sociogram" class="page"><div class="card" id="sc" style="padding:14px">
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><h2 style="margin-bottom:0">Социограмма</h2><div style="display:flex;gap:6px"><span class="bsm" id="bpng" title="PNG">💾</span><span class="bsm" id="bps" title="Печать">🖨</span></div></div>
+<div class="lg" id="slg"></div><div id="sco" style="overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
+</div></div>
+
+<!-- Archive -->
+<div id="p-archive" class="page"><div class="card"><h2>Архив опросов</h2><div id="archive-list"></div></div></div>
+
+<!-- Profile -->
+<div id="p-profile" class="page">
+<div class="card"><h2>Профиль</h2>
+<div id="profile-info"></div>
+<div style="margin-top:16px"><button class="btn bp" id="btn-change-pass">Сменить пароль</button></div>
+</div>
+</div>
+
+<!-- Admin (organizer) -->
+<div id="p-admin" class="page">
+<div class="card"><h2>Управление опросами</h2>
+<div id="active-survey-info"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+<button class="btn bp" id="btn-new-survey">+ Новый опрос</button>
+<button class="btn bd" id="btn-close-survey">Завершить текущий</button>
+</div>
+</div>
+<div class="card"><h2 id="nh">Псевдонимы группы</h2><div id="nc"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><input type="text" id="ni" placeholder="Новый псевдоним" style="max-width:200px"><span class="btn bp" id="bna">Добавить</span></div></div>
+<div class="card"><h2>Зарегистрированные пользователи</h2><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Удаление пользователя освобождает его псевдоним. Ответы в архивных опросах сохраняются.</p><div id="registered-users-list"></div></div>
+<div class="card"><h2>Настройки голосования</h2>
+<p style="font-size:12px;color:var(--muted);margin-bottom:12px">Настройки применяются к текущему активному опросу.</p>
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><span class="label" style="margin:0">Позиций:</span><span class="btn bs" id="ba" style="padding:8px 14px">＋</span><span id="pos-count" style="font-size:18px;font-weight:700;color:var(--accent)"></span><span class="btn bs" id="br" style="padding:8px 14px">－</span></div>
+<div style="margin-bottom:12px"><label style="font-size:13px;color:#666;cursor:pointer"><input type="checkbox" id="no" style="margin-right:6px"> Негативный выбор</label></div>
+<div id="neg-label-edit" style="margin-bottom:12px"><input type="text" class="ql" id="ln" placeholder="Название негативного вопроса"></div>
+<h3 style="margin-top:16px">Названия вопросов</h3><div id="labels-edit"></div>
+</div>
+<div class="card" id="card-transfer-role"><h2>Управление ролями</h2><p style="font-size:13px;color:#666;margin-bottom:12px">Передать права главного организатора другому пользователю. Вы сможете выбрать свою новую роль.</p><button class="btn bp" id="btn-transfer">Передать права главного организатора</button></div>
+<div class="card"><h2>Данные</h2>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><span class="btn bp" id="bex">💾 Экспорт</span><span class="btn bp" id="bim">📂 Импорт</span><input type="file" id="fi" accept=".json" style="display:none"></div>
+</div>
+</div>
+
+<!-- Help / Description -->
+<div id="p-help" class="page">
+<div class="card"><h2>Описание функционала</h2>
+<div class="docs-block" id="docs-content"></div>
+</div>
+</div>
+</div></div>
+
+<!-- Modals -->
+<div id="transfer-modal" class="modal-overlay" style="display:none"><div class="modal">
+<h2>Передать права главного организатора</h2>
+<p style="font-size:13px;color:#666;margin-bottom:16px">Выберите пользователя, который станет новым главным организатором:</p>
+<div class="field"><select id="transfer-select" class="auth-select"></select></div>
+<p style="font-size:13px;color:#666;margin:16px 0 8px">Какой станет ваша роль?</p>
+<div class="field">
+<label style="display:block;padding:10px;border:1px solid #d4cbbf;border-radius:8px;margin-bottom:6px;cursor:pointer"><input type="radio" name="my-new-role" value="participant" checked style="margin-right:8px">Участник — голосую наравне со всеми</label>
+<label style="display:block;padding:10px;border:1px solid #d4cbbf;border-radius:8px;cursor:pointer"><input type="radio" name="my-new-role" value="co_organizer" style="margin-right:8px">Соорганизатор — продолжаю управлять, но не голосую</label>
+</div>
+<div class="modal-actions"><button class="btn bs" id="transfer-cancel">Отмена</button><button class="btn bd" id="transfer-confirm">Передать</button></div>
+</div></div>
+
+<div id="new-survey-modal" class="modal-overlay" style="display:none"><div class="modal">
+<h2>Новый опрос</h2>
+<p style="font-size:13px;color:#666;margin-bottom:12px">Текущий активный опрос будет автоматически переведён в архив.</p>
+<div class="auth-field"><label class="auth-label">Название опроса</label><input type="text" id="new-survey-name" class="auth-input" placeholder="Например: Апрель 2026"></div>
+<div class="modal-actions"><button class="btn bs" id="new-survey-cancel">Отмена</button><button class="btn bp" id="new-survey-create">Создать</button></div>
+</div></div>
+
+<div id="change-pass-modal" class="modal-overlay" style="display:none"><div class="modal">
+<h2>Смена пароля</h2>
+<p style="font-size:13px;color:#666;margin-bottom:16px">Введите новый пароль (минимум 6 символов).</p>
+<div class="auth-field"><label class="auth-label">Новый пароль</label><input type="password" id="new-pass-input" class="auth-input" placeholder="••••••" autocomplete="new-password"></div>
+<div id="change-pass-msg" class="auth-error"></div>
+<div class="modal-actions"><button class="btn bs" id="change-pass-cancel">Отмена</button><button class="btn bp" id="change-pass-confirm">Сменить</button></div>
+</div></div>
+
+<!-- Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+'use strict';
+
+// ============================================================================
+// КОНФИГУРАЦИЯ SUPABASE
+// ============================================================================
+var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co';
+var SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
+var sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+
+var DEFAULT_LABELS=["С кем бы стал делать в первую очередь","С кем бы стал делать во вторую очередь","С кем бы стал делать в третью очередь"];
+var EC=['#1565c0','#43a047','#ab47bc','#ff6f00','#00897b','#d81b60','#5e35b1','#00acc1','#8d6e63','#546e7a'];
+
+// ============================================================================
+// СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+// ============================================================================
+var currentUser=null;       // объект auth.users из supabase
+var userProfile=null;       // запись из profiles
+var pseudonyms=[];          // массив строк (псевдонимы группы)
+var users={};               // map: user_id -> profile
+var surveys=[];             // массив опросов
+var activeSurvey=null;      // активный опрос
+var viewSurveyId=null;      // какой опрос сейчас смотрим
+var viewSurvey=null;
+var responses=[];           // ответы для viewSurvey
+var currentTab='vote';
+var appTitle='Социометрия';
+var appSubtitle='Клуб Социальных Технологий — группа 161';
+
+// Realtime channels
+var chProfiles=null,chSurveys=null,chResponses=null,chPseudonyms=null;
+
+var _renderTimer=null,_eventsInited=false;
+
+// ============================================================================
+// УТИЛИТЫ
+// ============================================================================
+function g(id){return document.getElementById(id)}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function toast(m,err){var e=document.createElement('div');e.className='toast'+(err?' toast-err':'');e.textContent=m;document.body.appendChild(e);setTimeout(function(){if(e.parentNode)e.parentNode.removeChild(e)},3000)}
+function pad(s,l){while(s.length<l)s+=' ';return s}
+function fmtDate(ts){if(!ts)return'';var d=new Date(ts);return d.toLocaleDateString('ru-RU')}
+function scheduleRender(){if(_renderTimer)clearTimeout(_renderTimer);_renderTimer=setTimeout(function(){_renderTimer=null;renderAll()},60)}
+function isMainOrganizer(){return userProfile&&userProfile.role==='main_organizer'}
+function isCoOrganizer(){return userProfile&&userProfile.role==='co_organizer'}
+function isOrganizer(){return userProfile&&(userProfile.role==='main_organizer'||userProfile.role==='co_organizer')}
+function isParticipant(){return userProfile&&userProfile.role==='participant'}
+
+// Транслитерация ошибок Supabase
+function authErrorRu(err){
+  if(!err)return'Неизвестная ошибка';
+  var msg=(err.message||'').toLowerCase();
+  if(msg.indexOf('invalid login')>=0||msg.indexOf('invalid credentials')>=0)return'Неверный email или пароль';
+  if(msg.indexOf('email not confirmed')>=0)return'Email не подтверждён';
+  if(msg.indexOf('user already registered')>=0||msg.indexOf('already exists')>=0)return'Email уже зарегистрирован';
+  if(msg.indexOf('password should be')>=0||msg.indexOf('weak password')>=0)return'Пароль слишком короткий (мин. 6 символов)';
+  if(msg.indexOf('invalid email')>=0)return'Неверный формат email';
+  if(msg.indexOf('rate limit')>=0)return'Слишком много попыток. Подождите минуту.';
+  if(msg.indexOf('duplicate key')>=0&&msg.indexOf('pseudonym')>=0)return'Этот псевдоним уже занят';
+  if(msg.indexOf('only_one_main_organizer')>=0)return'Главный организатор уже существует';
+  return err.message||'Ошибка сервера';
+}
+
+// ============================================================================
+// AUTH: ВХОД, РЕГИСТРАЦИЯ, СБРОС ПАРОЛЯ
+// ============================================================================
+g('show-register').onclick=function(){
+  g('login-form').style.display='none';
+  g('register-form').style.display='block';
+  g('reset-form').style.display='none';
+  g('login-error').textContent='';
+  loadAvailablePseudonyms();
+};
+g('show-login').onclick=function(){
+  g('register-form').style.display='none';
+  g('login-form').style.display='block';
+  g('reset-form').style.display='none';
+  g('reg-error').textContent='';
+};
+g('show-reset').onclick=function(){
+  g('login-form').style.display='none';
+  g('reset-form').style.display='block';
+  g('reset-email').value=g('login-email').value||'';
+  g('reset-error').textContent='';
+  g('reset-info').textContent='';
+};
+g('show-login-from-reset').onclick=function(){
+  g('reset-form').style.display='none';
+  g('login-form').style.display='block';
+};
+
+g('login-btn').onclick=async function(){
+  var email=g('login-email').value.trim(),pass=g('login-pass').value;
+  if(!email||!pass){g('login-error').textContent='Заполните все поля';return}
+  g('login-btn').disabled=true;g('login-error').textContent='';g('login-info').textContent='';
+  var res=await sb.auth.signInWithPassword({email:email,password:pass});
+  if(res.error){
+    g('login-error').textContent=authErrorRu(res.error);
+    g('login-btn').disabled=false;
+  }
+  // Успешный вход обработается через onAuthStateChange ниже
+};
+g('login-pass').onkeydown=function(e){if(e.key==='Enter')g('login-btn').click()};
+
+g('reg-btn').onclick=async function(){
+  var email=g('reg-email').value.trim(),pass=g('reg-pass').value,name=g('reg-name').value;
+  if(!email||!pass||!name){g('reg-error').textContent='Заполните все поля';return}
+  if(pass.length<6){g('reg-error').textContent='Пароль мин. 6 символов';return}
+  g('reg-btn').disabled=true;g('reg-error').textContent='';
+  // Регистрация: триггер handle_new_user на сервере создаст profile автоматически
+  var res=await sb.auth.signUp({
+    email:email,password:pass,
+    options:{data:{pseudonym:name}}
+  });
+  if(res.error){
+    g('reg-error').textContent=authErrorRu(res.error);
+    g('reg-btn').disabled=false;
+    return;
+  }
+  // Если confirm email выключен — пользователь сразу залогинен,
+  // сработает onAuthStateChange. Если включён — попросим проверить почту.
+  if(res.data&&res.data.session){
+    // Уже залогинены — обработка через onAuthStateChange
+  }else{
+    g('reg-error').textContent='';
+    toast('Проверьте email для подтверждения');
+    g('reg-btn').disabled=false;
+  }
+};
+g('reg-pass').onkeydown=function(e){if(e.key==='Enter')g('reg-btn').click()};
+
+g('reset-btn').onclick=async function(){
+  var email=g('reset-email').value.trim();
+  if(!email){g('reset-error').textContent='Введите email';return}
+  g('reset-btn').disabled=true;g('reset-error').textContent='';g('reset-info').textContent='';
+  var res=await sb.auth.resetPasswordForEmail(email,{redirectTo:window.location.href});
+  g('reset-btn').disabled=false;
+  if(res.error){g('reset-error').textContent=authErrorRu(res.error);return}
+  g('reset-info').textContent='Письмо отправлено. Проверьте почту.';
+};
+
+async function loadAvailablePseudonyms(){
+  var sel=g('reg-name');sel.innerHTML='<option value="">— Выберите псевдоним —</option>';
+  // Читаем псевдонимы (публичный доступ через RLS)
+  var pseudoRes=await sb.from('pseudonyms').select('name').order('name');
+  if(pseudoRes.error){
+    g('reg-error').textContent='Не удалось загрузить псевдонимы: '+pseudoRes.error.message;
+    return;
+  }
+  // Читаем занятые (это требует авторизации, поэтому может вернуть пусто без auth — это ок)
+  var profilesRes=await sb.from('profiles').select('pseudonym');
+  var taken={};
+  if(profilesRes.data){profilesRes.data.forEach(function(p){taken[p.pseudonym]=true})}
+  pseudoRes.data.forEach(function(p){
+    if(!taken[p.name]){
+      var o=document.createElement('option');o.value=p.name;o.textContent=p.name;
+      sel.appendChild(o);
+    }
+  });
+}
+
+g('logout-btn').onclick=async function(){
+  await sb.auth.signOut();
+};
+
+// ============================================================================
+// АВТО-ПЕРЕХОД ПО СОСТОЯНИЮ AUTH
+// ============================================================================
+sb.auth.onAuthStateChange(async function(event,session){
+  if(session&&session.user){
+    currentUser=session.user;
+    // Загружаем профиль из таблицы profiles
+    var pr=await sb.from('profiles').select('*').eq('id',currentUser.id).single();
+    if(pr.error||!pr.data){
+      // Профиль не создан — что-то пошло не так
+      console.error('Профиль не найден:',pr.error);
+      toast('Профиль не найден. Обратитесь к организатору.',true);
+      await sb.auth.signOut();
+      return;
+    }
+    userProfile=pr.data;
+    startApp();
+  }else{
+    currentUser=null;userProfile=null;
+    stopRealtime();
+    g('loading').style.display='none';
+    g('auth-screen').style.display='';
+    g('main-app').style.display='none';
+    g('login-btn').disabled=false;
+    g('reg-btn').disabled=false;
+  }
+});
+
+// При первой загрузке проверяем сессию
+(async function(){
+  var s=await sb.auth.getSession();
+  if(!s.data.session){
+    g('loading').style.display='none';
+    g('auth-screen').style.display='';
+  }
+  // Если сессия есть, onAuthStateChange сам сработает
+})();
+
+// ============================================================================
+// ОСТАНОВКА REALTIME ПОДПИСОК
+// ============================================================================
+function stopRealtime(){
+  [chProfiles,chSurveys,chResponses,chPseudonyms].forEach(function(c){
+    if(c){try{sb.removeChannel(c)}catch(e){}}
+  });
+  chProfiles=chSurveys=chResponses=chPseudonyms=null;
+}
+
+// ============================================================================
+// СТАРТ ПРИЛОЖЕНИЯ ПОСЛЕ АВТОРИЗАЦИИ
+// ============================================================================
+async function startApp(){
+  g('loading').style.display='none';
+  g('auth-screen').style.display='none';
+  g('main-app').style.display='';
+  renderHeader();
+
+  // Загружаем начальные данные
+  await Promise.all([
+    loadPseudonyms(),
+    loadAllProfiles(),
+    loadAllSurveys()
+  ]);
+
+  // Подписываемся на realtime
+  setupRealtime();
+
+  if(!_eventsInited){initEvents();_eventsInited=true}
+  scheduleRender();
+}
+
+async function loadPseudonyms(){
+  var r=await sb.from('pseudonyms').select('name').order('name');
+  if(r.error){console.error('loadPseudonyms',r.error);return}
+  pseudonyms=r.data.map(function(x){return x.name});
+}
+
+async function loadAllProfiles(){
+  var r=await sb.from('profiles').select('*');
+  if(r.error){console.error('loadAllProfiles',r.error);return}
+  users={};
+  r.data.forEach(function(p){users[p.id]=p});
+  // Обновляем свой профиль
+  if(users[currentUser.id])userProfile=users[currentUser.id];
+}
+
+async function loadAllSurveys(){
+  var r=await sb.from('surveys').select('*').order('created_at',{ascending:false});
+  if(r.error){console.error('loadAllSurveys',r.error);return}
+  surveys=r.data;
+  activeSurvey=null;
+  for(var i=0;i<surveys.length;i++){
+    if(surveys[i].status==='active'){activeSurvey=surveys[i];break}
+  }
+  if(!viewSurveyId&&activeSurvey)viewSurveyId=activeSurvey.id;
+  if(!viewSurveyId&&surveys.length)viewSurveyId=surveys[0].id;
+  updateViewSurvey();
+  await loadResponses();
+}
+
+function updateViewSurvey(){
+  viewSurvey=null;
+  for(var i=0;i<surveys.length;i++){
+    if(surveys[i].id===viewSurveyId){viewSurvey=surveys[i];break}
+  }
+}
+
+async function loadResponses(){
+  if(!viewSurveyId){responses=[];return}
+  var r=await sb.from('responses').select('*').eq('survey_id',viewSurveyId).order('created_at');
+  if(r.error){console.error('loadResponses',r.error);responses=[];return}
+  responses=r.data;
+}
+
+// ============================================================================
+// REALTIME-ПОДПИСКИ (аналог Firestore onSnapshot)
+// ============================================================================
+function setupRealtime(){
+  stopRealtime();
+
+  chPseudonyms=sb.channel('rt-pseudonyms')
+    .on('postgres_changes',{event:'*',schema:'public',table:'pseudonyms'},async function(){
+      await loadPseudonyms();scheduleRender();
+    }).subscribe();
+
+  chProfiles=sb.channel('rt-profiles')
+    .on('postgres_changes',{event:'*',schema:'public',table:'profiles'},async function(){
+      await loadAllProfiles();renderHeader();scheduleRender();
+    }).subscribe();
+
+  chSurveys=sb.channel('rt-surveys')
+    .on('postgres_changes',{event:'*',schema:'public',table:'surveys'},async function(){
+      await loadAllSurveys();scheduleRender();
+    }).subscribe();
+
+  chResponses=sb.channel('rt-responses')
+    .on('postgres_changes',{event:'*',schema:'public',table:'responses'},async function(payload){
+      // Перезагружаем только если изменения касаются текущего просматриваемого опроса
+      var sid=payload.new&&payload.new.survey_id||payload.old&&payload.old.survey_id;
+      if(sid===viewSurveyId){
+        await loadResponses();scheduleRender();
+      }
+    }).subscribe();
+}
+
+function renderHeader(){
+  g('user-badge').textContent=userProfile?userProfile.pseudonym:'';
+  var role='Участник';
+  if(userProfile){
+    if(userProfile.role==='main_organizer')role='Главный организатор';
+    else if(userProfile.role==='co_organizer')role='Соорганизатор';
+  }
+  g('user-role').textContent=role;
+}
+
+// ============================================================================
+// ТАБЫ
+// ============================================================================
+function renderTabs(){
+  var tb=[];
+  if(isParticipant())tb.push(['vote','Голосование']);
+  tb.push(['results','Таблица']);
+  if(isOrganizer()){tb.push(['responses','Ответы']);tb.push(['sociogram','Социограмма'])}
+  tb.push(['archive','Архив']);
+  tb.push(['profile','Профиль']);
+  if(isOrganizer())tb.push(['admin','Настройки']);
+  if(isOrganizer())tb.push(['help','Описание']);
+  var b=g('tbar');b.innerHTML='';
+  var valid=false;
+  for(var i=0;i<tb.length;i++){
+    var t=document.createElement('span');
+    t.className='tab'+(tb[i][0]===currentTab?' active':'');
+    t.setAttribute('data-t',tb[i][0]);
+    t.textContent=tb[i][1];
+    b.appendChild(t);
+    if(tb[i][0]===currentTab)valid=true;
+  }
+  if(!valid&&tb.length){currentTab=tb[0][0];renderTabs();return}
+  var ps=document.querySelectorAll('.page');for(var k=0;k<ps.length;k++)ps[k].className='page';
+  var pg=g('p-'+currentTab);if(pg)pg.className='page active';
+}
+
+g('tbar').addEventListener('click',function(e){
+  var t=e.target;
+  while(t&&!t.getAttribute('data-t')&&t!==this)t=t.parentNode;
+  if(!t||!t.getAttribute('data-t'))return;
+  currentTab=t.getAttribute('data-t');
+  renderTabs();scheduleRender();
+});
+
+// ============================================================================
+// ПАНЕЛЬ ВЫБОРА ОПРОСА
+// ============================================================================
+function renderSurveyBar(){
+  if(surveys.length===0){g('survey-bar').style.display='none';return}
+  g('survey-bar').style.display='flex';
+  var sel=g('survey-select');sel.innerHTML='';
+  for(var i=0;i<surveys.length;i++){
+    var o=document.createElement('option');o.value=surveys[i].id;
+    o.textContent=surveys[i].title+(surveys[i].status==='active'?' (активный)':' — '+fmtDate(surveys[i].created_at));
+    sel.appendChild(o);
+  }
+  sel.value=viewSurveyId||'';
+  var badge=g('survey-status-badge');
+  if(viewSurvey){
+    badge.innerHTML=viewSurvey.status==='active'
+      ?'<span class="survey-status s-active">Активный</span>'
+      :'<span class="survey-status s-closed">Завершён</span>';
+  }else badge.innerHTML='';
+}
+
+g('survey-select').addEventListener('change',async function(){
+  viewSurveyId=this.value;updateViewSurvey();
+  await loadResponses();scheduleRender();
+});
+
+// ============================================================================
+// ГЛАВНАЯ ФУНКЦИЯ ОТРИСОВКИ
+// ============================================================================
+function renderAll(){
+  renderTabs();renderSurveyBar();renderTitle();
+  if(viewSurvey){
+    if(isParticipant())renderVote();
+    renderResultsTable();
+  }
+  if(isOrganizer()&&viewSurvey){renderAllResponses();renderSociogram()}
+  if(isOrganizer())renderAdmin();
+  renderArchive();
+  renderProfile();
+  if(isOrganizer())renderDocs();
+}
+
+function renderTitle(){
+  g('mt').value=appTitle;g('ms').value=appSubtitle;
+  g('mt').readOnly=true;g('ms').readOnly=true;
+}
+
+// ============================================================================
+// ХЕЛПЕРЫ ДЛЯ ТЕКУЩЕГО ОПРОСА
+// ============================================================================
+function surveyNP(){return viewSurvey?(viewSurvey.num_positive||3):3}
+function surveyNeg(){return viewSurvey?!!viewSurvey.has_negative:true}
+function surveyNegLabel(){return viewSurvey&&viewSurvey.negative_label?viewSurvey.negative_label:'С кем бы не хотел делать работу'}
+function surveyLabels(){return viewSurvey&&viewSurvey.labels?viewSurvey.labels:DEFAULT_LABELS}
+function isViewingActive(){return viewSurvey&&viewSurvey.status==='active'}
+function gsl(i){return(i+1)+' выбор'}
+function gl(i){var lb=surveyLabels();return(lb&&lb[i])?lb[i]:gsl(i)}
+function fsel(s,items,cur){
+  s.innerHTML='<option value="">— Выберите —</option>';
+  for(var i=0;i<items.length;i++){
+    var o=document.createElement('option');o.value=items[i][0];o.textContent=items[i][1];
+    s.appendChild(o);
+  }
+  if(cur)s.value=cur;
+}
+
+// Только участники для выпадашек голосования (как в v3)
+function getParticipantNames(){
+  var arr=[];
+  for(var uid in users){
+    if(users[uid].role==='participant')arr.push(users[uid].pseudonym);
+  }
+  arr.sort(function(a,b){return a.localeCompare(b,'ru')});
+  return arr;
+}
+
+// Имена для отображения в таблицах: для активного — текущие участники,
+// для архивного — собираем из реальных ответов (сохраняем удалённых).
+function getDisplayNames(){
+  if(isViewingActive())return getParticipantNames();
+  var seen={};var arr=[];
+  for(var i=0;i<responses.length;i++){
+    var r=responses[i];
+    if(r.respondent_name&&!seen[r.respondent_name]){seen[r.respondent_name]=1;arr.push(r.respondent_name)}
+    var ch=r.positive_choices||[];
+    for(var j=0;j<ch.length;j++){if(ch[j]&&!seen[ch[j]]){seen[ch[j]]=1;arr.push(ch[j])}}
+    if(r.negative_choice&&!seen[r.negative_choice]){seen[r.negative_choice]=1;arr.push(r.negative_choice)}
+  }
+  arr.sort(function(a,b){return a.localeCompare(b,'ru')});
+  return arr;
+}
+
+// ============================================================================
+// ГОЛОСОВАНИЕ
+// ============================================================================
+function renderVote(){
+  if(!isParticipant())return;
+  var np=surveyNP(),names=getParticipantNames(),myName=userProfile.pseudonym;
+  g('vote-stats').innerHTML='<div class="stat"><div class="sn2">'+responses.length+'</div><div class="sl">Ответов</div></div>'
+    +'<div class="stat"><div class="sn2">'+Math.max(0,names.length-responses.length)+'</div><div class="sl">Осталось</div></div>'
+    +'<div class="stat"><div class="sn2">'+names.length+'</div><div class="sl">Всего</div></div>';
+
+  if(!isViewingActive()){
+    g('vote-closed-msg').innerHTML='<div class="card" style="text-align:center;color:var(--muted)"><p style="font-size:16px;margin-bottom:8px">📋 Этот опрос завершён</p><p style="font-size:13px">Результаты доступны во вкладке «Таблица».</p></div>';
+    g('vote-card').style.display='none';g('my-vote-info').innerHTML='';return;
+  }
+  g('vote-closed-msg').innerHTML='';g('vote-card').style.display='';
+
+  var myResp=null;
+  for(var i=0;i<responses.length;i++){if(responses[i].user_id===currentUser.id){myResp=responses[i];break}}
+  g('vote-status').innerHTML=myResp?'<div class="mo">Вы уже проголосовали. Можно изменить свой ответ.</div>':'';
+
+  var pch=g('pch'),oldVals=[];
+  var ss=pch.querySelectorAll('select');for(var x=0;x<ss.length;x++)oldVals.push(ss[x].value);
+  var h='';for(var j=0;j<np;j++)h+='<div class="cr"><span class="cl">'+gsl(j)+'</span><select id="fc'+j+'"></select></div>';
+  pch.innerHTML=h;
+  var items=[];for(var k=0;k<names.length;k++){if(names[k]!==myName)items.push([names[k],names[k]])}
+  for(var m=0;m<np;m++){
+    var cur=m<oldVals.length&&oldVals[m]?oldVals[m]:(myResp&&myResp.positive_choices&&myResp.positive_choices[m]?myResp.positive_choices[m]:'');
+    fsel(g('fc'+m),items,cur);
+  }
+
+  if(surveyNeg()){
+    g('neg-wrap').style.display='block';
+    fsel(g('fn'),items,myResp&&myResp.negative_choice?myResp.negative_choice:'');
+    g('neg-label-display').textContent=surveyNegLabel();
+  }else g('neg-wrap').style.display='none';
+  g('ci').textContent=np+' поз.'+(surveyNeg()?' + нег.':'');
+
+  if(myResp){
+    var info='<div class="card"><h3>Ваш ответ</h3><div style="font-size:13px;line-height:2">';
+    var ch=myResp.positive_choices||[];
+    for(var n=0;n<ch.length;n++){if(ch[n])info+='<div>'+gsl(n)+': <strong>'+esc(ch[n])+'</strong></div>'}
+    if(myResp.negative_choice)info+='<div>Негативный: <span class="bn">'+esc(myResp.negative_choice)+'</span></div>';
+    info+='</div><div style="margin-top:12px"><button class="btn bd" id="btn-del-my-vote" style="font-size:12px;padding:8px 16px">Удалить мой ответ</button></div></div>';
+    g('my-vote-info').innerHTML=info;
+    g('btn-del-my-vote').onclick=async function(){
+      if(!confirm('Удалить свой ответ?'))return;
+      var r=await sb.from('responses').delete().eq('id',myResp.id);
+      if(r.error)toast('Ошибка: '+r.error.message,true);
+      else{toast('Ответ удалён');await loadResponses();scheduleRender()}
+    };
+  }else g('my-vote-info').innerHTML='';
+}
+
+async function submitVote(){
+  if(!isParticipant()){toast('Только участники голосуют',true);return}
+  if(!isViewingActive()){toast('Опрос завершён',true);return}
+  var myName=userProfile.pseudonym,np=surveyNP(),ch=[];
+  for(var i=0;i<np;i++)ch.push(g('fc'+i).value||'');
+  var neg=surveyNeg()?(g('fn').value||''):'';
+  var any=false;for(var j=0;j<ch.length;j++)if(ch[j])any=true;
+  if(!any){g('fm').innerHTML='<div class="me">Сделайте хотя бы один выбор</div>';return}
+  var all=[];for(var k=0;k<ch.length;k++)if(ch[k])all.push(ch[k]);if(neg)all.push(neg);
+  for(var m=0;m<all.length;m++){if(all[m]===myName){g('fm').innerHTML='<div class="me">Нельзя выбрать себя</div>';return}}
+  var seen={};for(var n=0;n<all.length;n++){if(seen[all[n]]){g('fm').innerHTML='<div class="me">Выборы должны быть разными</div>';return}seen[all[n]]=true}
+
+  var cleanCh=ch.slice();while(cleanCh.length&&!cleanCh[cleanCh.length-1])cleanCh.pop();
+
+  var record={
+    survey_id:viewSurveyId,
+    user_id:currentUser.id,
+    respondent_name:myName,
+    positive_choices:cleanCh,
+    negative_choice:neg||null
+  };
+  var r=await sb.from('responses').upsert(record,{onConflict:'survey_id,user_id'}).select();
+  if(r.error){g('fm').innerHTML='<div class="me">Ошибка: '+esc(r.error.message)+'</div>';return}
+  g('fm').innerHTML='<div class="mo">Ответ сохранён ✓</div>';
+  toast('Голос сохранён');
+  await loadResponses();scheduleRender();
+}
+
+// ============================================================================
+// СВОДНАЯ ТАБЛИЦА И СТАТИСТИКА
+// ============================================================================
+function mch(){var m=surveyNP();for(var i=0;i<responses.length;i++){var c=responses[i].positive_choices||[];if(c.length>m)m=c.length}return m}
+function tly(){
+  var m=mch(),names=getDisplayNames(),t={};
+  for(var i=0;i<names.length;i++){
+    var o={neg:0,total:0};
+    for(var j=0;j<m;j++)o['c'+j]=0;
+    t[names[i]]=o;
+  }
+  for(var k=0;k<responses.length;k++){
+    var r=responses[k],ch=r.positive_choices||[];
+    for(var l=0;l<ch.length;l++){
+      if(ch[l]){
+        if(!t[ch[l]]){var oo={neg:0,total:0};for(var jj=0;jj<m;jj++)oo['c'+jj]=0;t[ch[l]]=oo}
+        t[ch[l]]['c'+l]++;t[ch[l]].total++;
+      }
+    }
+    if(r.negative_choice){
+      if(!t[r.negative_choice]){var oo2={neg:0,total:0};for(var jj2=0;jj2<m;jj2++)oo2['c'+jj2]=0;t[r.negative_choice]=oo2}
+      t[r.negative_choice].neg++;
+    }
+  }
+  return t;
+}
+function muts(){
+  var p=[],seen={};
+  for(var i=0;i<responses.length;i++){
+    var r1=responses[i],c1=r1.positive_choices||[];
+    for(var j=0;j<c1.length;j++){
+      if(!c1[j])continue;
+      for(var k=0;k<responses.length;k++){
+        if(responses[k].respondent_name!==c1[j])continue;
+        if((responses[k].positive_choices||[]).indexOf(r1.respondent_name)>=0){
+          var key=[r1.respondent_name,c1[j]].sort().join('|');
+          if(!seen[key]){seen[key]=1;p.push([r1.respondent_name,c1[j]].sort().join(' ↔ '))}
+        }
+      }
+    }
+  }
+  return p;
+}
+function sts(t){
+  if(t.neg>=3)return['Отверг.','#e53935'];
+  if(t.total>=8)return['Звезда','#f9a825'];
+  if(t.total>=4)return['Предпочит.','#43a047'];
+  if(t.total===0)return['Изолир.','#bdbdbd'];
+  return['Принятый','#78909c'];
+}
+
+function renderResultsTable(){
+  var t=tly(),mu=muts(),m=mch(),mx=1;
+  var namesArr=Object.keys(t);
+  for(var n in t)if(t[n].total>mx)mx=t[n].total;
+  var so=namesArr.slice().sort(function(a,b){return(t[b]?t[b].total:0)-(t[a]?t[a].total:0)});
+  var iso=0;for(var q in t)if(t[q].total===0)iso++;
+  g('rst').innerHTML='<div class="stat"><div class="sn2">'+responses.length+'</div><div class="sl">Ответов</div></div>'
+    +'<div class="stat"><div class="sn2">'+mu.length+'</div><div class="sl">Взаимных</div></div>'
+    +'<div class="stat"><div class="sn2">'+iso+'</div><div class="sl">Изолир.</div></div>';
+  var h='<table><thead><tr><th>Имя</th>';
+  for(var i=0;i<m;i++)h+='<th title="'+esc(gl(i))+'">'+gsl(i)+'</th>';
+  h+='<th>Σ</th><th>Нег.</th><th>Статус</th></tr></thead><tbody>';
+  for(var j=0;j<so.length;j++){
+    var nm=so[j],v=t[nm],s=sts(v),pc=Math.round((v.total/mx)*100);
+    h+='<tr><td style="font-weight:600">'+esc(nm)+'</td>';
+    for(var k=0;k<m;k++){var vl=v['c'+k];h+='<td>'+(vl||'<span style="color:#ccc">—</span>')+'</td>'}
+    h+='<td><div style="display:flex;align-items:center;justify-content:center;gap:3px"><div style="width:40px;height:4px;border-radius:2px;background:#eee;overflow:hidden"><div style="width:'+pc+'%;height:100%;border-radius:2px;background:var(--accent)"></div></div><b>'+v.total+'</b></div></td>';
+    h+='<td>'+(v.neg?'<span class="bn">'+v.neg+'</span>':'<span style="color:#ccc">—</span>')+'</td>';
+    h+='<td><span class="bst" style="background:'+s[1]+'">'+s[0]+'</span></td></tr>';
+  }
+  h+='</tbody></table>';g('rt').innerHTML=h;
+  g('mu').innerHTML=mu.length?'<div class="card"><h2>Взаимные выборы ('+mu.length+')</h2><div>'+mu.map(function(p){return'<span class="mc">'+esc(p)+'</span>'}).join('')+'</div></div>':'';
+}
+
+// ============================================================================
+// ВСЕ ОТВЕТЫ (организатор)
+// ============================================================================
+function renderAllResponses(){
+  if(!isOrganizer()||!viewSurvey)return;
+  var m=mch(),names=getDisplayNames();
+  var h='<table><thead><tr><th>Имя</th>';
+  for(var i=0;i<m;i++)h+='<th>'+gsl(i)+'</th>';
+  h+='<th>Нег.</th><th></th></tr></thead><tbody>';
+  var respMap={};for(var r=0;r<responses.length;r++)respMap[responses[r].respondent_name]=responses[r];
+  for(var j=0;j<names.length;j++){
+    var nm=names[j],resp=respMap[nm];
+    if(resp){
+      var ch=resp.positive_choices||[];
+      h+='<tr><td><span class="voted-check">✓</span> '+esc(nm)+'</td>';
+      for(var k=0;k<m;k++)h+='<td>'+(ch[k]?esc(ch[k]):'—')+'</td>';
+      h+='<td>'+(resp.negative_choice?'<span class="bn">'+esc(resp.negative_choice)+'</span>':'—')+'</td>';
+      h+='<td>'+(isViewingActive()?'<span class="bsm" data-del-resp="'+esc(resp.id)+'">✕</span>':'')+'</td></tr>';
+    }else{
+      h+='<tr style="opacity:.5"><td><span class="not-voted">✗</span> '+esc(nm)+'</td>';
+      for(var l=0;l<m;l++)h+='<td>—</td>';
+      h+='<td>—</td><td></td></tr>';
+    }
+  }
+  h+='</tbody></table>';g('all-responses-table').innerHTML=h;
+}
+
+g('all-responses-table').addEventListener('click',async function(e){
+  var t=e.target;
+  while(t&&!t.getAttribute('data-del-resp')&&t!==this)t=t.parentNode;
+  if(!t||!t.getAttribute('data-del-resp'))return;
+  var id=t.getAttribute('data-del-resp');
+  if(!confirm('Удалить этот ответ?'))return;
+  var r=await sb.from('responses').delete().eq('id',id);
+  if(r.error)toast('Ошибка: '+r.error.message,true);
+  else{toast('Удалён');await loadResponses();scheduleRender()}
+});
+
+// ============================================================================
+// СОЦИОГРАММА
+// ============================================================================
+function renderSociogram(){
+  if(!isOrganizer()||!viewSurvey)return;
+  var co=g('sco'),le=g('slg'),names=getDisplayNames();
+  if(!responses.length){co.innerHTML='<p style="text-align:center;color:#999;padding:30px">Нет ответов</p>';le.innerHTML='';return}
+  var m=mch(),lg='';
+  for(var i=0;i<m;i++)lg+='<span><span class="ll" style="background:'+EC[i%EC.length]+'"></span>'+gsl(i)+'</span>';
+  lg+='<span><span class="ll" style="background:#e53935"></span>Нег.</span><span><span class="ll" style="background:#f9a825;height:4px"></span>Взаим.</span>';
+  le.innerHTML=lg;
+  var W=800,H=700,cx=W/2,cy=H/2,R=Math.min(W,H)/2-80,an=[];
+  for(var a=0;a<names.length;a++){
+    var nm=names[a],act=false;
+    for(var b=0;b<responses.length;b++){
+      if(responses[b].respondent_name===nm){act=true;break}
+      var chk=responses[b].positive_choices||[];
+      if(chk.indexOf(nm)>=0||responses[b].negative_choice===nm){act=true;break}
+    }
+    if(act)an.push(nm);
+  }
+  var dn=an.length?an:names,pos={};
+  for(var c=0;c<dn.length;c++){
+    var ag=(2*Math.PI*c/dn.length)-Math.PI/2;
+    pos[dn[c]]={x:cx+R*Math.cos(ag),y:cy+R*Math.sin(ag)};
+  }
+  function isMu(a2,b2){
+    var ra=null,rb=null;
+    for(var i2=0;i2<responses.length;i2++){
+      if(responses[i2].respondent_name===a2)ra=responses[i2];
+      if(responses[i2].respondent_name===b2)rb=responses[i2];
+    }
+    return ra&&rb&&(ra.positive_choices||[]).indexOf(b2)>=0&&(rb.positive_choices||[]).indexOf(a2)>=0;
+  }
+  var df='';
+  for(var d=0;d<m;d++)df+='<marker id="a'+d+'" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+EC[d%EC.length]+'" opacity=".7"/></marker>';
+  df+='<marker id="an" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#e53935" opacity=".7"/></marker><marker id="am" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#f9a825" opacity=".7"/></marker>';
+  var t2=tly(),edges='';
+  for(var e2=0;e2<responses.length;e2++){
+    var r=responses[e2],fr=r.respondent_name;
+    if(!pos[fr])continue;
+    var rch=r.positive_choices||[];
+    for(var f=0;f<rch.length;f++){
+      if(!rch[f]||!pos[rch[f]])continue;
+      var mu2=isMu(fr,rch[f]);
+      edges+=mke(fr,rch[f],mu2?'#f9a825':EC[f%EC.length],mu2?3:Math.max(1,3-f*.4),'',mu2?'url(#am)':'url(#a'+f+')',pos);
+    }
+    if(r.negative_choice&&pos[r.negative_choice])edges+=mke(fr,r.negative_choice,'#e53935',1.5,'5,3','url(#an)',pos);
+  }
+  var nodes='';
+  for(var g2=0;g2<dn.length;g2++){
+    var nm2=dn[g2],p=pos[nm2];if(!p)continue;
+    var tv=t2[nm2]||{total:0,neg:0};
+    var rad=Math.max(14,Math.min(28,14+tv.total*2));
+    var fill=tv.neg>=3?'#ffcdd2':tv.total>=6?'#fff9c4':tv.total>=3?'#c8e6c9':'#f5f0e8';
+    var stroke=tv.neg>=3?'#e53935':tv.total>=6?'#f9a825':tv.total>=3?'#43a047':'#bbb';
+    nodes+='<g class="nd" data-n="'+esc(nm2)+'" style="cursor:pointer"><circle cx="'+p.x+'" cy="'+p.y+'" r="'+rad+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.5"/><text x="'+p.x+'" y="'+(p.y+rad+14)+'" text-anchor="middle" style="font-size:11px;font-weight:500;fill:#333">'+esc(nm2)+'</text></g>';
+  }
+  co.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:'+W+'px;display:block;margin:0 auto"><defs>'+df+'</defs>'+edges+nodes+'</svg>';
+  var ns=co.querySelectorAll('.nd');
+  for(var h2=0;h2<ns.length;h2++){
+    ns[h2].addEventListener('mouseenter',function(){hlN(this.getAttribute('data-n'))});
+    ns[h2].addEventListener('mouseleave',uhl);
+    ns[h2].addEventListener('touchstart',function(ev){ev.preventDefault();hlN(this.getAttribute('data-n'))},{passive:false});
+    ns[h2].addEventListener('touchend',function(ev){ev.preventDefault();uhl()},{passive:false});
+  }
+}
+function mke(fr,to,col,w,dash,mk,pos){
+  var p1=pos[fr],p2=pos[to],dx=p2.x-p1.x,dy=p2.y-p1.y,d=Math.sqrt(dx*dx+dy*dy)||1,nr=18;
+  var x1=p1.x+(dx/d)*(nr+2),y1=p1.y+(dy/d)*(nr+2),x2=p2.x-(dx/d)*(nr+10),y2=p2.y-(dy/d)*(nr+10);
+  var mx=(x1+x2)/2,my=(y1+y2)/2,px=-(y2-y1)/d*15,py=(x2-x1)/d*15;
+  return'<path d="M'+x1+','+y1+' Q'+(mx+px)+','+(my+py)+' '+x2+','+y2+'" fill="none" stroke="'+col+'" stroke-width="'+w+'" '+(dash?'stroke-dasharray="'+dash+'"':'')+' opacity=".45" marker-end="'+mk+'" class="edge" data-f="'+fr+'" data-t="'+to+'"/>';
+}
+function hlN(name){
+  var cn={};cn[name]=true;
+  var es=document.querySelectorAll('.edge');
+  for(var i=0;i<es.length;i++){
+    var f=es[i].getAttribute('data-f'),t=es[i].getAttribute('data-t'),hit=f===name||t===name;
+    es[i].style.opacity=hit?'.9':'.06';
+    if(f===name)cn[t]=true;
+    if(t===name)cn[f]=true;
+  }
+  var ns=document.querySelectorAll('.nd');
+  for(var j=0;j<ns.length;j++)ns[j].style.opacity=cn[ns[j].getAttribute('data-n')]?'1':'.3';
+}
+function uhl(){
+  var es=document.querySelectorAll('.edge');
+  for(var i=0;i<es.length;i++)es[i].style.opacity='.45';
+  var ns=document.querySelectorAll('.nd');
+  for(var j=0;j<ns.length;j++)ns[j].style.opacity='1';
+}
+
+// ============================================================================
+// АРХИВ
+// ============================================================================
+function renderArchive(){
+  var el=g('archive-list');
+  if(!surveys.length){el.innerHTML='<p style="color:var(--muted)">Нет опросов</p>';return}
+  var h='';
+  for(var i=0;i<surveys.length;i++){
+    var s=surveys[i],isActive=s.status==='active',isViewing=s.id===viewSurveyId;
+    h+='<div class="survey-item'+(isViewing?' active-survey':'')+'">';
+    h+='<div class="si-clickable" data-survey-id="'+esc(s.id)+'"><div class="si-name">'+esc(s.title)+'</div><div class="si-date">'+fmtDate(s.created_at)+'</div></div>';
+    h+='<span class="si-status" style="background:'+(isActive?'#e8f5e9;color:var(--green)':'var(--tab-bg);color:var(--muted)')+'">'+(isActive?'Активный':'Завершён')+'</span>';
+    if(isOrganizer()&&!isActive)h+='<span class="bsm" data-del-survey="'+esc(s.id)+'" style="color:var(--red);border-color:var(--red);margin-left:8px">✕</span>';
+    h+='</div>';
+  }
+  el.innerHTML=h;
+}
+
+g('archive-list').addEventListener('click',async function(e){
+  var t=e.target;
+  while(t&&!t.getAttribute('data-survey-id')&&!t.getAttribute('data-del-survey')&&t!==this)t=t.parentNode;
+  if(!t)return;
+  if(t.getAttribute('data-del-survey')){
+    if(!isOrganizer())return;
+    var did=t.getAttribute('data-del-survey');
+    if(!confirm('Удалить этот опрос из архива? Все его ответы будут потеряны навсегда.'))return;
+    var r=await sb.from('surveys').delete().eq('id',did);
+    if(r.error)toast('Ошибка: '+r.error.message,true);
+    else{toast('Удалён');await loadAllSurveys();scheduleRender()}
+    return;
+  }
+  if(t.getAttribute('data-survey-id')){
+    viewSurveyId=t.getAttribute('data-survey-id');
+    updateViewSurvey();
+    await loadResponses();
+    currentTab='results';renderTabs();scheduleRender();
+  }
+});
+
+// ============================================================================
+// ПРОФИЛЬ
+// ============================================================================
+function renderProfile(){
+  if(!userProfile)return;
+  var role='Участник';
+  if(userProfile.role==='main_organizer')role='Главный организатор';
+  else if(userProfile.role==='co_organizer')role='Соорганизатор';
+  g('profile-info').innerHTML='<div style="font-size:14px;line-height:2"><div><strong>Псевдоним:</strong> '+esc(userProfile.pseudonym)+'</div><div><strong>Email:</strong> '+esc(userProfile.email||'')+'</div><div><strong>Роль:</strong> '+role+'</div></div>';
+}
+
+// ============================================================================
+// ОПИСАНИЕ ФУНКЦИОНАЛА
+// ============================================================================
+function renderDocs(){
+  g('docs-content').innerHTML=
+    '<h3>Роли в программе</h3>'+
+    '<ul><li><strong>Главный организатор</strong> — полный доступ. В системе всегда только один. Не голосует. Может передать роль.</li>'+
+    '<li><strong>Соорганизатор</strong> — те же возможности, кроме передачи роли главного. Не голосует.</li>'+
+    '<li><strong>Участник</strong> — голосует в активном опросе и видит сводную таблицу.</li></ul>'+
+    '<h3>Опросы</h3>'+
+    '<ul><li>Один активный опрос в единицу времени. Создание нового автоматически архивирует предыдущий.</li>'+
+    '<li>Завершённые опросы доступны во вкладке «Архив».</li>'+
+    '<li>Удаление опроса из архива необратимо.</li></ul>'+
+    '<h3>Регистрация</h3>'+
+    '<ul><li>Самый первый зарегистрированный автоматически становится главным организатором.</li>'+
+    '<li>Все остальные регистрируются самостоятельно: выбирают свободный псевдоним, указывают email и пароль.</li>'+
+    '<li>Чтобы добавить нового участника, организатор сначала добавляет псевдоним во вкладке Настройки → Псевдонимы группы, затем человек регистрируется сам.</li></ul>'+
+    '<h3>Псевдонимы группы</h3>'+
+    '<ul><li>Список доступных псевдонимов. Уже занятые помечены зелёной точкой ●.</li>'+
+    '<li>При удалении псевдонима из списка имена в архивных опросах сохраняются.</li></ul>'+
+    '<h3>Сохранение истории</h3>'+
+    '<ul><li>Если участник удалён из базы, его ответы в архивных опросах остаются — имя записано прямо в ответе.</li></ul>'+
+    '<h3>Смена и сброс пароля</h3>'+
+    '<ul><li>Любой пользователь может сменить пароль во вкладке «Профиль».</li>'+
+    '<li>На экране входа есть «Забыли пароль?» — отправляет ссылку на email.</li>'+
+    '<li>Организатор может сбросить пароль любого пользователя кнопкой 🔑.</li></ul>'+
+    '<h3>Голосование</h3>'+
+    '<ul><li>В выпадашках при голосовании только участники (без организаторов).</li>'+
+    '<li>Нельзя выбрать самого себя. Все выборы должны быть разными.</li>'+
+    '<li>Участник может изменить или удалить свой ответ, пока опрос активен.</li></ul>'+
+    '<h3>Хостинг и доступ</h3>'+
+    '<ul><li>Программа работает на Supabase. База данных в регионе Frankfurt.</li>'+
+    '<li>Доступна из России без VPN.</li></ul>';
+}
+
+// ============================================================================
+// АДМИНКА
+// ============================================================================
+function renderAdmin(){
+  if(!isOrganizer())return;
+
+  var asi=g('active-survey-info');
+  if(activeSurvey){
+    asi.innerHTML='<div style="padding:12px 16px;background:var(--bg);border-radius:8px;font-size:14px"><strong>Текущий опрос:</strong> '+esc(activeSurvey.title)+' <span style="color:var(--green);font-size:12px">(активный)</span><br><span style="font-size:12px;color:var(--muted)">Создан: '+fmtDate(activeSurvey.created_at)+'</span></div>';
+  }else{
+    asi.innerHTML='<div style="padding:12px 16px;background:#fff3e0;border-radius:8px;font-size:14px;color:#e65100">Нет активного опроса. Создайте новый.</div>';
+  }
+
+  // Псевдонимы
+  g('nh').textContent='Псевдонимы группы ('+pseudonyms.length+')';
+  var h='';
+  for(var i=0;i<pseudonyms.length;i++){
+    var registered=false;
+    for(var uid in users){if(users[uid].pseudonym===pseudonyms[i]){registered=true;break}}
+    h+='<span class="chip">'+(registered?'<span style="color:var(--green);margin-right:2px">●</span>':'')+esc(pseudonyms[i])+'<span class="cx" data-rm="'+esc(pseudonyms[i])+'">×</span></span>';
+  }
+  g('nc').innerHTML=h;
+
+  // Зарегистрированные пользователи
+  var rul=g('registered-users-list'),rh='',uc=0;
+  for(var u in users)uc++;
+  if(!uc){rh='<div style="color:var(--muted);font-size:13px">Нет</div>'}
+  else{
+    rh='<table style="font-size:13px"><thead><tr><th>Имя</th><th>Email</th><th>Роль</th><th></th></tr></thead><tbody>';
+    var sortedUids=Object.keys(users).sort(function(a,b){return users[a].pseudonym.localeCompare(users[b].pseudonym,'ru')});
+    for(var ui=0;ui<sortedUids.length;ui++){
+      var uid2=sortedUids[ui],u2=users[uid2],isMe=uid2===currentUser.id;
+      var roleLabel='';
+      if(u2.role==='main_organizer')roleLabel='<span style="color:var(--accent);font-weight:600">Главный</span>';
+      else if(u2.role==='co_organizer')roleLabel='<span style="color:var(--accent);font-weight:600">Соорганизатор</span>';
+      else roleLabel='Участник';
+      rh+='<tr><td style="font-weight:600">'+esc(u2.pseudonym)+'</td>';
+      rh+='<td style="font-size:12px;color:var(--muted)">'+esc(u2.email||'')+'</td>';
+      if(isMainOrganizer()&&!isMe&&u2.role!=='main_organizer'){
+        rh+='<td><select class="role-select" data-role-uid="'+esc(uid2)+'">'+
+          '<option value="participant"'+(u2.role==='participant'?' selected':'')+'>Участник</option>'+
+          '<option value="co_organizer"'+(u2.role==='co_organizer'?' selected':'')+'>Соорганизатор</option>'+
+          '</select></td>';
+      }else{
+        rh+='<td>'+roleLabel+'</td>';
+      }
+      var actions='';
+      if(!isMe){
+        actions+='<span class="bsm" data-reset-uid="'+esc(uid2)+'" data-reset-email="'+esc(u2.email||'')+'" title="Сбросить пароль">🔑</span> ';
+        if(u2.role!=='main_organizer'){
+          actions+='<span class="bsm" data-del-user="'+esc(uid2)+'" data-del-name="'+esc(u2.pseudonym)+'" style="color:var(--red);border-color:var(--red)">✕</span>';
+        }
+      }else{
+        actions='<span style="font-size:11px;color:var(--muted)">вы</span>';
+      }
+      rh+='<td>'+actions+'</td></tr>';
+    }
+    rh+='</tbody></table>';
+  }
+  rul.innerHTML=rh;
+
+  // Настройки голосования (только для активного опроса)
+  if(activeSurvey&&viewSurvey&&viewSurveyId===activeSurvey.id){
+    g('pos-count').textContent=surveyNP();
+    g('no').checked=surveyNeg();
+    g('neg-label-edit').style.display=surveyNeg()?'block':'none';
+    g('ln').value=surveyNegLabel();
+    var le=g('labels-edit'),lh='',np=surveyNP();
+    for(var jj=0;jj<np;jj++)lh+='<div style="margin-bottom:8px"><span style="font-size:12px;color:var(--muted);font-weight:600">'+gsl(jj)+':</span> <input type="text" class="ql choice-label-input" data-idx="'+jj+'" value="'+esc(gl(jj))+'" style="margin-top:2px"></div>';
+    le.innerHTML=lh;
+  }else{
+    g('pos-count').textContent='—';
+    g('labels-edit').innerHTML='<p style="color:var(--muted);font-size:12px">Доступно только для активного опроса. Переключитесь на активный опрос вверху.</p>';
+  }
+
+  // Карточка передачи роли — только для главного организатора
+  g('card-transfer-role').style.display=isMainOrganizer()?'':'none';
+}
+
+// ============================================================================
+// СОБЫТИЯ
+// ============================================================================
+function initEvents(){
+  g('bsub').addEventListener('click',submitVote);
+  g('bct').addEventListener('click',cpTbl);
+  g('bcx').addEventListener('click',cpTxt);
+  g('bpr').addEventListener('click',function(){prn('rc')});
+  g('bpng').addEventListener('click',sPNG);
+  g('bps').addEventListener('click',function(){prn('sc')});
+
+  async function updateActiveSurvey(data){
+    if(!isOrganizer()||!activeSurvey)return;
+    var r=await sb.from('surveys').update(data).eq('id',activeSurvey.id);
+    if(r.error)toast('Ошибка: '+r.error.message,true);
+    else{await loadAllSurveys();scheduleRender()}
+  }
+
+  g('ba').addEventListener('click',function(){if(!activeSurvey)return;var np=surveyNP();if(np>=10)return;updateActiveSurvey({num_positive:np+1})});
+  g('br').addEventListener('click',function(){if(!activeSurvey)return;var np=surveyNP();if(np<=1)return;updateActiveSurvey({num_positive:np-1})});
+  g('no').addEventListener('change',function(){updateActiveSurvey({has_negative:this.checked})});
+  g('ln').addEventListener('change',function(){updateActiveSurvey({negative_label:this.value})});
+  g('labels-edit').addEventListener('change',function(e){
+    var t=e.target;
+    if(!t.classList.contains('choice-label-input'))return;
+    var idx=parseInt(t.getAttribute('data-idx'));
+    var labels=(surveyLabels()||DEFAULT_LABELS).slice();
+    while(labels.length<=idx)labels.push('');
+    labels[idx]=t.value;
+    updateActiveSurvey({labels:labels});
+  });
+
+  // Добавить псевдоним
+  g('bna').addEventListener('click',async function(){
+    if(!isOrganizer())return;
+    var inp=g('ni'),n=inp.value.trim();
+    if(!n)return;
+    if(pseudonyms.indexOf(n)>=0){alert('Уже есть');return}
+    var r=await sb.from('pseudonyms').insert({name:n});
+    if(r.error)toast('Ошибка: '+r.error.message,true);
+    else{toast('Добавлено');inp.value='';await loadPseudonyms();scheduleRender()}
+  });
+  g('ni').addEventListener('keydown',function(e){if(e.key==='Enter')g('bna').click()});
+
+  // Удалить псевдоним
+  g('nc').addEventListener('click',async function(e){
+    var t=e.target;
+    while(t&&!t.getAttribute('data-rm')&&t!==this)t=t.parentNode;
+    if(!t||!t.getAttribute('data-rm'))return;
+    if(!isOrganizer())return;
+    var rm=t.getAttribute('data-rm');
+    var regUid=null;
+    for(var uid in users){if(users[uid].pseudonym===rm){regUid=uid;break}}
+    if(regUid){
+      alert('«'+rm+'» — занятый псевдоним. Сначала удалите этого пользователя в таблице зарегистрированных.');
+      return;
+    }
+    if(!confirm('Удалить «'+rm+'»?'))return;
+    var r=await sb.from('pseudonyms').delete().eq('name',rm);
+    if(r.error)toast('Ошибка: '+r.error.message,true);
+    else{toast('«'+rm+'» удалён');await loadPseudonyms();scheduleRender()}
+  });
+
+  // Действия в таблице зарегистрированных пользователей
+  g('registered-users-list').addEventListener('change',async function(e){
+    var t=e.target;
+    if(!t.classList||!t.classList.contains('role-select'))return;
+    if(!isMainOrganizer())return;
+    var uid=t.getAttribute('data-role-uid'),newRole=t.value;
+    var r=await sb.from('profiles').update({role:newRole}).eq('id',uid);
+    if(r.error)toast('Ошибка: '+r.error.message,true);
+    else{toast('Роль обновлена');await loadAllProfiles();scheduleRender()}
+  });
+
+  g('registered-users-list').addEventListener('click',async function(e){
+    var t=e.target;
+    while(t&&!t.getAttribute('data-del-user')&&!t.getAttribute('data-reset-uid')&&t!==this)t=t.parentNode;
+    if(!t)return;
+    if(t.getAttribute('data-reset-uid')){
+      if(!isOrganizer())return;
+      var email=t.getAttribute('data-reset-email');
+      if(!email){toast('У пользователя нет email',true);return}
+      if(!confirm('Отправить ссылку для сброса пароля на '+email+'?'))return;
+      var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:window.location.href});
+      if(r.error)toast('Ошибка: '+r.error.message,true);
+      else toast('Письмо отправлено на '+email);
+      return;
+    }
+    if(t.getAttribute('data-del-user')){
+      if(!isOrganizer())return;
+      var delUid=t.getAttribute('data-del-user'),delName=t.getAttribute('data-del-name');
+      if(!confirm('Удалить «'+delName+'»? Профиль будет удалён, ответы в архивных опросах сохранятся.\nВНИМАНИЕ: учётная запись в системе авторизации останется — её можно удалить только в админке Supabase.'))return;
+      var r=await sb.from('profiles').delete().eq('id',delUid);
+      if(r.error)toast('Ошибка: '+r.error.message,true);
+      else{toast('«'+delName+'» удалён');await loadAllProfiles();scheduleRender()}
+    }
+  });
+
+  // Новый опрос
+  g('btn-new-survey').addEventListener('click',function(){
+    if(!isOrganizer())return;
+    g('new-survey-name').value='';
+    g('new-survey-modal').style.display='flex';
+  });
+  g('new-survey-cancel').addEventListener('click',function(){g('new-survey-modal').style.display='none'});
+  g('new-survey-create').addEventListener('click',async function(){
+    var name=g('new-survey-name').value.trim();
+    if(!name){alert('Введите название');return}
+    var r=await sb.from('surveys').insert({
+      title:name,status:'active',num_positive:3,has_negative:true,
+      labels:DEFAULT_LABELS,negative_label:'С кем бы не хотел делать работу',
+      created_by:currentUser.id
+    }).select().single();
+    if(r.error){toast('Ошибка: '+r.error.message,true);return}
+    viewSurveyId=r.data.id;
+    g('new-survey-modal').style.display='none';
+    toast('Опрос «'+name+'» создан');
+    currentTab=isParticipant()?'vote':'results';
+    await loadAllSurveys();renderTabs();scheduleRender();
+  });
+
+  // Завершить активный опрос
+  g('btn-close-survey').addEventListener('click',async function(){
+    if(!isOrganizer())return;
+    if(!activeSurvey){toast('Нет активного опроса',true);return}
+    if(!confirm('Завершить опрос «'+activeSurvey.title+'»? Голосование будет закрыто.'))return;
+    var r=await sb.from('surveys').update({status:'archived',archived_at:new Date().toISOString()}).eq('id',activeSurvey.id);
+    if(r.error)toast('Ошибка: '+r.error.message,true);
+    else{toast('Опрос завершён');await loadAllSurveys();scheduleRender()}
+  });
+
+  // Передача роли главного организатора
+  g('btn-transfer').addEventListener('click',function(){
+    if(!isMainOrganizer())return;
+    var sel=g('transfer-select');
+    sel.innerHTML='<option value="">— Выберите —</option>';
+    var sortedUids=Object.keys(users).sort(function(a,b){return users[a].pseudonym.localeCompare(users[b].pseudonym,'ru')});
+    for(var i=0;i<sortedUids.length;i++){
+      var uid=sortedUids[i];
+      if(uid!==currentUser.id){
+        var o=document.createElement('option');
+        o.value=uid;
+        o.textContent=users[uid].pseudonym+' ('+(users[uid].email||'')+')';
+        sel.appendChild(o);
+      }
+    }
+    g('transfer-modal').style.display='flex';
+  });
+  g('transfer-cancel').addEventListener('click',function(){g('transfer-modal').style.display='none'});
+  g('transfer-confirm').addEventListener('click',async function(){
+    var newUid=g('transfer-select').value;
+    if(!newUid){alert('Выберите пользователя');return}
+    var myNewRole='participant';
+    var radios=document.getElementsByName('my-new-role');
+    for(var i=0;i<radios.length;i++)if(radios[i].checked)myNewRole=radios[i].value;
+    if(!confirm('Передать права главного организатора пользователю «'+users[newUid].pseudonym+'»?\nВаша новая роль: '+(myNewRole==='participant'?'Участник':'Соорганизатор')))return;
+    // Сначала меняем себя на новую роль (освобождаем main_organizer)
+    var r1=await sb.from('profiles').update({role:myNewRole}).eq('id',currentUser.id);
+    if(r1.error){toast('Ошибка: '+r1.error.message,true);return}
+    // Назначаем нового главного
+    var r2=await sb.from('profiles').update({role:'main_organizer'}).eq('id',newUid);
+    if(r2.error){
+      // Откатываем себя обратно
+      await sb.from('profiles').update({role:'main_organizer'}).eq('id',currentUser.id);
+      toast('Ошибка: '+r2.error.message,true);
+      return;
+    }
+    g('transfer-modal').style.display='none';
+    toast('Права переданы');
+    await loadAllProfiles();
+    currentTab=isParticipant()?'vote':'results';
+    renderTabs();scheduleRender();
+  });
+
+  // Смена своего пароля
+  g('btn-change-pass').addEventListener('click',function(){
+    g('new-pass-input').value='';
+    g('change-pass-msg').textContent='';
+    g('change-pass-modal').style.display='flex';
+  });
+  g('change-pass-cancel').addEventListener('click',function(){g('change-pass-modal').style.display='none'});
+  g('change-pass-confirm').addEventListener('click',async function(){
+    var p=g('new-pass-input').value;
+    if(!p||p.length<6){g('change-pass-msg').textContent='Минимум 6 символов';return}
+    var r=await sb.auth.updateUser({password:p});
+    if(r.error){g('change-pass-msg').textContent=authErrorRu(r.error);return}
+    g('change-pass-modal').style.display='none';
+    toast('Пароль изменён');
+  });
+
+  // Экспорт данных
+  g('bex').addEventListener('click',function(){
+    var d=JSON.stringify({
+      title:appTitle,subtitle:appSubtitle,
+      pseudonyms:pseudonyms,
+      survey:viewSurvey?{
+        title:viewSurvey.title,
+        num_positive:viewSurvey.num_positive,
+        has_negative:viewSurvey.has_negative,
+        labels:viewSurvey.labels,
+        negative_label:viewSurvey.negative_label,
+        status:viewSurvey.status
+      }:null,
+      responses:responses.map(function(r){return{
+        respondent_name:r.respondent_name,
+        positive_choices:r.positive_choices,
+        negative_choice:r.negative_choice
+      }})
+    },null,2);
+    var b=new Blob([d],{type:'application/json'}),u=URL.createObjectURL(b);
+    var a=document.createElement('a');
+    a.href=u;a.download='sociometry_'+(viewSurvey?viewSurvey.title:'export')+'.json';
+    a.click();URL.revokeObjectURL(u);
+  });
+
+  // Импорт данных
+  g('bim').addEventListener('click',function(){g('fi').click()});
+  g('fi').addEventListener('change',function(e){
+    if(!isOrganizer()||!activeSurvey){toast('Нужен активный опрос',true);return}
+    var f=e.target.files[0];if(!f)return;
+    var reader=new FileReader();
+    reader.onload=async function(ev){
+      try{
+        var d=JSON.parse(ev.target.result);
+        if(d.survey){
+          await sb.from('surveys').update({
+            num_positive:d.survey.num_positive||3,
+            has_negative:d.survey.has_negative!==undefined?d.survey.has_negative:true,
+            labels:d.survey.labels||DEFAULT_LABELS,
+            negative_label:d.survey.negative_label||''
+          }).eq('id',activeSurvey.id);
+        }
+        if(d.responses&&d.responses.length){
+          var imported=0,skipped=0;
+          for(var i=0;i<d.responses.length;i++){
+            var rr=d.responses[i];
+            var foundUid=null;
+            for(var uid in users){if(users[uid].pseudonym===rr.respondent_name){foundUid=uid;break}}
+            if(!foundUid){skipped++;continue}
+            await sb.from('responses').upsert({
+              survey_id:activeSurvey.id,
+              user_id:foundUid,
+              respondent_name:rr.respondent_name,
+              positive_choices:rr.positive_choices||[],
+              negative_choice:rr.negative_choice||null
+            },{onConflict:'survey_id,user_id'});
+            imported++;
+          }
+          toast('Импортировано: '+imported+(skipped?', пропущено: '+skipped:''));
+          await loadResponses();scheduleRender();
+        }else{
+          toast('Настройки загружены');
+          await loadAllSurveys();scheduleRender();
+        }
+      }catch(ex){alert('Ошибка файла: '+ex.message)}
+    };
+    reader.readAsText(f);
+    e.target.value='';
+  });
+}
+
+// ============================================================================
+// КОПИРОВАНИЕ И ПЕЧАТЬ
+// ============================================================================
+function prn(id){
+  var el=g(id),t=appTitle,s=appSubtitle;
+  var w=window.open('','_blank');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(t)+'</title>'+
+    '<style>body{font-family:sans-serif;padding:20px;color:#222}h1{font-size:18px;margin-bottom:6px}h2{font-size:18px;margin-bottom:14px}'+
+    'table{width:100%;border-collapse:collapse;font-size:13px}'+
+    'th{background:#8b6f47;color:#fff;padding:8px;text-align:center}th:first-child{text-align:left}'+
+    'td{padding:6px 8px;border-bottom:1px solid #ddd;text-align:center}td:first-child{text-align:left}'+
+    '.bn{background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:10px;font-size:11px}'+
+    '.bst{color:#fff;padding:2px 8px;border-radius:10px;font-size:11px}'+
+    '.mc{display:inline-block;padding:4px 12px;margin:2px;border:1px solid #ddd;border-radius:16px;font-size:12px}'+
+    'svg{max-width:100%}</style></head><body>'+
+    '<h1>'+esc(t)+'</h1>'+
+    '<div style="font-size:13px;color:#666;margin-bottom:6px">'+esc(s)+(viewSurvey?' — '+esc(viewSurvey.title):'')+'</div>'+
+    '<div style="font-size:12px;color:#999;margin-bottom:16px">'+new Date().toLocaleDateString('ru-RU')+'</div>'+
+    el.innerHTML+'</body></html>';
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){w.print()},500);
+}
+
+function cpTbl(){
+  var t=document.querySelector('#rt table');if(!t)return;
+  var txt='';
+  var rows=t.querySelectorAll('tr');
+  for(var i=0;i<rows.length;i++){
+    var cells=rows[i].querySelectorAll('th,td'),r=[];
+    for(var j=0;j<cells.length;j++)r.push(cells[j].innerText.trim());
+    txt+=r.join('\t')+'\n';
+  }
+  try{
+    navigator.clipboard.write([new ClipboardItem({
+      'text/html':new Blob([t.outerHTML],{type:'text/html'}),
+      'text/plain':new Blob([txt],{type:'text/plain'})
+    })]).then(function(){toast('Скопировано')});
+  }catch(e){
+    try{navigator.clipboard.writeText(txt).then(function(){toast('Скопировано')})}
+    catch(e2){fbc(txt)}
+  }
+}
+
+function cpTxt(){
+  var t=tly(),m=mch(),namesArr=Object.keys(t);
+  var so=namesArr.slice().sort(function(a,b){return(t[b]?t[b].total:0)-(t[a]?t[a].total:0)});
+  var txt=appTitle.toUpperCase()+'\n'+appSubtitle+'\n'+(viewSurvey?viewSurvey.title:'')+'\n'+new Date().toLocaleDateString('ru-RU')+'\n\n';
+  var hdr=pad('Имя',16);
+  for(var i=0;i<m;i++)hdr+=pad(gsl(i),10);
+  hdr+=pad('Σ',5)+pad('Нег.',6)+'Статус\n';
+  txt+=hdr+new Array(hdr.length).join('—')+'\n';
+  for(var j=0;j<so.length;j++){
+    var nm=so[j],v=t[nm],s=sts(v);
+    var row=pad(nm,16);
+    for(var k=0;k<m;k++)row+=pad(v['c'+k]?''+v['c'+k]:'—',10);
+    row+=pad(''+v.total,5)+pad(v.neg?''+v.neg:'—',6)+s[0]+'\n';
+    txt+=row;
+  }
+  var mu=muts();
+  if(mu.length){
+    txt+='\nВзаимные ('+mu.length+'):\n';
+    for(var n=0;n<mu.length;n++)txt+='  '+mu[n]+'\n';
+  }
+  try{navigator.clipboard.writeText(txt).then(function(){toast('Скопировано')})}
+  catch(e){fbc(txt)}
+}
+
+function fbc(t){
+  var a=document.createElement('textarea');
+  a.value=t;document.body.appendChild(a);a.select();
+  document.execCommand('copy');document.body.removeChild(a);
+  toast('Скопировано');
+}
+
+function sPNG(){
+  var svg=document.querySelector('#sco svg');if(!svg)return;
+  var d=new XMLSerializer().serializeToString(svg);
+  var cv=document.createElement('canvas'),ctx=cv.getContext('2d'),img=new Image();
+  cv.width=1600;cv.height=1400;
+  img.onload=function(){
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img,0,0,cv.width,cv.height);
+    ctx.font='bold 24px sans-serif';ctx.fillStyle='#333';
+    ctx.fillText(appTitle+' — '+(viewSurvey?viewSurvey.title:''),20,30);
+    var a=document.createElement('a');
+    a.download='sociogramma.png';
+    a.href=cv.toDataURL('image/png');
+    a.click();
+  };
+  img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(d)));
+}
+
+})();
+</script>
+</body>
+</html>
