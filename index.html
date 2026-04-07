@@ -1322,28 +1322,51 @@ function initEvents(){
   });
   g('transfer-cancel').addEventListener('click',function(){g('transfer-modal').style.display='none'});
   g('transfer-confirm').addEventListener('click',async function(){
+    console.log('[transfer] click handler started');
     var newUid=g('transfer-select').value;
+    console.log('[transfer] newUid =',newUid);
     if(!newUid){alert('Выберите пользователя');return}
     var myNewRole='participant';
     var radios=document.getElementsByName('my-new-role');
     for(var i=0;i<radios.length;i++)if(radios[i].checked)myNewRole=radios[i].value;
-    if(!confirm('Передать права главного организатора пользователю «'+users[newUid].pseudonym+'»?\nВаша новая роль: '+(myNewRole==='participant'?'Участник':'Соорганизатор')))return;
-    // Сначала меняем себя на новую роль (освобождаем main_organizer)
-    var r1=await sb.from('profiles').update({role:myNewRole}).eq('id',currentUser.id);
-    if(r1.error){toast('Ошибка: '+r1.error.message,true);return}
-    // Назначаем нового главного
-    var r2=await sb.from('profiles').update({role:'main_organizer'}).eq('id',newUid);
-    if(r2.error){
-      // Откатываем себя обратно
-      await sb.from('profiles').update({role:'main_organizer'}).eq('id',currentUser.id);
-      toast('Ошибка: '+r2.error.message,true);
-      return;
+    console.log('[transfer] myNewRole =',myNewRole);
+    console.log('[transfer] target user =',users[newUid]);
+    var ok=confirm('Передать права главного организатора пользователю «'+users[newUid].pseudonym+'»?\nВаша новая роль: '+(myNewRole==='participant'?'Участник':'Соорганизатор'));
+    console.log('[transfer] confirm result =',ok);
+    if(!ok)return;
+
+    // Кнопка → loading
+    var btn=g('transfer-confirm');
+    btn.disabled=true;
+    var oldText=btn.textContent;
+    btn.textContent='Передача...';
+
+    try{
+      console.log('[transfer] calling RPC transfer_main_organizer');
+      var rpc=await sb.rpc('transfer_main_organizer',{
+        new_main_id:newUid,
+        my_new_role:myNewRole
+      });
+      console.log('[transfer] RPC result:',rpc);
+      if(rpc.error){
+        console.error('[transfer] RPC error:',rpc.error);
+        toast('Ошибка: '+rpc.error.message,true);
+        btn.disabled=false;btn.textContent=oldText;
+        return;
+      }
+      console.log('[transfer] RPC success, reloading profiles');
+      g('transfer-modal').style.display='none';
+      toast('Права переданы');
+      await loadAllProfiles();
+      console.log('[transfer] profiles reloaded, my new role =',userProfile&&userProfile.role);
+      currentTab=isParticipant()?'vote':'results';
+      renderTabs();scheduleRender();
+    }catch(ex){
+      console.error('[transfer] exception:',ex);
+      toast('Исключение: '+(ex.message||ex),true);
+    }finally{
+      btn.disabled=false;btn.textContent=oldText;
     }
-    g('transfer-modal').style.display='none';
-    toast('Права переданы');
-    await loadAllProfiles();
-    currentTab=isParticipant()?'vote':'results';
-    renderTabs();scheduleRender();
   });
 
   // Смена своего пароля
