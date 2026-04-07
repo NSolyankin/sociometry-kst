@@ -284,23 +284,36 @@ td:first-child{text-align:left;font-weight:500}
 var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co';
 var SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 
+// Стандартный ключ хранилища, который supabase-js использует по умолчанию.
+// Мы храним токен здесь, чтобы сессия сохранялась между перезагрузками.
+var SB_STORAGE_KEY='sb-nxxjbiwrkrlylpfypzvi-auth-token';
+
 // Создаём клиент Supabase. При проблемах с зависанием библиотеки
-// клиент можно пересоздать функцией recreateClient() ниже.
+// клиент можно пересоздать функцией hardLocalLogout() ниже.
 var sb=null;
 function createSbClient(){
+  // Каждый новый клиент использует свой уникальный storageKey,
+  // чтобы старые экземпляры (которые supabase-js не умеет уничтожать)
+  // не толкались за один и тот же lock в localStorage.
+  // Сам токен мы вручную копируем в стандартный ключ при логине.
+  var uniqueKey='sb-runtime-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
   return window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
-    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},
+    auth:{
+      persistSession:true,
+      autoRefreshToken:true,
+      detectSessionInUrl:false,
+      storageKey:uniqueKey
+    },
     realtime:{params:{eventsPerSecond:1}}
   });
 }
 sb=createSbClient();
 
-// Принудительно очищает локальную сессию: выбрасывает клиент,
-// чистит localStorage и создаёт новый. Используется вместо signOut(),
-// который иногда виснет.
+// Принудительно очищает локальную сессию: чистит localStorage
+// от всех ключей Supabase и пересоздаёт клиент с новым уникальным ключом.
+// Это надёжнее, чем sb.auth.signOut(), который иногда виснет.
 function hardLocalLogout(){
   console.log('[hardLogout] start');
-  // Чистим все ключи Supabase из localStorage
   try{
     var keys=[];
     for(var i=0;i<localStorage.length;i++){
@@ -309,11 +322,15 @@ function hardLocalLogout(){
     }
     keys.forEach(function(k){console.log('[hardLogout] removing',k);localStorage.removeItem(k)});
   }catch(e){console.warn('[hardLogout] localStorage error:',e)}
-  // Останавливаем polling
   if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
-  // Пересоздаём клиент
-  try{sb=createSbClient();console.log('[hardLogout] client recreated')}
-  catch(e){console.error('[hardLogout] recreate error:',e)}
+  try{
+    sb=createSbClient();
+    // Переподписываем обработчик на новый клиент
+    if(typeof handleAuthStateChange==='function'){
+      sb.auth.onAuthStateChange(handleAuthStateChange);
+    }
+    console.log('[hardLogout] client recreated');
+  }catch(e){console.error('[hardLogout] recreate error:',e)}
 }
 
 var DEFAULT_LABELS=["С кем бы стал делать в первую очередь","С кем бы стал делать во вторую очередь","С кем бы стал делать в третью очередь"];
@@ -499,20 +516,25 @@ function forceLocalLogout(){
   g('login-pass').value='';
 }
 
-// ============================================================================
-// АВТО-ПЕРЕХОД ПО СОСТОЯНИЮ AUTH
-// ============================================================================
-sb.auth.onAuthStateChange(async function(event,session){
+// Обработчик изменения состояния авторизации.
+// Вынесен в отдельную функцию, потому что мы переподписываем его
+// при каждом пересоздании клиента (см. createSbClient/hardLocalLogout).
+async function handleAuthStateChange(event,session){
   console.log('[auth] state change:',event,'session:',session?'yes':'no');
   try{
     if(session&&session.user){
       currentUser=session.user;
       // Загружаем профиль из таблицы profiles
-      var pr=await sb.from('profiles').select('*').eq('id',currentUser.id).single();
-      if(pr.error||!pr.data){
-        console.error('[auth] профиль не найден:',pr.error);
-        toast('Профиль не найден. Обратитесь к организатору.',true);
-        // Не вызываем signOut здесь, чтобы не зациклиться. Просто показываем экран входа.
+      var pr=await sb.from('profiles').select('*').eq('id',currentUser.id).maybeSingle();
+      if(pr.error){
+        console.error('[auth] ошибка загрузки профиля:',pr.error);
+        toast('Ошибка загрузки профиля: '+pr.error.message,true);
+        forceLocalLogout();
+        return;
+      }
+      if(!pr.data){
+        console.error('[auth] профиль не найден для uid =',currentUser.id);
+        toast('Профиль не найден. Возможно, ваш аккаунт был удалён организатором.',true);
         forceLocalLogout();
         return;
       }
@@ -530,13 +552,16 @@ sb.auth.onAuthStateChange(async function(event,session){
       g('reg-btn').disabled=false;
     }
   }catch(ex){
-    console.error('[auth] exception in onAuthStateChange:',ex);
-    // Гарантированно скрываем спиннер, чтобы не зависнуть
+    console.error('[auth] exception in handleAuthStateChange:',ex);
     g('loading').style.display='none';
     if(!session)g('auth-screen').style.display='';
     toast('Ошибка авторизации: '+(ex.message||ex),true);
   }
-});
+}
+
+// Подписываемся на изменения. Эту подписку нужно обновлять
+// при каждом пересоздании клиента — см. createSbClient ниже.
+sb.auth.onAuthStateChange(handleAuthStateChange);
 
 // При первой загрузке проверяем сессию
 (async function(){
