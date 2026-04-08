@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=yes">
 <title>Портал КСТ 161</title>
 <style>
-/* Базовые стили */
+/* Копируем проверенные стили */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-:root{--bg:#f5f1ea;--card:#fffdf8;--border:#e8e0d4;--accent:#8b6f47;--accent2:#6d5635;--text:#2c2c2c;--muted:#999;--tab-bg:#ede8df;--green:#2e7d32;--red:#c0392b;--red-bg:#fce4ec;--red-text:#c62828}
+:root{--bg:#f5f1ea;--card:#fffdf8;--border:#e8e0d4;--accent:#8b6f47;--accent2:#6d5635;--text:#2c2c2c;--muted:#999;--tab-bg:#ede8df;--green:#2e7d32;--red:#c0392b}
 body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .app{max-width:960px;margin:0 auto;padding:16px 12px 60px}
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px}
@@ -30,12 +30,13 @@ td{padding:10px;border-bottom:1px solid var(--border)}
 .survey-tag{font-size:11px;padding:4px 10px;border-radius:10px;font-weight:700}
 .tag-active{background:#e8f5e9;color:var(--green)}
 .tag-done{background:#e3f2fd;color:#1565c0}
+.loading{text-align:center;padding:50px;color:#999}
 .auth-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
 .auth-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:400px}
 </style>
 </head>
 <body>
-<div id="loading" style="text-align:center;padding:50px;color:#999">Загрузка...</div>
+<div id="loading" class="loading">Загрузка портала...</div>
 
 <div id="auth-screen" style="display:none">
     <div class="auth-wrap"><div class="auth-card">
@@ -51,7 +52,7 @@ td{padding:10px;border-bottom:1px solid var(--border)}
     <div class="app">
         <div class="header">
             <div><span class="user-badge" id="user-badge"></span> <span class="user-role" id="user-role"></span></div>
-            <button class="btn" style="padding:6px 12px;font-size:12px" id="logout-btn">Выйти</button>
+            <button class="btn" style="padding:6px 12px; font-size:12px" id="logout-btn">Выйти</button>
         </div>
         <div class="tabs" id="tbar"></div>
 
@@ -66,7 +67,7 @@ td{padding:10px;border-bottom:1px solid var(--border)}
         <div id="p-vote" class="page">
             <div class="card">
                 <h2 id="vote-title" style="margin-bottom:4px"></h2>
-                <div id="voter-identity" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+                <div id="voter-name" style="font-size:12px; color:var(--muted); margin-bottom:16px"></div>
                 <div id="vote-form-area" style="overflow-x:auto"></div>
                 <button class="btn bp" id="bsub" style="width:100%;margin-top:20px">Сохранить ответ</button>
                 <div id="fm" style="margin-top:10px;text-align:center"></div>
@@ -76,32 +77,20 @@ td{padding:10px;border-bottom:1px solid var(--border)}
         <div id="p-results" class="page">
             <div class="card">
                 <h2 id="results-title">Результаты</h2>
-                <div id="results-area" style="overflow-x:auto;margin-top:16px"></div>
+                <div id="results-area" style="overflow-x:auto; margin-top:16px"></div>
             </div>
         </div>
 
         <div id="p-profile" class="page">
-            <div class="card">
-                <h2>Мой профиль</h2>
-                <div id="profile-info" style="line-height:2;margin-top:15px"></div>
-            </div>
+            <div class="card"><h2>Мой профиль</h2><div id="profile-info" style="line-height:2"></div></div>
         </div>
 
         <div id="p-admin" class="page">
             <div class="card">
                 <h2>Новый опрос</h2>
                 <div class="field"><label class="label">Название</label><input type="text" id="new-title"></div>
-                <div class="field">
-                    <label class="label">Тип</label>
-                    <select id="new-type">
-                        <option value="sociometry">Социометрия</option>
-                        <option value="matrix">Матрица оценок (Да/Нет)</option>
-                    </select>
-                </div>
-                <div id="questions-field" class="field" style="display:none">
-                    <label class="label">Вопросы (каждый с новой строки)</label>
-                    <textarea id="new-questions" rows="4"></textarea>
-                </div>
+                <div class="field"><label class="label">Тип</label><select id="new-type"><option value="sociometry">Социометрия</option><option value="matrix">Матрица оценок (Да/Нет)</option></select></div>
+                <div id="questions-field" class="field" style="display:none"><label class="label">Вопросы (каждый с новой строки)</label><textarea id="new-questions" rows="4"></textarea></div>
                 <button class="btn bp" id="btn-create-survey" style="width:100%">Опубликовать</button>
             </div>
         </div>
@@ -113,24 +102,40 @@ td{padding:10px;border-bottom:1px solid var(--border)}
 (function(){
 'use strict';
 var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co', SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
-var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+var sb = null;
 
-var currentUser, userProfile, surveys=[], userResponses=[], viewSurveyId=null, viewSurvey=null, currentTab='dashboard', participants=[], allResponses=[];
+// ФУНКЦИЯ СОЗДАНИЯ КЛИЕНТА (С УНИКАЛЬНЫМ КЛЮЧОМ ДЛЯ КАЖДОГО ЗАПУСКА)
+function createSbClient(){
+  var uniqueKey='sb-runtime-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  return window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+    auth:{ persistSession:true, autoRefreshToken:true, storageKey:uniqueKey }
+  });
+}
+sb = createSbClient();
+
+var currentUser, userProfile, surveys=[], userResponses=[], viewSurveyId=null, viewSurvey=null, currentTab='dashboard', participants=[];
 
 async function handleAuthStateChange(event, session) {
     if (session) {
         currentUser = session.user;
-        let {data} = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+        let {data, error} = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+        if(error || !data) { showLogin(); return; }
         userProfile = data;
-        if (userProfile) startPortal();
+        startPortal();
     } else showLogin();
 }
 sb.auth.onAuthStateChange(handleAuthStateChange);
 
-function showLogin() { document.getElementById('loading').style.display='none'; document.getElementById('auth-screen').style.display='block'; document.getElementById('main-app').style.display='none'; }
+function showLogin() { 
+    document.getElementById('loading').style.display='none'; 
+    document.getElementById('auth-screen').style.display='block'; 
+    document.getElementById('main-app').style.display='none';
+}
 
 async function startPortal() {
-    document.getElementById('loading').style.display='none'; document.getElementById('auth-screen').style.display='none'; document.getElementById('main-app').style.display='block';
+    document.getElementById('loading').style.display='none'; 
+    document.getElementById('auth-screen').style.display='none'; 
+    document.getElementById('main-app').style.display='block';
     if (userProfile.role === 'main_organizer') document.getElementById('btn-show-admin').style.display = 'block';
     await loadData(); renderAll();
 }
@@ -159,7 +164,7 @@ function renderAll() {
 
 function renderTabs() {
     var tb = [['dashboard', 'Рабочий стол']];
-    // Организаторы НЕ голосуют
+    // ГОЛОСОВАНИЕ ТОЛЬКО ДЛЯ УЧАСТНИКОВ
     if (viewSurveyId && userProfile.role === 'participant') tb.push(['vote', 'Голосование']);
     if (viewSurveyId) tb.push(['results', 'Результаты']);
     tb.push(['profile', 'Профиль']);
@@ -179,20 +184,24 @@ function renderDashboard() {
         var isDone = userResponses.includes(s.id);
         var card = document.createElement('div'); card.className = 'survey-card';
         card.innerHTML = `<div><div style="font-weight:600">${s.title}</div><div style="font-size:12px;color:#999">${s.type==='matrix'?'Матрица':'Социометрия'}</div></div>
-        <span class="survey-tag ${s.status==='active'?(isDone?'tag-done':'tag-active'):''}">${s.status==='active'?(isDone?'Завершено':'Пройти'):'Архив'}</span>`;
-        card.onclick = () => { viewSurveyId = s.id; viewSurvey = s; currentTab = isDone ? 'results' : 'vote'; if(userProfile.role!=='participant') currentTab='results'; renderAll(); };
+        <span class="survey-tag ${s.status === 'active' ? (isDone ? 'tag-done' : 'tag-active') : ''}">${s.status==='active'?(isDone?'Завершено':'Пройти'):'Архив'}</span>`;
+        card.onclick = () => { 
+            viewSurveyId = s.id; viewSurvey = s; 
+            currentTab = (isDone || userProfile.role !== 'participant') ? 'results' : 'vote'; 
+            renderAll(); 
+        };
         container.appendChild(card);
     });
 }
 
 function renderProfile() {
-    document.getElementById('profile-info').innerHTML = `<p><b>Псевдоним:</b> ${userProfile.pseudonym}</p><p><b>Email:</b> ${currentUser.email}</p><p><b>Группа:</b> ${userProfile.group_id || '161'}</p>`;
+    document.getElementById('profile-info').innerHTML = `<p><b>Псевдоним:</b> ${userProfile.pseudonym}</p><p><b>Роль:</b> ${userProfile.role}</p><p><b>Группа:</b> ${userProfile.group_id || '161'}</p>`;
 }
 
 function renderVoteForm() {
     var area = document.getElementById('vote-form-area'); area.innerHTML = '';
     document.getElementById('vote-title').textContent = viewSurvey.title;
-    document.getElementById('voter-identity').textContent = `Вы голосуете как: ${userProfile.pseudonym}`;
+    document.getElementById('voter-name').textContent = 'Голосует: ' + userProfile.pseudonym;
     
     if (viewSurvey.type === 'matrix') {
         let qs = viewSurvey.settings?.questions || [];
@@ -202,27 +211,38 @@ function renderVoteForm() {
             html += `<tr><td><b>${p}</b></td>` + qs.map((q, i) => `<td><select id="m-${p}-${i}"><option value="">—</option><option value="да">Да</option><option value="нет">Нет</option></select></td>`).join('') + '</tr>';
         });
         area.innerHTML = html + '</tbody></table>';
+    } else {
+        area.innerHTML = '<p style="padding:20px; color:#999">Перейдите в основное приложение для классической социометрии.</p>';
     }
 }
 
-// СОХРАНЕНИЕ ОТВЕТА
+// СОХРАНЕНИЕ ОТВЕТА (БЕЗ RELOAD!)
 document.getElementById('bsub').onclick = async function() {
     var btn = this; btn.disabled = true; document.getElementById('fm').textContent = 'Сохранение...';
-    let answers = {};
-    if (viewSurvey.type === 'matrix') {
-        let qs = viewSurvey.settings?.questions || [];
-        participants.forEach(p => {
-            if (p === userProfile.pseudonym) return;
-            answers[p] = qs.map((q, i) => document.getElementById(`m-${p}-${i}`).value);
-        });
+    try {
+        let answers = {};
+        if (viewSurvey.type === 'matrix') {
+            let qs = viewSurvey.settings?.questions || [];
+            participants.forEach(p => {
+                if (p === userProfile.pseudonym) return;
+                answers[p] = qs.map((q, i) => document.getElementById(`m-${p}-${i}`).value);
+            });
+        }
+        let {error} = await sb.from('responses').upsert({
+            survey_id: viewSurveyId, user_id: currentUser.id, respondent_name: userProfile.pseudonym, answers: answers
+        }, {onConflict: 'survey_id,user_id'});
+
+        if (error) throw error;
+        
+        alert('Сохранено!');
+        await loadData();
+        currentTab = 'results';
+        renderAll();
+    } catch(ex) {
+        alert('Ошибка: ' + ex.message);
+        btn.disabled = false;
+        document.getElementById('fm').textContent = '';
     }
-
-    let {error} = await sb.from('responses').upsert({
-        survey_id: viewSurveyId, user_id: currentUser.id, respondent_name: userProfile.pseudonym, answers: answers
-    }, {onConflict: 'survey_id,user_id'});
-
-    if (error) { alert(error.message); btn.disabled = false; }
-    else { alert('Сохранено!'); location.reload(); }
 };
 
 async function renderResults() {
@@ -232,7 +252,7 @@ async function renderResults() {
 
     if (viewSurvey.type === 'matrix') {
         let qs = viewSurvey.settings?.questions || [];
-        let stats = {}; // { pseudonym: [ {yes:0, no:0}, ... ] }
+        let stats = {}; 
         participants.forEach(p => { stats[p] = qs.map(() => ({yes: 0, no: 0})); });
 
         data.forEach(resp => {
@@ -246,7 +266,7 @@ async function renderResults() {
             }
         });
 
-        let html = '<table><thead><tr><th>Участник</th>' + qs.map(q => `<th>${q} (Да/Нет)</th>`).join('') + '</tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Имя</th>' + qs.map(q => `<th>${q} (Да/Нет)</th>`).join('') + '</tr></thead><tbody>';
         participants.forEach(p => {
             html += `<tr><td><b>${p}</b></td>` + stats[p].map(s => `<td><span style="color:green">${s.yes}</span> / <span style="color:red">${s.no}</span></td>`).join('') + '</tr>';
         });
@@ -259,9 +279,17 @@ document.getElementById('new-type').onchange = function() { document.getElementB
 document.getElementById('btn-create-survey').onclick = async function() {
     var qs = document.getElementById('new-questions').value.split('\n').filter(q => q.trim() !== '');
     let {error} = await sb.from('surveys').insert({title: document.getElementById('new-title').value, type: document.getElementById('new-type').value, status: 'active', settings: {questions: qs}, group_id: userProfile.group_id || '161', created_by: currentUser.id});
-    if (error) alert(error.message); else location.reload();
+    if (error) alert(error.message); else { await loadData(); currentTab='dashboard'; renderAll(); }
 };
-document.getElementById('logout-btn').onclick = () => { localStorage.clear(); location.reload(); };
+document.getElementById('logout-btn').onclick = () => { 
+    try {
+        for(var i=0;i<localStorage.length;i++){
+            var k=localStorage.key(i);
+            if(k&&(k.indexOf('sb-')===0||k.indexOf('supabase')>=0)) localStorage.removeItem(k);
+        }
+    } catch(e){}
+    location.reload(); 
+};
 document.getElementById('login-btn').onclick = async function() {
     let {error} = await sb.auth.signInWithPassword({email: document.getElementById('login-email').value, password: document.getElementById('login-pass').value});
     if (error) document.getElementById('login-error').textContent = error.message;
