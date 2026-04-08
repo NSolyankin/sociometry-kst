@@ -100,7 +100,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 (function(){
 'use strict';
 
-// КОНФИГУРАЦИЯ (та же, что в оригинале)
+// 1. Конфигурация Supabase
 var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co';
 var SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -108,16 +108,28 @@ var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 var currentUser=null;
 var userProfile=null;
 var surveys=[];
-var activeSurvey=null;
-var viewSurveyId=null; // Какой опрос открыт сейчас
-var userResponses=[]; // Ответы текущего пользователя
+var userResponses=[]; 
+var viewSurveyId=null; 
 var currentTab='dashboard';
 
-// --- AUTH LOGIC ---
+// 2. Функция очистки сессии (из вашего рабочего index.html)
+function hardLocalLogout(){
+  console.log('[portal] Очистка локальных данных...');
+  try {
+    for(var i=0; i<localStorage.length; i++){
+      var k=localStorage.key(i);
+      if(k && (k.indexOf('sb-')===0 || k.indexOf('supabase')>=0)) localStorage.removeItem(k);
+    }
+  } catch(e) { console.warn('Ошибка очистки:', e); }
+}
+
+// 3. Обработка авторизации
 async function handleAuthStateChange(event, session) {
+    console.log('[portal] Статус Auth:', event);
     if (session && session.user) {
         currentUser = session.user;
-        let { data } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+        let { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+        if (error) { console.error('Ошибка профиля:', error); return; }
         userProfile = data;
         if (userProfile) { await startPortal(); }
     } else {
@@ -142,7 +154,7 @@ async function startPortal() {
 }
 
 async function loadData() {
-    // Загружаем все опросы и ответы текущего пользователя
+    // Загружаем все опросы и ответы именно этого пользователя
     let sRes = await sb.from('surveys').select('*').order('created_at', {ascending:false});
     surveys = sRes.data || [];
     
@@ -150,8 +162,9 @@ async function loadData() {
     userResponses = (rRes.data || []).map(r => r.survey_id);
 }
 
-// --- RENDERING ---
+// 4. Отрисовка интерфейса
 function renderHeader() {
+    if(!userProfile) return;
     document.getElementById('user-badge').textContent = userProfile.pseudonym;
     document.getElementById('user-role').textContent = userProfile.role === 'main_organizer' ? 'Организатор' : 'Участник';
 }
@@ -177,7 +190,6 @@ function renderTabs() {
 
 function renderAll() {
     renderTabs();
-    // Прячем все страницы
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     
     if (currentTab === 'dashboard') {
@@ -193,6 +205,11 @@ function renderDashboard() {
     var container = document.getElementById('survey-list-container');
     container.innerHTML = '';
     
+    if(surveys.length === 0) {
+        container.innerHTML = '<p style="color:#999; text-align:center; padding:20px;">Опросов пока нет</p>';
+        return;
+    }
+
     surveys.forEach(s => {
         var isDone = userResponses.includes(s.id);
         var card = document.createElement('div');
@@ -200,7 +217,7 @@ function renderDashboard() {
         card.innerHTML = `
             <div>
                 <div class="s-title">${s.title}</div>
-                <div class="s-meta">Тип: ${s.type || 'Социометрия'} • ${new Date(s.created_at).toLocaleDateString()}</div>
+                <div class="s-meta">Тип: ${s.type || 'Социометрия'} • ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div>
             </div>
             <span class="survey-tag ${s.status === 'active' ? (isDone ? 'tag-done' : 'tag-active') : 'tag-archived'}">
                 ${s.status === 'active' ? (isDone ? 'Завершено' : 'Пройти') : 'Архив'}
@@ -215,16 +232,38 @@ function renderDashboard() {
     });
 }
 
-// Логика выхода (hard logout)
-document.getElementById('logout-btn').onclick = function() {
-    localStorage.clear();
-    location.reload();
+// 5. Кнопки: Вход и Выход
+document.getElementById('login-btn').onclick = async function() {
+    var btn = this;
+    var email = document.getElementById('login-email').value.trim();
+    var pass = document.getElementById('login-pass').value;
+    var errDiv = document.getElementById('login-error');
+
+    if(!email || !pass) { errDiv.textContent = 'Заполните все поля'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Входим...';
+    errDiv.textContent = '';
+
+    hardLocalLogout();
+
+    try {
+        var { error } = await sb.auth.signInWithPassword({email: email, password: pass});
+        if (error) {
+            errDiv.textContent = 'Ошибка: ' + (error.message === 'Invalid login credentials' ? 'Неверный email или пароль' : error.message);
+            btn.disabled = false;
+            btn.textContent = 'Войти';
+        }
+    } catch (ex) {
+        errDiv.textContent = 'Ошибка соединения';
+        btn.disabled = false;
+        btn.textContent = 'Войти';
+    }
 };
 
-document.getElementById('login-btn').onclick = async function() {
-    var email = document.getElementById('login-email').value;
-    var pass = document.getElementById('login-pass').value;
-    await sb.auth.signInWithPassword({email, password});
+document.getElementById('logout-btn').onclick = function() {
+    hardLocalLogout();
+    location.reload();
 };
 
 })();
