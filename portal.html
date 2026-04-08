@@ -5,93 +5,95 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=yes">
 <title>Портал КСТ 161</title>
 <style>
-/* Копируем базовые стили из оригинала */
+/* Стили из оригинала с дополнениями для матриц */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#f5f1ea;--card:#fffdf8;--border:#e8e0d4;--accent:#8b6f47;--accent2:#6d5635;--text:#2c2c2c;--muted:#999;--tab-bg:#ede8df;--green:#2e7d32;--red:#c0392b;--red-bg:#fce4ec;--red-text:#c62828;--star:#f9a825;--pref:#43a047;--accepted:#78909c;--isolated:#bdbdbd}
-body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .app{max-width:960px;margin:0 auto;padding:16px 12px 60px}
-.auth-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-.auth-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.06)}
-.auth-title{font-family:Georgia,serif;font-size:28px;font-weight:700;color:#3a3028;margin-bottom:4px;text-align:center}
-.auth-sub{font-size:13px;color:var(--muted);margin-bottom:24px;text-align:center}
-.auth-field{margin-bottom:16px}
-.auth-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
-.auth-input{width:100%;padding:12px 14px;border:1px solid #d4cbbf;border-radius:8px;font-size:16px;background:#fff;color:#333;outline:none;-webkit-appearance:none}
-.auth-btn{display:block;width:100%;padding:14px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
-.auth-link{display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--accent);cursor:pointer;border:none;background:none}
-.auth-error{color:var(--red);font-size:13px;margin-top:8px;text-align:center;min-height:18px}
-.auth-info{color:var(--green);font-size:13px;margin-top:8px;text-align:center;min-height:18px}
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px}
 .user-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:var(--tab-bg);font-size:13px;font-weight:500;border:1px solid var(--border)}
 .user-role{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);font-weight:700}
-.logout-btn{background:none;border:1px solid #d4cbbf;padding:6px 14px;border-radius:8px;font-size:12px;color:#777;cursor:pointer}
 .tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
-.tab{display:inline-block;padding:10px 16px;border:none;cursor:pointer;font-size:14px;font-weight:500;border-radius:8px;background:var(--tab-bg);color:#777;transition:all .15s}
+.tab{padding:10px 16px;cursor:pointer;font-size:14px;font-weight:500;border-radius:8px;background:var(--tab-bg);color:#777}
 .tab.active{background:var(--accent);color:#fff}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
-.btn{display:inline-block;font-size:14px;font-weight:600;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;text-align:center;transition:all .15s}
-.bp{background:var(--accent);color:#fff}
-.page{display:none}.page.active{display:block}
-
-/* Специфические стили для Портала */
-.survey-card{padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:12px;cursor:pointer;transition:all .2s;display:flex;justify-content:space-between;align-items:center}
-.survey-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.05)}
-.survey-card .s-title{font-weight:600;font-size:16px;color:#3a3028}
-.survey-card .s-meta{font-size:12px;color:var(--muted);margin-top:4px}
-.survey-tag{font-size:11px;padding:4px 10px;border-radius:10px;font-weight:700;text-transform:uppercase}
+.survey-card{padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.survey-tag{font-size:11px;padding:4px 10px;border-radius:10px;font-weight:700}
 .tag-active{background:#e8f5e9;color:var(--green)}
 .tag-done{background:#e3f2fd;color:#1565c0}
-.tag-archived{background:var(--bg);color:var(--muted)}
+.btn{display:inline-block;font-size:14px;font-weight:600;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;text-align:center}
+.bp{background:var(--accent);color:#fff}
+.field{margin-bottom:14px}
+.label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:block}
+input, select, textarea{width:100%;padding:12px;border:1px solid #d4cbbf;border-radius:8px;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--accent);color:#fff;padding:10px;text-align:left}
+td{padding:10px;border-bottom:1px solid var(--border)}
+.page{display:none}.page.active{display:block}
+.auth-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:400px}
 </style>
 </head>
 <body>
-<div id="loading" class="loading" style="text-align:center;padding:50px"><div class="spinner"></div>Загрузка...</div>
+<div id="loading" style="text-align:center;padding:50px">Загрузка...</div>
 
 <div id="auth-screen" style="display:none">
-    <div class="auth-wrap">
-        <div class="auth-card">
-            <div class="auth-title">Портал КСТ</div>
-            <div class="auth-sub">Единый кабинет группы 161</div>
-            <div id="login-form">
-                <div class="auth-field"><label class="auth-label">Email</label><input type="email" id="login-email" class="auth-input" placeholder="email@example.com"></div>
-                <div class="auth-field"><label class="auth-label">Пароль</label><input type="password" id="login-pass" class="auth-input" placeholder="••••••"></div>
-                <button class="auth-btn" id="login-btn" style="width:100%">Войти</button>
-                <div id="login-error" class="auth-error"></div>
-            </div>
-        </div>
-    </div>
+    <div class="auth-wrap"><div class="auth-card">
+        <h2 style="text-align:center;margin-bottom:20px">Портал КСТ</h2>
+        <div class="field"><label class="label">Email</label><input type="email" id="login-email"></div>
+        <div class="field"><label class="label">Пароль</label><input type="password" id="login-pass"></div>
+        <button class="btn bp" id="login-btn" style="width:100%">Войти</button>
+        <div id="login-error" style="color:red;margin-top:10px;text-align:center"></div>
+    </div></div>
 </div>
 
 <div id="main-app" style="display:none">
     <div class="app">
         <div class="header">
-            <div class="header-left"><span class="user-badge" id="user-badge"></span> <span class="user-role" id="user-role"></span></div>
-            <button class="logout-btn" id="logout-btn">Выйти</button>
+            <div><span class="user-badge" id="user-badge"></span> <span class="user-role" id="user-role"></span></div>
+            <button class="btn" style="padding:6px 12px" id="logout-btn">Выйти</button>
         </div>
-        
         <div class="tabs" id="tbar"></div>
 
         <div id="p-dashboard" class="page">
-            <h2 style="margin-bottom:16px; font-family:Georgia,serif;">Мои опросы</h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2>Мои опросы</h2>
+                <button class="btn bp" id="btn-admin" style="display:none;padding:8px 16px">+ Создать</button>
+            </div>
             <div id="survey-list-container"></div>
         </div>
 
-        <div id="survey-context-area" style="display:none">
-            <div id="p-vote" class="page">
-                <div class="card">
-                    <h2 id="vote-title">Голосование</h2>
-                    <div id="vote-form-area"></div>
-                    <button class="btn bp" id="bsub" style="width:100%; margin-top:16px">Сохранить ответ</button>
-                    <div id="fm" style="margin-top:10px"></div>
-                </div>
-            </div>
-            
-            <div id="p-results" class="page">
-                <div class="card"><h2>Результаты</h2><div id="rt-container"></div></div>
+        <div id="p-vote" class="page">
+            <div class="card">
+                <h2 id="vote-title" style="margin-bottom:16px"></h2>
+                <div id="vote-form-area"></div>
+                <button class="btn bp" id="bsub" style="width:100%;margin-top:20px">Сохранить ответ</button>
+                <div id="fm" style="margin-top:10px"></div>
             </div>
         </div>
 
-        <div id="p-profile" class="page"><div class="card"><h2>Мой профиль</h2><div id="profile-info"></div></div></div>
+        <div id="p-results" class="page">
+            <div class="card"><h2>Результаты</h2><div id="rt-container"></div></div>
+        </div>
+
+        <div id="p-admin" class="page">
+            <div class="card">
+                <h2>Новый опрос</h2>
+                <div class="field"><label class="label">Название</label><input type="text" id="new-title" placeholder="Например: Оценка лидерства"></div>
+                <div class="field">
+                    <label class="label">Тип опроса</label>
+                    <select id="new-type">
+                        <option value="sociometry">Социометрия (3 выбора + нег.)</option>
+                        <option value="matrix">Матрица (Да/Нет по списку)</option>
+                    </select>
+                </div>
+                <div id="questions-field" class="field" style="display:none">
+                    <label class="label">Вопросы для матрицы (каждый с новой строки)</label>
+                    <textarea id="new-questions" rows="4" placeholder="Готов работать в команде?&#10;Считаю лидером?"></textarea>
+                </div>
+                <button class="btn bp" id="btn-create-survey">Создать и активировать</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -99,171 +101,114 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 <script>
 (function(){
 'use strict';
-
-// 1. Конфигурация Supabase
-var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co';
-var SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
+var SUPABASE_URL='https://nxxjbiwrkrlylpfypzvi.supabase.co', SUPABASE_KEY='sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-var currentUser=null;
-var userProfile=null;
-var surveys=[];
-var userResponses=[]; 
-var viewSurveyId=null; 
-var currentTab='dashboard';
+var currentUser, userProfile, surveys=[], userResponses=[], viewSurveyId=null, viewSurvey=null, currentTab='dashboard', participants=[];
 
-// 2. Функция очистки сессии (из вашего рабочего index.html)
-function hardLocalLogout(){
-  console.log('[portal] Очистка локальных данных...');
-  try {
-    for(var i=0; i<localStorage.length; i++){
-      var k=localStorage.key(i);
-      if(k && (k.indexOf('sb-')===0 || k.indexOf('supabase')>=0)) localStorage.removeItem(k);
-    }
-  } catch(e) { console.warn('Ошибка очистки:', e); }
-}
-
-// 3. Обработка авторизации
 async function handleAuthStateChange(event, session) {
-    console.log('[portal] Статус Auth:', event);
-    if (session && session.user) {
+    if (session) {
         currentUser = session.user;
-        let { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-        if (error) { console.error('Ошибка профиля:', error); return; }
+        let {data} = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
         userProfile = data;
-        if (userProfile) { await startPortal(); }
-    } else {
-        showLogin();
-    }
+        if (userProfile) startPortal();
+    } else showLogin();
 }
 sb.auth.onAuthStateChange(handleAuthStateChange);
 
-function showLogin() {
-    document.getElementById('loading').style.display='none';
-    document.getElementById('auth-screen').style.display='block';
-    document.getElementById('main-app').style.display='none';
-}
+function showLogin() { document.getElementById('loading').style.display='none'; document.getElementById('auth-screen').style.display='block'; }
 
 async function startPortal() {
-    document.getElementById('loading').style.display='none';
-    document.getElementById('auth-screen').style.display='none';
-    document.getElementById('main-app').style.display='block';
-    renderHeader();
-    await loadData();
-    renderAll();
+    document.getElementById('loading').style.display='none'; document.getElementById('auth-screen').style.display='none'; document.getElementById('main-app').style.display='block';
+    if (userProfile.role === 'main_organizer') document.getElementById('btn-admin').style.display = 'block';
+    await loadData(); renderAll();
 }
 
 async function loadData() {
-    // Загружаем все опросы и ответы именно этого пользователя
     let sRes = await sb.from('surveys').select('*').order('created_at', {ascending:false});
     surveys = sRes.data || [];
-    
     let rRes = await sb.from('responses').select('survey_id').eq('user_id', currentUser.id);
     userResponses = (rRes.data || []).map(r => r.survey_id);
+    let pRes = await sb.from('profiles').select('pseudonym').eq('role', 'participant');
+    participants = (pRes.data || []).map(p => p.pseudonym).sort();
 }
 
-// 4. Отрисовка интерфейса
-function renderHeader() {
-    if(!userProfile) return;
+function renderAll() {
     document.getElementById('user-badge').textContent = userProfile.pseudonym;
-    document.getElementById('user-role').textContent = userProfile.role === 'main_organizer' ? 'Организатор' : 'Участник';
+    renderTabs();
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('p-' + currentTab).classList.add('active');
+    if (currentTab === 'dashboard') renderDashboard();
+    if (currentTab === 'vote') renderVoteForm();
 }
 
 function renderTabs() {
     var tb = [['dashboard', 'Рабочий стол']];
-    if (viewSurveyId) {
-        tb.push(['vote', 'Голосование']);
-        tb.push(['results', 'Результаты']);
-    }
-    tb.push(['profile', 'Профиль']);
-    
-    var container = document.getElementById('tbar');
-    container.innerHTML = '';
+    if (viewSurveyId) { tb.push(['vote', 'Голосование']); tb.push(['results', 'Результаты']); }
+    if (userProfile.role === 'main_organizer') tb.push(['admin', 'Создать']);
+    var container = document.getElementById('tbar'); container.innerHTML = '';
     tb.forEach(item => {
-        var t = document.createElement('span');
-        t.className = 'tab' + (item[0] === currentTab ? ' active' : '');
-        t.textContent = item[1];
-        t.onclick = () => { currentTab = item[0]; renderAll(); };
+        var t = document.createElement('span'); t.className = 'tab' + (item[0] === currentTab ? ' active' : '');
+        t.textContent = item[1]; t.onclick = () => { currentTab = item[0]; renderAll(); };
         container.appendChild(t);
     });
 }
 
-function renderAll() {
-    renderTabs();
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    
-    if (currentTab === 'dashboard') {
-        renderDashboard();
-    } else {
-        var pg = document.getElementById('p-' + currentTab);
-        if (pg) pg.classList.add('active');
-    }
-}
-
 function renderDashboard() {
-    document.getElementById('p-dashboard').classList.add('active');
-    var container = document.getElementById('survey-list-container');
-    container.innerHTML = '';
-    
-    if(surveys.length === 0) {
-        container.innerHTML = '<p style="color:#999; text-align:center; padding:20px;">Опросов пока нет</p>';
-        return;
-    }
-
+    var container = document.getElementById('survey-list-container'); container.innerHTML = '';
     surveys.forEach(s => {
         var isDone = userResponses.includes(s.id);
-        var card = document.createElement('div');
-        card.className = 'survey-card';
-        card.innerHTML = `
-            <div>
-                <div class="s-title">${s.title}</div>
-                <div class="s-meta">Тип: ${s.type || 'Социометрия'} • ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div>
-            </div>
-            <span class="survey-tag ${s.status === 'active' ? (isDone ? 'tag-done' : 'tag-active') : 'tag-archived'}">
-                ${s.status === 'active' ? (isDone ? 'Завершено' : 'Пройти') : 'Архив'}
-            </span>
-        `;
-        card.onclick = () => {
-            viewSurveyId = s.id;
-            currentTab = isDone ? 'results' : 'vote';
-            renderAll();
-        };
+        var card = document.createElement('div'); card.className = 'survey-card';
+        card.innerHTML = `<div><div style="font-weight:600">${s.title}</div><div style="font-size:12px;color:#999">${s.type==='matrix'?'Матрица':'Социометрия'} • ${new Date(s.created_at).toLocaleDateString()}</div></div>
+        <span class="survey-tag ${s.status === 'active' ? (isDone ? 'tag-done' : 'tag-active') : ''}">${s.status==='active'?(isDone?'Завершено':'Пройти'):'Архив'}</span>`;
+        card.onclick = () => { viewSurveyId = s.id; viewSurvey = s; currentTab = isDone ? 'results' : 'vote'; renderAll(); };
         container.appendChild(card);
     });
 }
 
-// 5. Кнопки: Вход и Выход
-document.getElementById('login-btn').onclick = async function() {
-    var btn = this;
-    var email = document.getElementById('login-email').value.trim();
-    var pass = document.getElementById('login-pass').value;
-    var errDiv = document.getElementById('login-error');
-
-    if(!email || !pass) { errDiv.textContent = 'Заполните все поля'; return; }
-
-    btn.disabled = true;
-    btn.textContent = 'Входим...';
-    errDiv.textContent = '';
-
-    hardLocalLogout();
-
-    try {
-        var { error } = await sb.auth.signInWithPassword({email: email, password: pass});
-        if (error) {
-            errDiv.textContent = 'Ошибка: ' + (error.message === 'Invalid login credentials' ? 'Неверный email или пароль' : error.message);
-            btn.disabled = false;
-            btn.textContent = 'Войти';
-        }
-    } catch (ex) {
-        errDiv.textContent = 'Ошибка соединения';
-        btn.disabled = false;
-        btn.textContent = 'Войти';
+function renderVoteForm() {
+    var area = document.getElementById('vote-form-area'); area.innerHTML = '';
+    document.getElementById('vote-title').textContent = viewSurvey.title;
+    
+    if (viewSurvey.type === 'matrix') {
+        let qs = viewSurvey.settings?.questions || [];
+        let html = '<table><thead><tr><th>Участник</th>' + qs.map(q => `<th>${q}</th>`).join('') + '</tr></thead><tbody>';
+        participants.forEach(p => {
+            if (p === userProfile.pseudonym) return;
+            html += `<tr><td><b>${p}</b></td>` + qs.map((q, i) => `<td><select id="m-${p}-${i}"><option value="">—</option><option value="да">Да</option><option value="нет">Нет</option></select></td>`).join('') + '</tr>';
+        });
+        area.innerHTML = html + '</tbody></table>';
+    } else {
+        area.innerHTML = '<p>Интерфейс социометрии (в разработке для портала)...</p>';
     }
+}
+
+// СОЗДАНИЕ ОПРОСА
+document.getElementById('new-type').onchange = function() {
+    document.getElementById('questions-field').style.display = this.value === 'matrix' ? 'block' : 'none';
 };
 
-document.getElementById('logout-btn').onclick = function() {
-    hardLocalLogout();
-    location.reload();
+document.getElementById('btn-create-survey').onclick = async function() {
+    var title = document.getElementById('new-title').value;
+    var type = document.getElementById('new-type').value;
+    var questions = document.getElementById('new-questions').value.split('\n').filter(q => q.trim() !== '');
+    
+    let {error} = await sb.from('surveys').insert({
+        title: title, type: type, status: 'active', 
+        settings: { questions: questions },
+        group_id: userProfile.group_id
+    });
+    
+    if (error) alert(error.message);
+    else { alert('Опрос создан!'); location.reload(); }
+};
+
+document.getElementById('logout-btn').onclick = () => { localStorage.clear(); location.reload(); };
+
+document.getElementById('login-btn').onclick = async function() {
+    var email = document.getElementById('login-email').value, pass = document.getElementById('login-pass').value;
+    let {error} = await sb.auth.signInWithPassword({email, password: pass});
+    if (error) document.getElementById('login-error').textContent = error.message;
 };
 
 })();
