@@ -26,11 +26,7 @@
     padding: 0;
     min-height: 100vh;
   }
-  .container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 20px;
-  }
+  .container { max-width: 900px; margin: 0 auto; padding: 20px; }
   .card {
     background: var(--card);
     border-radius: 12px;
@@ -40,6 +36,7 @@
   }
   h1 { font-size: 24px; margin: 0 0 8px 0; }
   h2 { font-size: 18px; margin: 0 0 12px 0; }
+  h3 { font-size: 16px; margin: 16px 0 8px 0; }
   p { margin: 8px 0; color: var(--muted); }
   label {
     display: block;
@@ -47,7 +44,7 @@
     color: var(--muted);
     margin-bottom: 6px;
   }
-  input[type="email"], input[type="password"], input[type="text"] {
+  input[type="email"], input[type="password"], input[type="text"], input[type="number"], select, textarea {
     width: 100%;
     padding: 12px;
     border: 1px solid var(--border);
@@ -56,8 +53,10 @@
     margin-bottom: 12px;
     background: #fff;
     color: var(--text);
+    font-family: inherit;
   }
-  input:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 60px; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
   button {
     background: var(--accent);
     color: #fff;
@@ -77,6 +76,8 @@
   }
   button.secondary:hover { background: #f0f0f0; }
   button.danger { background: var(--danger); }
+  button.danger:hover { background: #e6342a; }
+  button.small { padding: 6px 12px; font-size: 14px; }
   .header {
     display: flex;
     justify-content: space-between;
@@ -92,47 +93,140 @@
     font-size: 12px;
     background: #e8e8ed;
     color: var(--muted);
+    margin-left: 4px;
   }
   .badge.organizer { background: #fff3cd; color: #856404; }
   .badge.participant { background: #d1ecf1; color: #0c5460; }
-  .error {
-    background: #ffe6e6;
-    color: var(--danger);
-    padding: 12px;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    font-size: 14px;
-  }
-  .info {
-    background: #e8f4ff;
-    color: #004085;
-    padding: 12px;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    font-size: 14px;
-  }
-  .empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--muted);
-  }
-  .link-btn {
-    background: none;
-    border: none;
-    color: var(--accent);
-    cursor: pointer;
-    padding: 0;
-    font-size: 14px;
-    text-decoration: underline;
-  }
+  .badge.active { background: #d4edda; color: #155724; }
+  .badge.archived { background: #e2e3e5; color: #383d41; }
+  .badge.type { background: #e8e0ff; color: #4a3e8c; }
+  .error { background: #ffe6e6; color: var(--danger); padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+  .info { background: #e8f4ff; color: #004085; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .link-btn { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; }
   .hidden { display: none !important; }
+
+  .survey-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #fff;
+  }
+  .survey-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .survey-item-title { font-size: 16px; font-weight: 600; margin: 0 0 6px 0; }
+  .survey-item-meta { font-size: 13px; color: var(--muted); }
+  .survey-item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0 16px 0; }
+
+  .modal-backdrop {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 700px;
+    width: 100%;
+    margin-top: 20px;
+    margin-bottom: 20px;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .radio-group, .checkbox-group { margin-bottom: 12px; }
+  .radio-option, .checkbox-option {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  .radio-option:hover, .checkbox-option:hover { background: #f9f9fb; }
+  .radio-option input, .checkbox-option input { margin: 4px 10px 0 0; width: auto; }
+  .radio-option-content { flex: 1; }
+  .radio-option-label { font-weight: 500; color: var(--text); }
+  .radio-option-desc { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .subjects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .subjects-grid label {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .subjects-grid input { width: auto; margin: 0 6px 0 0; }
+
+  .question-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #f9f9fb;
+  }
+  .question-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .question-item-num { font-weight: 600; color: var(--muted); font-size: 13px; }
+  .question-item textarea { margin-bottom: 8px; }
+  .question-item-options {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  .question-item-options label {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .question-item-options input { width: auto; margin: 0 4px 0 0; }
+  .question-item-options select { width: auto; padding: 4px 8px; margin: 0 0 0 4px; font-size: 13px; }
 </style>
 </head>
 <body>
 
 <div class="container">
 
-  <!-- ============ ЭКРАН ВХОДА ============ -->
   <div id="screen-login" class="card hidden">
     <h1>Портал опросов КСТ</h1>
     <p>Группа 161</p>
@@ -147,7 +241,6 @@
     </p>
   </div>
 
-  <!-- ============ ЭКРАН ДАШБОРДА ============ -->
   <div id="screen-dashboard" class="hidden">
     <div class="card">
       <div class="header">
@@ -168,36 +261,149 @@
         <button id="btn-new-survey" class="hidden">+ Новый опрос</button>
       </div>
       <div id="surveys-list">
-        <div class="empty-state">
-          Здесь будет список опросов.<br>
-          <small>(Шаг 2: каркас. Создание и просмотр опросов появятся в шаге 3.)</small>
-        </div>
+        <div class="empty-state">Загрузка списка опросов…</div>
       </div>
     </div>
   </div>
 
-  <!-- ============ ЭКРАН ЗАГРУЗКИ ============ -->
   <div id="screen-loading" class="card">
     <p>Загрузка…</p>
+  </div>
+
+  <div id="modal-new-survey" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Новый опрос</h2>
+        <button class="link-btn" id="btn-close-modal">✕ Закрыть</button>
+      </div>
+
+      <div id="new-survey-error" class="error hidden"></div>
+
+      <label>Название опроса</label>
+      <input type="text" id="ns-title" placeholder="Например: Опрос группы 161, апрель 2026">
+
+      <h3>Тип опроса</h3>
+      <div class="radio-group" id="ns-type-group">
+        <label class="radio-option">
+          <input type="radio" name="ns-type" value="variant_1" checked>
+          <div class="radio-option-content">
+            <div class="radio-option-label">Вариант 1</div>
+            <div class="radio-option-desc">Каждый участник выбирает несколько коллег по заданному критерию (например, «с кем бы я хотел работать в одной команде») и при желании одного — по обратному критерию. Показывает структуру предпочтений в группе.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="ns-type" value="variant_2">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Вариант 2</div>
+            <div class="radio-option-desc">Каждый участник отвечает «да/нет» или открытым текстом на список вопросов про каждого из коллег. Используется, когда нужно собрать оценку группы по конкретным качествам или критериям.</div>
+          </div>
+        </label>
+      </div>
+
+      <div id="ns-v1-settings">
+        <h3>Настройки Варианта 1</h3>
+        <label>Количество позитивных выборов</label>
+        <input type="number" id="ns-v1-positive-count" min="1" max="10" value="3">
+        <label>Текст позитивного критерия</label>
+        <input type="text" id="ns-v1-positive-text" value="С кем бы я хотел работать в одной команде">
+        <label class="checkbox-option" style="margin-bottom: 8px;">
+          <input type="checkbox" id="ns-v1-has-negative" checked>
+          <div class="radio-option-content">
+            <div class="radio-option-label">Есть негативный выбор</div>
+          </div>
+        </label>
+        <div id="ns-v1-negative-block">
+          <label>Текст негативного критерия</label>
+          <input type="text" id="ns-v1-negative-text" value="С кем бы я не хотел работать в одной команде">
+        </div>
+      </div>
+
+      <div id="ns-v2-settings" class="hidden">
+        <h3>Про кого задаются вопросы</h3>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="ns-v2-subjects-mode" value="all" checked>
+            <div class="radio-option-content">
+              <div class="radio-option-label">Про всех участников группы</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-v2-subjects-mode" value="selected">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Про выбранных участников</div>
+            </div>
+          </label>
+        </div>
+        <div id="ns-v2-subjects-list" class="hidden">
+          <label>Выберите, про кого задавать вопросы:</label>
+          <div class="subjects-grid" id="ns-v2-subjects-grid"></div>
+        </div>
+
+        <h3>Самооценка</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v2-allow-self">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Разрешить отвечать на вопросы про самого себя</div>
+            <div class="radio-option-desc">Если выключено — каждый участник заполняет таблицу про всех остальных, кроме себя.</div>
+          </div>
+        </label>
+
+        <h3>Вопросы</h3>
+        <div id="ns-v2-questions-list"></div>
+        <button class="secondary small" id="btn-add-question" type="button">+ Добавить вопрос</button>
+      </div>
+
+      <h3>Видимость общего результата для участников</h3>
+      <p style="margin-top: 0;">После того как организатор архивирует опрос, участники увидят:</p>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="ns-visibility" value="self_only" checked>
+          <div class="radio-option-content">
+            <div class="radio-option-label">Только свой ответ и сводку по себе</div>
+            <div class="radio-option-desc">Участник видит, как ответили на вопросы про него, но не видит результаты других.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="ns-visibility" value="full">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Полный результат по всем</div>
+            <div class="radio-option-desc">Участник видит сводные данные про всех. Авторы голосов скрыты.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="ns-visibility" value="none">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Не показывать (только организатор)</div>
+            <div class="radio-option-desc">Участники видят только сам факт, что они проголосовали. Результаты доступны только организатору.</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary" id="btn-cancel-survey">Отмена</button>
+        <button id="btn-save-survey">Создать опрос</button>
+      </div>
+    </div>
   </div>
 
 </div>
 
 <script>
-// ============================================================
-// КОНФИГУРАЦИЯ
-// ============================================================
 const SUPABASE_URL = 'https://nxxjbiwrkrlylpfypzvi.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
+
+const SURVEY_TYPES = {
+  variant_1: { label: 'Вариант 1', description: 'Каждый участник выбирает несколько коллег по заданному критерию.' },
+  variant_2: { label: 'Вариант 2', description: 'Каждый участник отвечает на список вопросов про коллег.' }
+};
 
 let sb = null;
 let currentUser = null;
 let currentProfile = null;
 let pollingInterval = null;
+let allPseudonyms = [];
+let questionCounter = 0;
 
-// ============================================================
-// СОЗДАНИЕ КЛИЕНТА SUPABASE С УНИКАЛЬНЫМ STORAGEKEY
-// ============================================================
 function createSbClient() {
   const uniqueKey = 'sb-portal-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   console.log('[boot] creating sb client with storageKey=' + uniqueKey);
@@ -211,10 +417,6 @@ function createSbClient() {
   });
 }
 
-// ============================================================
-// ЖЁСТКИЙ ЛОКАЛЬНЫЙ ВЫХОД
-// Полностью чистит localStorage от sb-* и пересоздаёт клиент
-// ============================================================
 function hardLocalLogout() {
   console.log('[hardLogout] start');
   try {
@@ -237,15 +439,12 @@ function hardLocalLogout() {
   console.log('[hardLogout] done');
 }
 
-// ============================================================
-// POLLING (заглушка — пока ничего не запрашивает)
-// ============================================================
 function startPolling() {
   if (pollingInterval) return;
   console.log('[polling] start');
   pollingInterval = setInterval(() => {
     console.log('[polling] tick');
-    // в шаге 3 сюда добавится загрузка опросов
+    loadSurveys();
   }, 10000);
 }
 
@@ -257,9 +456,6 @@ function stopPolling() {
   }
 }
 
-// ============================================================
-// ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ
-// ============================================================
 function showScreen(name) {
   console.log('[ui] show screen: ' + name);
   document.getElementById('screen-login').classList.add('hidden');
@@ -268,9 +464,6 @@ function showScreen(name) {
   document.getElementById('screen-' + name).classList.remove('hidden');
 }
 
-// ============================================================
-// ЗАГРУЗКА ПРОФИЛЯ ПОЛЬЗОВАТЕЛЯ
-// ============================================================
 async function loadProfile(userId) {
   console.log('[profile] loading for ' + userId);
   const { data, error } = await sb
@@ -286,9 +479,156 @@ async function loadProfile(userId) {
   return data;
 }
 
-// ============================================================
-// ОТРИСОВКА ДАШБОРДА
-// ============================================================
+async function loadPseudonyms() {
+  console.log('[pseudonyms] loading');
+  const { data, error } = await sb
+    .from('pseudonyms')
+    .select('name')
+    .order('name');
+  if (error) {
+    console.error('[pseudonyms] error:', error);
+    return [];
+  }
+  console.log('[pseudonyms] loaded ' + data.length);
+  return data.map(r => r.name);
+}
+
+async function loadSurveys() {
+  console.log('[surveys] loading');
+  const { data, error } = await sb
+    .from('surveys')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('[surveys] error:', error);
+    document.getElementById('surveys-list').innerHTML =
+      '<div class="error">Ошибка загрузки опросов: ' + error.message + '</div>';
+    return;
+  }
+  console.log('[surveys] loaded ' + data.length);
+
+  const counts = {};
+  for (const s of data) {
+    if (s.type !== 'variant_1' && s.type !== 'variant_2') continue;
+    const { count } = await sb
+      .from('responses')
+      .select('id', { count: 'exact', head: true })
+      .eq('survey_id', s.id);
+    counts[s.id] = count || 0;
+  }
+  renderSurveys(data, counts);
+}
+
+function renderSurveys(surveys, counts) {
+  const list = document.getElementById('surveys-list');
+  const isOrganizer = currentProfile?.role === 'main_organizer' || currentProfile?.role === 'co_organizer';
+
+  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2');
+  if (newSurveys.length === 0) {
+    list.innerHTML = '<div class="empty-state">Опросов пока нет.<br><small>' +
+      (isOrganizer ? 'Создайте новый опрос кнопкой «+ Новый опрос».' : 'Дождитесь, пока организатор создаст опрос.') +
+      '</small></div>';
+    return;
+  }
+
+  const active = newSurveys.filter(s => s.status === 'active');
+  const archived = newSurveys.filter(s => s.status === 'archived');
+
+  let html = '';
+  if (active.length > 0) {
+    html += '<h3 style="margin-top:0;">Активные</h3>';
+    active.forEach(s => { html += renderSurveyItem(s, counts[s.id], isOrganizer); });
+  }
+  if (archived.length > 0) {
+    if (active.length > 0) html += '<hr class="section-divider">';
+    html += '<h3>Архив</h3>';
+    archived.forEach(s => { html += renderSurveyItem(s, counts[s.id], isOrganizer); });
+  }
+  list.innerHTML = html;
+
+  list.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      if (action === 'archive') archiveSurvey(id);
+      else if (action === 'delete') deleteSurvey(id);
+    });
+  });
+}
+
+function renderSurveyItem(s, count, isOrganizer) {
+  const typeLabel = SURVEY_TYPES[s.type]?.label || s.type;
+  const statusLabel = s.status === 'active' ? 'активен' : 'архив';
+  const statusClass = s.status === 'active' ? 'active' : 'archived';
+  const date = new Date(s.created_at).toLocaleDateString('ru-RU');
+
+  let actions = '';
+  if (isOrganizer) {
+    if (s.status === 'active') {
+      actions += `<button class="secondary small" data-action="archive" data-id="${s.id}">Архивировать</button>`;
+    }
+    actions += `<button class="danger small" data-action="delete" data-id="${s.id}">Удалить</button>`;
+  }
+
+  return `
+    <div class="survey-item">
+      <div class="survey-item-header">
+        <div style="flex:1; min-width:200px;">
+          <div class="survey-item-title">${escapeHtml(s.title)}</div>
+          <div class="survey-item-meta">
+            <span class="badge type">${escapeHtml(typeLabel)}</span>
+            <span class="badge ${statusClass}">${statusLabel}</span>
+            · ${count} ${pluralResponses(count)}
+            · создан ${date}
+          </div>
+        </div>
+        <div class="survey-item-actions">${actions}</div>
+      </div>
+    </div>
+  `;
+}
+
+function pluralResponses(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'ответ';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'ответа';
+  return 'ответов';
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function archiveSurvey(id) {
+  if (!confirm('Архивировать опрос? После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам видимости.')) return;
+  console.log('[archive] ' + id);
+  const { error } = await sb.from('surveys').update({ status: 'archived' }).eq('id', id);
+  if (error) {
+    alert('Ошибка архивации: ' + error.message);
+    return;
+  }
+  loadSurveys();
+}
+
+async function deleteSurvey(id) {
+  if (!confirm('Полностью удалить опрос и все ответы? Это действие нельзя отменить.')) return;
+  console.log('[delete] ' + id);
+  await sb.from('responses').delete().eq('survey_id', id);
+  const { error } = await sb.from('surveys').delete().eq('id', id);
+  if (error) {
+    alert('Ошибка удаления: ' + error.message);
+    return;
+  }
+  loadSurveys();
+}
+
 function renderDashboard() {
   const pseudonym = currentProfile?.pseudonym || '(без псевдонима)';
   const role = currentProfile?.role || 'participant';
@@ -310,11 +650,186 @@ function renderDashboard() {
   document.getElementById('btn-new-survey').classList.toggle('hidden', !isOrganizer);
 
   showScreen('dashboard');
+  loadSurveys();
 }
 
-// ============================================================
-// ВХОД
-// ============================================================
+async function openNewSurveyModal() {
+  console.log('[new-survey] open modal');
+  document.getElementById('ns-title').value = '';
+  document.getElementById('ns-v1-positive-count').value = '3';
+  document.getElementById('ns-v1-positive-text').value = 'С кем бы я хотел работать в одной команде';
+  document.getElementById('ns-v1-has-negative').checked = true;
+  document.getElementById('ns-v1-negative-text').value = 'С кем бы я не хотел работать в одной команде';
+  document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
+  document.querySelector('input[name="ns-v2-subjects-mode"][value="all"]').checked = true;
+  document.getElementById('ns-v2-allow-self').checked = false;
+  document.querySelector('input[name="ns-visibility"][value="self_only"]').checked = true;
+  document.getElementById('new-survey-error').classList.add('hidden');
+  document.getElementById('ns-v2-questions-list').innerHTML = '';
+  questionCounter = 0;
+
+  if (allPseudonyms.length === 0) {
+    allPseudonyms = await loadPseudonyms();
+  }
+  renderSubjectsGrid();
+
+  updateTypeVisibility();
+  updateNegativeBlock();
+  updateSubjectsListVisibility();
+
+  document.getElementById('modal-new-survey').classList.remove('hidden');
+}
+
+function closeNewSurveyModal() {
+  document.getElementById('modal-new-survey').classList.add('hidden');
+}
+
+function updateTypeVisibility() {
+  const type = document.querySelector('input[name="ns-type"]:checked').value;
+  document.getElementById('ns-v1-settings').classList.toggle('hidden', type !== 'variant_1');
+  document.getElementById('ns-v2-settings').classList.toggle('hidden', type !== 'variant_2');
+}
+
+function updateNegativeBlock() {
+  const has = document.getElementById('ns-v1-has-negative').checked;
+  document.getElementById('ns-v1-negative-block').classList.toggle('hidden', !has);
+}
+
+function updateSubjectsListVisibility() {
+  const mode = document.querySelector('input[name="ns-v2-subjects-mode"]:checked').value;
+  document.getElementById('ns-v2-subjects-list').classList.toggle('hidden', mode !== 'selected');
+}
+
+function renderSubjectsGrid() {
+  const grid = document.getElementById('ns-v2-subjects-grid');
+  grid.innerHTML = allPseudonyms.map(name =>
+    `<label><input type="checkbox" value="${escapeHtml(name)}"> ${escapeHtml(name)}</label>`
+  ).join('');
+}
+
+function addQuestion() {
+  questionCounter++;
+  const id = 'q-' + questionCounter;
+  const html = `
+    <div class="question-item" data-qid="${id}">
+      <div class="question-item-header">
+        <span class="question-item-num">Вопрос ${questionCounter}</span>
+        <button class="link-btn" data-remove="${id}">✕ удалить</button>
+      </div>
+      <textarea placeholder="Текст вопроса (например: «Я доверил бы этому человеку важное поручение»)" data-field="text"></textarea>
+      <div class="question-item-options">
+        <label>Тип ответа:
+          <select data-field="answer_type">
+            <option value="yes_no">Да / Нет</option>
+            <option value="open">Открытый ответ</option>
+          </select>
+        </label>
+        <label><input type="checkbox" data-field="optional"> Необязательный</label>
+        <label data-show-for="open" style="display:none;"><input type="checkbox" data-field="show_to_participants"> Показывать ответы участникам анонимно</label>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById('ns-v2-questions-list');
+  list.insertAdjacentHTML('beforeend', html);
+  const item = list.querySelector(`[data-qid="${id}"]`);
+  item.querySelector('[data-remove]').addEventListener('click', () => item.remove());
+  item.querySelector('[data-field="answer_type"]').addEventListener('change', (e) => {
+    const showFor = item.querySelector('[data-show-for="open"]');
+    showFor.style.display = e.target.value === 'open' ? 'flex' : 'none';
+  });
+}
+
+function collectFormData() {
+  const title = document.getElementById('ns-title').value.trim();
+  const type = document.querySelector('input[name="ns-type"]:checked').value;
+  const visibility = document.querySelector('input[name="ns-visibility"]:checked').value;
+
+  if (!title) return { error: 'Введите название опроса' };
+
+  const settings = {};
+
+  if (type === 'variant_1') {
+    const posCount = parseInt(document.getElementById('ns-v1-positive-count').value, 10);
+    if (isNaN(posCount) || posCount < 1 || posCount > 10) {
+      return { error: 'Количество позитивных выборов: число от 1 до 10' };
+    }
+    const posText = document.getElementById('ns-v1-positive-text').value.trim();
+    if (!posText) return { error: 'Введите текст позитивного критерия' };
+    const hasNeg = document.getElementById('ns-v1-has-negative').checked;
+    const negText = hasNeg ? document.getElementById('ns-v1-negative-text').value.trim() : '';
+    if (hasNeg && !negText) return { error: 'Введите текст негативного критерия (или снимите галочку)' };
+    settings.positive_count = posCount;
+    settings.positive_text = posText;
+    settings.has_negative = hasNeg;
+    settings.negative_text = negText;
+  }
+
+  if (type === 'variant_2') {
+    const subjectsMode = document.querySelector('input[name="ns-v2-subjects-mode"]:checked').value;
+    let subjects = null;
+    if (subjectsMode === 'selected') {
+      subjects = Array.from(document.querySelectorAll('#ns-v2-subjects-grid input:checked')).map(c => c.value);
+      if (subjects.length === 0) return { error: 'Выберите хотя бы одного участника, про кого задавать вопросы' };
+    }
+    const allowSelf = document.getElementById('ns-v2-allow-self').checked;
+
+    const questionItems = document.querySelectorAll('#ns-v2-questions-list .question-item');
+    if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос' };
+    const questions = [];
+    let qNum = 0;
+    for (const item of questionItems) {
+      qNum++;
+      const text = item.querySelector('[data-field="text"]').value.trim();
+      if (!text) return { error: 'Заполните текст вопроса ' + qNum };
+      const answerType = item.querySelector('[data-field="answer_type"]').value;
+      const optional = item.querySelector('[data-field="optional"]').checked;
+      const q = { id: 'q' + qNum, text, answer_type: answerType, optional };
+      if (answerType === 'open') {
+        q.show_to_participants = item.querySelector('[data-field="show_to_participants"]').checked;
+      }
+      questions.push(q);
+    }
+
+    settings.subjects_mode = subjectsMode;
+    settings.subjects = subjects;
+    settings.allow_self = allowSelf;
+    settings.questions = questions;
+  }
+
+  return { title, type, visibility, settings };
+}
+
+async function saveNewSurvey() {
+  const errorBox = document.getElementById('new-survey-error');
+  errorBox.classList.add('hidden');
+
+  const data = collectFormData();
+  if (data.error) {
+    errorBox.textContent = data.error;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  console.log('[new-survey] saving:', data);
+  const { error } = await sb.from('surveys').insert({
+    title: data.title,
+    type: data.type,
+    status: 'active',
+    visibility: data.visibility,
+    settings: data.settings,
+    created_by: currentUser.id
+  });
+  if (error) {
+    console.error('[new-survey] error:', error);
+    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[new-survey] saved');
+  closeNewSurveyModal();
+  loadSurveys();
+}
+
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
@@ -328,7 +843,6 @@ async function doLogin() {
   }
 
   console.log('[login] attempt for ' + email);
-  // Превентивный жёсткий выход — чистим возможные следы прошлой сессии
   hardLocalLogout();
 
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
@@ -350,9 +864,6 @@ async function doLogin() {
   renderDashboard();
 }
 
-// ============================================================
-// ВЫХОД (через жёсткий локальный выход, без sb.auth.signOut)
-// ============================================================
 function doLogout() {
   console.log('[logout] start');
   hardLocalLogout();
@@ -362,9 +873,6 @@ function doLogout() {
   console.log('[logout] done');
 }
 
-// ============================================================
-// СБРОС ПАРОЛЯ
-// ============================================================
 async function doForgotPassword() {
   const email = document.getElementById('login-email').value.trim();
   const errorBox = document.getElementById('login-error');
@@ -385,14 +893,10 @@ async function doForgotPassword() {
   errorBox.classList.remove('hidden');
 }
 
-// ============================================================
-// ИНИЦИАЛИЗАЦИЯ
-// ============================================================
 async function init() {
   console.log('[boot] init start');
   sb = createSbClient();
 
-  // Проверяем, есть ли уже активная сессия
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
     console.log('[boot] existing session found for ' + session.user.email);
@@ -408,9 +912,6 @@ async function init() {
   showScreen('login');
 }
 
-// ============================================================
-// ПРИВЯЗКА ОБРАБОТЧИКОВ
-// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-login').addEventListener('click', doLogin);
   document.getElementById('btn-logout').addEventListener('click', doLogout);
@@ -418,6 +919,21 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-password').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') doLogin();
   });
+
+  document.getElementById('btn-new-survey').addEventListener('click', openNewSurveyModal);
+  document.getElementById('btn-close-modal').addEventListener('click', closeNewSurveyModal);
+  document.getElementById('btn-cancel-survey').addEventListener('click', closeNewSurveyModal);
+  document.getElementById('btn-save-survey').addEventListener('click', saveNewSurvey);
+  document.getElementById('btn-add-question').addEventListener('click', addQuestion);
+
+  document.querySelectorAll('input[name="ns-type"]').forEach(r => {
+    r.addEventListener('change', updateTypeVisibility);
+  });
+  document.getElementById('ns-v1-has-negative').addEventListener('change', updateNegativeBlock);
+  document.querySelectorAll('input[name="ns-v2-subjects-mode"]').forEach(r => {
+    r.addEventListener('change', updateSubjectsListVisibility);
+  });
+
   init();
 });
 </script>
