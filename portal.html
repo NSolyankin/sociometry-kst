@@ -913,26 +913,44 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('btn-login').addEventListener('click', doLogin);
-  document.getElementById('btn-logout').addEventListener('click', doLogout);
-  document.getElementById('btn-forgot').addEventListener('click', doForgotPassword);
-  document.getElementById('login-password').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') doLogin();
-  });
+  console.log('[boot] DOMContentLoaded, binding handlers');
 
-  document.getElementById('btn-new-survey').addEventListener('click', openNewSurveyModal);
-  document.getElementById('btn-close-modal').addEventListener('click', closeNewSurveyModal);
-  document.getElementById('btn-cancel-survey').addEventListener('click', closeNewSurveyModal);
-  document.getElementById('btn-save-survey').addEventListener('click', saveNewSurvey);
-  document.getElementById('btn-add-question').addEventListener('click', addQuestion);
+  function bind(id, event, handler) {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.error('[bind] element not found: ' + id);
+      return;
+    }
+    el.addEventListener(event, handler);
+    console.log('[bind] ok: ' + id);
+  }
+
+  bind('btn-login', 'click', doLogin);
+  bind('btn-logout', 'click', doLogout);
+  bind('btn-forgot', 'click', doForgotPassword);
+
+  const loginPwd = document.getElementById('login-password');
+  if (loginPwd) {
+    loginPwd.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+  }
+
+  bind('btn-new-survey', 'click', openNewSurveyModal);
+  bind('btn-close-modal', 'click', closeNewSurveyModal);
+  bind('btn-cancel-survey', 'click', closeNewSurveyModal);
+  bind('btn-save-survey', 'click', saveNewSurvey);
+  bind('btn-add-question', 'click', addQuestion);
 
   document.querySelectorAll('input[name="ns-type"]').forEach(r => {
     r.addEventListener('change', updateTypeVisibility);
   });
-  document.getElementById('ns-v1-has-negative').addEventListener('change', updateNegativeBlock);
+  const negCheck = document.getElementById('ns-v1-has-negative');
+  if (negCheck) negCheck.addEventListener('change', updateNegativeBlock);
   document.querySelectorAll('input[name="ns-v2-subjects-mode"]').forEach(r => {
     r.addEventListener('change', updateSubjectsListVisibility);
   });
+
+  init();
+});
 
   init();
 });
