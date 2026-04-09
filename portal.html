@@ -182,6 +182,70 @@
     border: 1px solid #c3e6cb;
   }
 
+  /* Таблица результатов */
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .results-table th, .results-table td {
+    border: 1px solid var(--border);
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .results-table th {
+    background: #f5f5f7;
+    font-weight: 600;
+  }
+  .results-table td.subject-name {
+    font-weight: 600;
+    background: #f9f9fb;
+    white-space: nowrap;
+  }
+  .results-table .yn-cell {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .results-table .yn-strong { color: var(--success); font-weight: 600; }
+  .results-table .yn-weak { color: var(--muted); }
+
+  details.open-answers {
+    margin-top: 6px;
+    font-size: 13px;
+  }
+  details.open-answers summary {
+    cursor: pointer;
+    color: var(--accent);
+    user-select: none;
+  }
+  details.open-answers ul {
+    margin: 6px 0 0 0;
+    padding-left: 20px;
+  }
+  details.open-answers li {
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+  details.open-answers li .author {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .response-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #fff;
+  }
+  .response-card summary {
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+  }
+  .response-card[open] summary { margin-bottom: 10px; }
+
   .modal-backdrop {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -373,21 +437,7 @@
       </div>
 
       <div id="ns-v1-settings">
-        <h3>Настройки Варианта 1</h3>
-        <label>Количество позитивных выборов</label>
-        <input type="number" id="ns-v1-positive-count" min="1" max="10" value="3">
-        <label>Текст позитивного критерия</label>
-        <input type="text" id="ns-v1-positive-text" value="С кем бы я хотел работать в одной команде">
-        <label class="checkbox-option" style="margin-bottom: 8px;">
-          <input type="checkbox" id="ns-v1-has-negative" checked>
-          <div class="radio-option-content">
-            <div class="radio-option-label">Есть негативный выбор</div>
-          </div>
-        </label>
-        <div id="ns-v1-negative-block">
-          <label>Текст негативного критерия</label>
-          <input type="text" id="ns-v1-negative-text" value="С кем бы я не хотел работать в одной команде">
-        </div>
+        <div class="info" style="margin-top:16px;">Редактор Варианта 1 будет переделан в шаге 5а. Сейчас создание опросов Варианта 1 временно отключено. Используйте Вариант 2.</div>
       </div>
 
       <div id="ns-v2-settings" class="hidden">
@@ -815,18 +865,25 @@ function renderSurveyScreen() {
   const body = document.getElementById('survey-body');
   const isOrganizer = currentProfile?.role === 'main_organizer' || currentProfile?.role === 'co_organizer';
 
-  // Организатор — заглушка на этот шаг
+  // Организатор — всегда видит полные результаты
   if (isOrganizer) {
-    body.innerHTML = `
-      <div class="card">
-        <div class="info">Просмотр результатов опроса для организатора появится в шаге 4б.</div>
-        <p>Сейчас вы можете только видеть сам факт существования опроса и управлять им со страницы списка.</p>
-      </div>
-    `;
+    if (s.type === 'variant_1') {
+      body.innerHTML = `
+        <div class="card">
+          <div class="info">Просмотр результатов Варианта 1 будет реализован в шаге 5в.</div>
+        </div>
+      `;
+      return;
+    }
+    if (s.type === 'variant_2') {
+      renderResultsV2ForOrganizer();
+      return;
+    }
+    body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
     return;
   }
 
-  // Участник — вариант 1 пока заглушка
+  // Участник — Вариант 1 пока заглушка
   if (s.type === 'variant_1') {
     body.innerHTML = `
       <div class="card">
@@ -839,7 +896,7 @@ function renderSurveyScreen() {
   // Участник + Вариант 2
   if (s.type === 'variant_2') {
     if (s.status === 'archived') {
-      renderSurveyArchivedForParticipant();
+      renderResultsV2ForParticipant();
       return;
     }
     // Активный
@@ -854,16 +911,321 @@ function renderSurveyScreen() {
   body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
 }
 
-function renderSurveyArchivedForParticipant() {
-  const body = document.getElementById('survey-body');
-  let html = '<div class="card">';
-  html += '<div class="info">Опрос закрыт. Просмотр общих результатов будет доступен в шаге 4б.</div>';
-  if (currentOwnResponse) {
-    html += '<h3>Ваш ответ</h3>';
-    html += renderOwnResponseV2(currentOwnResponse.payload);
-  } else {
-    html += '<p>Вы не участвовали в этом опросе.</p>';
+// ============================================================
+// РЕЗУЛЬТАТЫ ВАРИАНТА 2 — ОРГАНИЗАТОР И УЧАСТНИК
+// ============================================================
+let cachedAllResponses = null; // кэш всех ответов текущего опроса
+
+async function loadAllResponses() {
+  console.log('[responses] loading all for survey ' + currentSurvey.id);
+  const { data, error } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', currentSurvey.id)
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('[responses] error:', error);
+    return [];
   }
+  console.log('[responses] loaded ' + data.length);
+  return data;
+}
+
+// Агрегирует ответы: для каждого субъекта и каждого вопроса считает статистику
+function aggregateResponsesV2(responses, questions, subjects) {
+  const agg = {};
+  subjects.forEach(subj => {
+    agg[subj] = {};
+    questions.forEach(q => {
+      if (q.answer_type === 'yes_no') {
+        agg[subj][q.id] = { yes: 0, no: 0, answered: 0 };
+      } else if (q.answer_type === 'open') {
+        agg[subj][q.id] = { texts: [] }; // массив {respondent, text}
+      }
+    });
+  });
+
+  responses.forEach(resp => {
+    const payload = resp.payload || {};
+    const answers = payload.answers || {};
+    subjects.forEach(subj => {
+      const subjAnswers = answers[subj] || {};
+      questions.forEach(q => {
+        const val = subjAnswers[q.id];
+        if (q.answer_type === 'yes_no') {
+          if (val === 'yes') { agg[subj][q.id].yes++; agg[subj][q.id].answered++; }
+          else if (val === 'no') { agg[subj][q.id].no++; agg[subj][q.id].answered++; }
+        } else if (q.answer_type === 'open') {
+          if (val) {
+            agg[subj][q.id].texts.push({
+              respondent: resp.respondent_name || '(аноним)',
+              text: val
+            });
+          }
+        }
+      });
+    });
+  });
+
+  return agg;
+}
+
+// Рендер ячейки агрегата для Да/Нет вопроса
+function renderYesNoCell(cell) {
+  if (cell.answered === 0) return '<span style="color:var(--muted);">—</span>';
+  const pct = Math.round((cell.yes / cell.answered) * 100);
+  return `<strong>${cell.yes}</strong> Да / <strong>${cell.no}</strong> Нет<br><span style="color:var(--muted); font-size:12px;">${pct}% Да</span>`;
+}
+
+// Рендер ячейки агрегата для открытого вопроса
+// mode: 'organizer' (с авторами), 'participant_anon' (без авторов), 'participant_hidden' (не показывать)
+function renderOpenCell(cell, mode) {
+  if (!cell.texts || cell.texts.length === 0) {
+    return '<span style="color:var(--muted);">—</span>';
+  }
+  if (mode === 'participant_hidden') {
+    return `<span style="color:var(--muted);">${cell.texts.length} ${pluralResponses(cell.texts.length)} (скрыто)</span>`;
+  }
+  let html = `<div style="font-size:12px; color:var(--muted); margin-bottom:4px;">${cell.texts.length} ${pluralResponses(cell.texts.length)}</div>`;
+  cell.texts.forEach(t => {
+    if (mode === 'organizer') {
+      html += `<div style="border-left:2px solid var(--border); padding:4px 6px; margin-bottom:4px;"><strong>${escapeHtml(t.respondent)}:</strong> ${escapeHtml(t.text)}</div>`;
+    } else {
+      html += `<div style="border-left:2px solid var(--border); padding:4px 6px; margin-bottom:4px;">${escapeHtml(t.text)}</div>`;
+    }
+  });
+  return html;
+}
+
+async function renderResultsV2ForOrganizer() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses;
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getSubjectsForResults();
+
+  // Кто голосовал / кто ещё нет
+  const respondents = responses.map(r => r.respondent_name).filter(Boolean);
+  const respondentsSet = new Set(respondents);
+  // «Могли голосовать» = все participant-профили, кроме организатора
+  const couldVote = allGroupParticipants.slice();
+  const notVoted = couldVote.filter(n => !respondentsSet.has(n));
+
+  const agg = aggregateResponsesV2(responses, questions, subjects);
+
+  let html = '<div class="card">';
+
+  // Верхняя панель действий
+  html += '<div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:12px; flex-wrap:wrap;">';
+  if (s.status === 'active') {
+    html += '<button class="secondary" id="btn-archive-here">Архивировать опрос</button>';
+  }
+  html += '</div>';
+
+  // Явка
+  html += '<h3 style="margin-top:0;">Явка</h3>';
+  html += `<p>Проголосовали: <strong>${respondents.length}</strong> из <strong>${couldVote.length}</strong></p>`;
+  if (respondents.length > 0) {
+    html += '<p style="font-size:13px;"><span style="color:var(--muted);">Отметились:</span> ' + respondents.map(escapeHtml).join(', ') + '</p>';
+  }
+  if (notVoted.length > 0) {
+    html += '<p style="font-size:13px;"><span style="color:var(--muted);">Ещё не проголосовали:</span> ' + notVoted.map(escapeHtml).join(', ') + '</p>';
+  }
+
+  if (responses.length === 0) {
+    html += '<div class="info" style="margin-top:16px;">Ответов пока нет. Таблица результатов появится после первого голосования.</div>';
+    html += '</div>';
+    body.innerHTML = html;
+    if (s.status === 'active') {
+      document.getElementById('btn-archive-here').addEventListener('click', () => archiveSurveyFromScreen());
+    }
+    return;
+  }
+
+  // Агрегированная таблица
+  html += '<h3>Сводная таблица</h3>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => {
+    const typeMark = q.answer_type === 'open' ? ' <span style="color:var(--muted); font-weight:normal; font-size:12px;">(текст)</span>' : '';
+    html += `<th>${escapeHtml(q.text)}${typeMark}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj)}</td>`;
+    questions.forEach(q => {
+      const cell = agg[subj][q.id];
+      if (q.answer_type === 'yes_no') {
+        html += `<td>${renderYesNoCell(cell)}</td>`;
+      } else {
+        html += `<td>${renderOpenCell(cell, 'organizer')}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // Детализация «кто как голосовал»
+  html += '<h3 style="margin-top:24px;">Детализация по респондентам</h3>';
+  html += '<p style="color:var(--muted); font-size:13px;">Развернуть, чтобы увидеть, как проголосовал конкретный участник.</p>';
+  responses.forEach((resp, idx) => {
+    const name = resp.respondent_name || '(аноним)';
+    const date = new Date(resp.created_at).toLocaleString('ru-RU');
+    html += `<details style="margin-bottom:8px; border:1px solid var(--border); border-radius:8px; padding:8px 12px;">`;
+    html += `<summary style="cursor:pointer; font-weight:500;">${escapeHtml(name)} <span style="color:var(--muted); font-weight:normal; font-size:12px;">· ${date}</span></summary>`;
+    html += '<div style="margin-top:12px;">';
+    html += renderSingleResponseTable(resp.payload, questions, subjects);
+    html += '</div>';
+    html += '</details>';
+  });
+
+  html += '</div>';
+  body.innerHTML = html;
+
+  if (s.status === 'active') {
+    const btn = document.getElementById('btn-archive-here');
+    if (btn) btn.addEventListener('click', () => archiveSurveyFromScreen());
+  }
+}
+
+// Рендер таблицы одного конкретного ответа (для детализации)
+function renderSingleResponseTable(payload, questions, subjects) {
+  if (!payload || !payload.answers) return '<p style="color:var(--muted);">(пустой ответ)</p>';
+  const answers = payload.answers;
+  let html = '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => { html += `<th>${escapeHtml(q.text)}</th>`; });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj)}</td>`;
+    questions.forEach(q => {
+      const val = answers[subj]?.[q.id];
+      let display = '<span style="color:var(--muted);">—</span>';
+      if (q.answer_type === 'yes_no') {
+        if (val === 'yes') display = 'Да';
+        else if (val === 'no') display = 'Нет';
+      } else if (q.answer_type === 'open') {
+        if (val) display = escapeHtml(val);
+      }
+      html += `<td>${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// Вспомогательная: список субъектов для агрегации результатов
+// (отличается от getSubjectsForSurvey тем, что здесь нет исключения самого себя —
+// агрегат строится по всем субъектам опроса)
+function getSubjectsForResults() {
+  const settings = currentSurvey.settings || {};
+  if (settings.subjects_mode === 'selected' && Array.isArray(settings.subjects)) {
+    return [...settings.subjects];
+  }
+  return [...allGroupParticipants];
+}
+
+async function archiveSurveyFromScreen() {
+  if (!confirm('Архивировать опрос? После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам видимости.')) return;
+  const { error } = await sb.from('surveys').update({ status: 'archived' }).eq('id', currentSurvey.id);
+  if (error) {
+    alert('Ошибка архивации: ' + error.message);
+    return;
+  }
+  // Перезагружаем опрос с новым статусом
+  const { data: fresh } = await sb.from('surveys').select('*').eq('id', currentSurvey.id).maybeSingle();
+  if (fresh) currentSurvey = fresh;
+  renderSurveyScreen();
+}
+
+async function renderResultsV2ForParticipant() {
+  const body = document.getElementById('survey-body');
+  const s = currentSurvey;
+  const visibility = s.visibility || 'self_only';
+
+  body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses;
+  const questions = s.settings?.questions || [];
+  const subjects = getSubjectsForResults();
+  const myName = currentProfile?.pseudonym;
+
+  let html = '<div class="card">';
+  html += '<div class="info" style="margin-bottom:16px;">Опрос закрыт. Ниже показаны результаты согласно настройкам видимости, заданным организатором.</div>';
+
+  // 1. Свой ответ
+  if (currentOwnResponse) {
+    html += '<h3 style="margin-top:0;">Ваш ответ</h3>';
+    html += renderSingleResponseTable(currentOwnResponse.payload, questions, subjects);
+  } else {
+    html += '<p style="color:var(--muted);">Вы не участвовали в этом опросе.</p>';
+  }
+
+  // 2. Если видимость = none — больше ничего не показываем
+  if (visibility === 'none') {
+    html += '<div class="info" style="margin-top:16px;">Общие результаты этого опроса доступны только организатору.</div>';
+    html += '</div>';
+    body.innerHTML = html;
+    return;
+  }
+
+  const agg = aggregateResponsesV2(responses, questions, subjects);
+
+  // 3. self_only: показать только строку про самого участника
+  if (visibility === 'self_only') {
+    html += '<h3 style="margin-top:24px;">Как ответили про вас</h3>';
+    if (!subjects.includes(myName)) {
+      html += '<p style="color:var(--muted);">Вас не было среди субъектов этого опроса, поэтому сводка про вас недоступна.</p>';
+    } else {
+      html += '<div class="vote-table-wrapper"><table class="vote-table">';
+      html += '<thead><tr><th>Вопрос</th><th>Результат</th></tr></thead><tbody>';
+      questions.forEach(q => {
+        const cell = agg[myName][q.id];
+        html += `<tr><td class="subject-name">${escapeHtml(q.text)}</td><td>`;
+        if (q.answer_type === 'yes_no') {
+          html += renderYesNoCell(cell);
+        } else if (q.answer_type === 'open') {
+          const mode = q.show_to_participants ? 'participant_anon' : 'participant_hidden';
+          html += renderOpenCell(cell, mode);
+        }
+        html += '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+  }
+
+  // 4. full: полная таблица со всеми субъектами
+  if (visibility === 'full') {
+    html += '<h3 style="margin-top:24px;">Сводные результаты</h3>';
+    html += '<p style="color:var(--muted); font-size:13px;">Авторы голосов не показаны.</p>';
+    html += '<div class="vote-table-wrapper"><table class="vote-table">';
+    html += '<thead><tr><th>Участник</th>';
+    questions.forEach(q => {
+      const typeMark = q.answer_type === 'open' ? ' <span style="color:var(--muted); font-weight:normal; font-size:12px;">(текст)</span>' : '';
+      html += `<th>${escapeHtml(q.text)}${typeMark}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    subjects.forEach(subj => {
+      html += `<tr><td class="subject-name">${escapeHtml(subj)}</td>`;
+      questions.forEach(q => {
+        const cell = agg[subj][q.id];
+        if (q.answer_type === 'yes_no') {
+          html += `<td>${renderYesNoCell(cell)}</td>`;
+        } else if (q.answer_type === 'open') {
+          const mode = q.show_to_participants ? 'participant_anon' : 'participant_hidden';
+          html += `<td>${renderOpenCell(cell, mode)}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
   html += '</div>';
   body.innerHTML = html;
 }
@@ -1048,11 +1410,9 @@ async function submitVoteV2() {
 async function openNewSurveyModal() {
   console.log('[new-survey] open modal');
   document.getElementById('ns-title').value = '';
-  document.getElementById('ns-v1-positive-count').value = '3';
-  document.getElementById('ns-v1-positive-text').value = 'С кем бы я хотел работать в одной команде';
-  document.getElementById('ns-v1-has-negative').checked = true;
-  document.getElementById('ns-v1-negative-text').value = 'С кем бы я не хотел работать в одной команде';
-  document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
+  // Вариант 1 временно отключён — сразу ставим Вариант 2
+  document.querySelector('input[name="ns-type"][value="variant_2"]').checked = true;
+
   document.querySelector('input[name="ns-v2-subjects-mode"][value="all"]').checked = true;
   document.getElementById('ns-v2-allow-self').checked = false;
   document.querySelector('input[name="ns-visibility"][value="self_only"]').checked = true;
@@ -1066,7 +1426,6 @@ async function openNewSurveyModal() {
   renderSubjectsGrid();
 
   updateTypeVisibility();
-  updateNegativeBlock();
   updateSubjectsListVisibility();
 
   document.getElementById('modal-new-survey').classList.remove('hidden');
@@ -1080,11 +1439,6 @@ function updateTypeVisibility() {
   const type = document.querySelector('input[name="ns-type"]:checked').value;
   document.getElementById('ns-v1-settings').classList.toggle('hidden', type !== 'variant_1');
   document.getElementById('ns-v2-settings').classList.toggle('hidden', type !== 'variant_2');
-}
-
-function updateNegativeBlock() {
-  const has = document.getElementById('ns-v1-has-negative').checked;
-  document.getElementById('ns-v1-negative-block').classList.toggle('hidden', !has);
 }
 
 function updateSubjectsListVisibility() {
@@ -1141,19 +1495,7 @@ function collectFormData() {
   const settings = {};
 
   if (type === 'variant_1') {
-    const posCount = parseInt(document.getElementById('ns-v1-positive-count').value, 10);
-    if (isNaN(posCount) || posCount < 1 || posCount > 10) {
-      return { error: 'Количество позитивных выборов: число от 1 до 10' };
-    }
-    const posText = document.getElementById('ns-v1-positive-text').value.trim();
-    if (!posText) return { error: 'Введите текст позитивного критерия' };
-    const hasNeg = document.getElementById('ns-v1-has-negative').checked;
-    const negText = hasNeg ? document.getElementById('ns-v1-negative-text').value.trim() : '';
-    if (hasNeg && !negText) return { error: 'Введите текст негативного критерия (или снимите галочку)' };
-    settings.positive_count = posCount;
-    settings.positive_text = posText;
-    settings.has_negative = hasNeg;
-    settings.negative_text = negText;
+    return { error: 'Создание опросов Варианта 1 временно отключено. Редактор будет переделан в шаге 5а. Используйте Вариант 2.' };
   }
 
   if (type === 'variant_2') {
@@ -1340,8 +1682,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('input[name="ns-type"]').forEach(r => {
     r.addEventListener('change', updateTypeVisibility);
   });
-  const negCheck = document.getElementById('ns-v1-has-negative');
-  if (negCheck) negCheck.addEventListener('change', updateNegativeBlock);
   document.querySelectorAll('input[name="ns-v2-subjects-mode"]').forEach(r => {
     r.addEventListener('change', updateSubjectsListVisibility);
   });
