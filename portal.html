@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Портал опросов КСТ</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -1176,22 +1179,32 @@ async function renderResultsV2ForParticipant() {
 
   const agg = aggregateResponsesV2(responses, questions, subjects);
 
+  // Фильтр вопросов для сводки участника:
+  // — все Да/Нет вопросы видны всегда (там нет текстов)
+  // — открытые вопросы видны только если организатор поставил флаг show_to_participants
+  const visibleQuestions = questions.filter(q => {
+    if (q.answer_type === 'yes_no') return true;
+    if (q.answer_type === 'open') return q.show_to_participants === true;
+    return false;
+  });
+
   // 3. self_only: показать только строку про самого участника
   if (visibility === 'self_only') {
     html += '<h3 style="margin-top:24px;">Как ответили про вас</h3>';
     if (!subjects.includes(myName)) {
       html += '<p style="color:var(--muted);">Вас не было среди субъектов этого опроса, поэтому сводка про вас недоступна.</p>';
+    } else if (visibleQuestions.length === 0) {
+      html += '<p style="color:var(--muted);">Организатор скрыл подробности сводных результатов.</p>';
     } else {
       html += '<div class="vote-table-wrapper"><table class="vote-table">';
       html += '<thead><tr><th>Вопрос</th><th>Результат</th></tr></thead><tbody>';
-      questions.forEach(q => {
+      visibleQuestions.forEach(q => {
         const cell = agg[myName][q.id];
         html += `<tr><td class="subject-name">${escapeHtml(q.text)}</td><td>`;
         if (q.answer_type === 'yes_no') {
           html += renderYesNoCell(cell);
         } else if (q.answer_type === 'open') {
-          const mode = q.show_to_participants ? 'participant_anon' : 'participant_hidden';
-          html += renderOpenCell(cell, mode);
+          html += renderOpenCell(cell, 'participant_anon');
         }
         html += '</td></tr>';
       });
@@ -1202,28 +1215,31 @@ async function renderResultsV2ForParticipant() {
   // 4. full: полная таблица со всеми субъектами
   if (visibility === 'full') {
     html += '<h3 style="margin-top:24px;">Сводные результаты</h3>';
-    html += '<p style="color:var(--muted); font-size:13px;">Авторы голосов не показаны.</p>';
-    html += '<div class="vote-table-wrapper"><table class="vote-table">';
-    html += '<thead><tr><th>Участник</th>';
-    questions.forEach(q => {
-      const typeMark = q.answer_type === 'open' ? ' <span style="color:var(--muted); font-weight:normal; font-size:12px;">(текст)</span>' : '';
-      html += `<th>${escapeHtml(q.text)}${typeMark}</th>`;
-    });
-    html += '</tr></thead><tbody>';
-    subjects.forEach(subj => {
-      html += `<tr><td class="subject-name">${escapeHtml(subj)}</td>`;
-      questions.forEach(q => {
-        const cell = agg[subj][q.id];
-        if (q.answer_type === 'yes_no') {
-          html += `<td>${renderYesNoCell(cell)}</td>`;
-        } else if (q.answer_type === 'open') {
-          const mode = q.show_to_participants ? 'participant_anon' : 'participant_hidden';
-          html += `<td>${renderOpenCell(cell, mode)}</td>`;
-        }
+    if (visibleQuestions.length === 0) {
+      html += '<p style="color:var(--muted);">Организатор скрыл подробности сводных результатов.</p>';
+    } else {
+      html += '<p style="color:var(--muted); font-size:13px;">Авторы голосов не показаны.</p>';
+      html += '<div class="vote-table-wrapper"><table class="vote-table">';
+      html += '<thead><tr><th>Участник</th>';
+      visibleQuestions.forEach(q => {
+        const typeMark = q.answer_type === 'open' ? ' <span style="color:var(--muted); font-weight:normal; font-size:12px;">(текст)</span>' : '';
+        html += `<th>${escapeHtml(q.text)}${typeMark}</th>`;
       });
-      html += '</tr>';
-    });
-    html += '</tbody></table></div>';
+      html += '</tr></thead><tbody>';
+      subjects.forEach(subj => {
+        html += `<tr><td class="subject-name">${escapeHtml(subj)}</td>`;
+        visibleQuestions.forEach(q => {
+          const cell = agg[subj][q.id];
+          if (q.answer_type === 'yes_no') {
+            html += `<td>${renderYesNoCell(cell)}</td>`;
+          } else if (q.answer_type === 'open') {
+            html += `<td>${renderOpenCell(cell, 'participant_anon')}</td>`;
+          }
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
   }
 
   html += '</div>';
