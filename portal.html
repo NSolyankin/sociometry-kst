@@ -112,7 +112,10 @@
     padding: 16px;
     margin-bottom: 12px;
     background: #fff;
+    cursor: pointer;
+    transition: background 0.1s;
   }
+  .survey-item:hover { background: #f9f9fb; }
   .survey-item-header {
     display: flex;
     justify-content: space-between;
@@ -124,6 +127,60 @@
   .survey-item-meta { font-size: 13px; color: var(--muted); }
   .survey-item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .section-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0 16px 0; }
+
+  /* Таблица голосования Варианта 2 */
+  .vote-table-wrapper { overflow-x: auto; margin: 16px 0; }
+  .vote-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .vote-table th, .vote-table td {
+    border: 1px solid var(--border);
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .vote-table th {
+    background: #f5f5f7;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+  }
+  .vote-table td.subject-name {
+    font-weight: 600;
+    background: #f9f9fb;
+    white-space: nowrap;
+  }
+  .vote-table select, .vote-table textarea {
+    width: 100%;
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .vote-table textarea { min-height: 50px; resize: vertical; }
+  .vote-table .invalid { border-color: var(--danger); background: #fff5f5; }
+
+  .warning-box {
+    background: #fff3cd;
+    color: #856404;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 16px 0;
+    font-size: 14px;
+    border: 1px solid #ffeaa7;
+  }
+  .success-box {
+    background: #d4edda;
+    color: #155724;
+    padding: 16px;
+    border-radius: 8px;
+    margin: 16px 0;
+    font-size: 14px;
+    border: 1px solid #c3e6cb;
+  }
 
   .modal-backdrop {
     position: fixed;
@@ -268,6 +325,21 @@
 
   <div id="screen-loading" class="card">
     <p>Загрузка…</p>
+  </div>
+
+  <!-- ============ ЭКРАН ОПРОСА ============ -->
+  <div id="screen-survey" class="hidden">
+    <div class="card">
+      <div class="header">
+        <div style="flex:1;">
+          <button class="link-btn" id="btn-back-to-list">← Назад к списку</button>
+          <h1 id="survey-title" style="margin-top:8px;">—</h1>
+          <p id="survey-meta">—</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="survey-body"></div>
   </div>
 
   <div id="modal-new-survey" class="modal-backdrop hidden">
@@ -461,6 +533,7 @@ function showScreen(name) {
   document.getElementById('screen-login').classList.add('hidden');
   document.getElementById('screen-dashboard').classList.add('hidden');
   document.getElementById('screen-loading').classList.add('hidden');
+  document.getElementById('screen-survey').classList.add('hidden');
   document.getElementById('screen-' + name).classList.remove('hidden');
 }
 
@@ -547,11 +620,19 @@ function renderSurveys(surveys, counts) {
   list.innerHTML = html;
 
   list.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const action = btn.dataset.action;
       const id = btn.dataset.id;
       if (action === 'archive') archiveSurvey(id);
       else if (action === 'delete') deleteSurvey(id);
+    });
+  });
+
+  list.querySelectorAll('[data-open-id]').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = item.dataset.openId;
+      openSurvey(id);
     });
   });
 }
@@ -571,7 +652,7 @@ function renderSurveyItem(s, count, isOrganizer) {
   }
 
   return `
-    <div class="survey-item">
+    <div class="survey-item" data-open-id="${s.id}">
       <div class="survey-item-header">
         <div style="flex:1; min-width:200px;">
           <div class="survey-item-title">${escapeHtml(s.title)}</div>
@@ -651,6 +732,317 @@ function renderDashboard() {
 
   showScreen('dashboard');
   loadSurveys();
+}
+
+// ============================================================
+// ЭКРАН ОПРОСА
+// ============================================================
+let currentSurvey = null;        // данные текущего открытого опроса
+let currentOwnResponse = null;   // свой ответ в этом опросе (если есть)
+let allGroupParticipants = [];   // список активных участников группы (псевдонимы)
+
+async function loadGroupParticipants() {
+  console.log('[participants] loading');
+  const { data, error } = await sb
+    .from('profiles')
+    .select('pseudonym, role')
+    .order('pseudonym');
+  if (error) {
+    console.error('[participants] error:', error);
+    return [];
+  }
+  // Исключаем организаторов — они не участвуют в голосовании
+  const participants = data
+    .filter(p => p.role === 'participant')
+    .map(p => p.pseudonym);
+  console.log('[participants] loaded ' + participants.length);
+  return participants;
+}
+
+async function openSurvey(id) {
+  console.log('[survey] opening ' + id);
+  stopPolling();
+  showScreen('loading');
+
+  // Загружаем сам опрос
+  const { data: survey, error: err1 } = await sb
+    .from('surveys')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (err1 || !survey) {
+    alert('Ошибка загрузки опроса: ' + (err1?.message || 'не найден'));
+    backToList();
+    return;
+  }
+  currentSurvey = survey;
+
+  // Загружаем свой ответ, если есть
+  const { data: ownResp } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', id)
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+  currentOwnResponse = ownResp || null;
+
+  // Загружаем список участников группы
+  if (allGroupParticipants.length === 0) {
+    allGroupParticipants = await loadGroupParticipants();
+  }
+
+  renderSurveyScreen();
+  showScreen('survey');
+}
+
+function backToList() {
+  console.log('[survey] back to list');
+  currentSurvey = null;
+  currentOwnResponse = null;
+  startPolling();
+  renderDashboard();
+}
+
+function renderSurveyScreen() {
+  const s = currentSurvey;
+  document.getElementById('survey-title').textContent = s.title;
+
+  const typeLabel = SURVEY_TYPES[s.type]?.label || s.type;
+  const statusLabel = s.status === 'active' ? 'активен' : 'архив';
+  const meta = document.getElementById('survey-meta');
+  meta.innerHTML = `<span class="badge type">${escapeHtml(typeLabel)}</span> <span class="badge ${s.status === 'active' ? 'active' : 'archived'}">${statusLabel}</span>`;
+
+  const body = document.getElementById('survey-body');
+  const isOrganizer = currentProfile?.role === 'main_organizer' || currentProfile?.role === 'co_organizer';
+
+  // Организатор — заглушка на этот шаг
+  if (isOrganizer) {
+    body.innerHTML = `
+      <div class="card">
+        <div class="info">Просмотр результатов опроса для организатора появится в шаге 4б.</div>
+        <p>Сейчас вы можете только видеть сам факт существования опроса и управлять им со страницы списка.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Участник — вариант 1 пока заглушка
+  if (s.type === 'variant_1') {
+    body.innerHTML = `
+      <div class="card">
+        <div class="info">Голосование по Варианту 1 (взаимные выборы) будет реализовано в шаге 5.</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Участник + Вариант 2
+  if (s.type === 'variant_2') {
+    if (s.status === 'archived') {
+      renderSurveyArchivedForParticipant();
+      return;
+    }
+    // Активный
+    if (currentOwnResponse) {
+      renderAlreadyVoted();
+      return;
+    }
+    renderVoteFormV2();
+    return;
+  }
+
+  body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
+}
+
+function renderSurveyArchivedForParticipant() {
+  const body = document.getElementById('survey-body');
+  let html = '<div class="card">';
+  html += '<div class="info">Опрос закрыт. Просмотр общих результатов будет доступен в шаге 4б.</div>';
+  if (currentOwnResponse) {
+    html += '<h3>Ваш ответ</h3>';
+    html += renderOwnResponseV2(currentOwnResponse.payload);
+  } else {
+    html += '<p>Вы не участвовали в этом опросе.</p>';
+  }
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderAlreadyVoted() {
+  const body = document.getElementById('survey-body');
+  let html = '<div class="card">';
+  html += '<div class="success-box"><strong>Ваш ответ сохранён.</strong><br>Общий результат появится после того, как организатор закроет опрос.</div>';
+  html += '<h3>Ваш ответ</h3>';
+  html += renderOwnResponseV2(currentOwnResponse.payload);
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderOwnResponseV2(payload) {
+  if (!payload || !payload.answers) return '<p>(ответ пустой)</p>';
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getSubjectsForSurvey(s);
+
+  let html = '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => { html += `<th>${escapeHtml(q.text)}</th>`; });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj)}</td>`;
+    questions.forEach(q => {
+      const ans = payload.answers?.[subj]?.[q.id];
+      let display = '—';
+      if (q.answer_type === 'yes_no') {
+        if (ans === 'yes') display = 'Да';
+        else if (ans === 'no') display = 'Нет';
+      } else if (q.answer_type === 'open') {
+        display = ans ? escapeHtml(ans) : '—';
+      }
+      html += `<td>${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function getSubjectsForSurvey(s) {
+  const settings = s.settings || {};
+  let subjects = [];
+  if (settings.subjects_mode === 'selected' && Array.isArray(settings.subjects)) {
+    subjects = [...settings.subjects];
+  } else {
+    subjects = [...allGroupParticipants];
+  }
+  // Если самооценка не разрешена — убираем текущего пользователя
+  if (!settings.allow_self) {
+    const myName = currentProfile?.pseudonym;
+    subjects = subjects.filter(n => n !== myName);
+  }
+  return subjects;
+}
+
+function renderVoteFormV2() {
+  const body = document.getElementById('survey-body');
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getSubjectsForSurvey(s);
+
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В этом опросе нет участников для голосования.</div></div>';
+    return;
+  }
+  if (questions.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В этом опросе нет вопросов.</div></div>';
+    return;
+  }
+
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя.</div>';
+  html += '<div id="vote-error" class="error hidden"></div>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table" id="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => {
+    const optionalMark = q.optional ? ' <span style="color:var(--muted); font-weight:normal;">(необязательно)</span>' : '';
+    html += `<th>${escapeHtml(q.text)}${optionalMark}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr data-subject="${escapeHtml(subj)}"><td class="subject-name">${escapeHtml(subj)}</td>`;
+    questions.forEach(q => {
+      html += '<td>';
+      if (q.answer_type === 'yes_no') {
+        html += `<select data-question="${escapeHtml(q.id)}" data-optional="${q.optional ? '1' : '0'}">
+          <option value="">—</option>
+          <option value="yes">Да</option>
+          <option value="no">Нет</option>
+        </select>`;
+      } else if (q.answer_type === 'open') {
+        html += `<textarea data-question="${escapeHtml(q.id)}" data-optional="${q.optional ? '1' : '0'}" placeholder="Ваш ответ"></textarea>`;
+      }
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">';
+  html += '<button class="secondary" id="btn-vote-cancel">Отмена</button>';
+  html += '<button id="btn-vote-submit">Подтвердить и отправить</button>';
+  html += '</div>';
+  html += '</div>';
+  body.innerHTML = html;
+
+  document.getElementById('btn-vote-cancel').addEventListener('click', backToList);
+  document.getElementById('btn-vote-submit').addEventListener('click', submitVoteV2);
+}
+
+async function submitVoteV2() {
+  console.log('[vote] submit start');
+  const errorBox = document.getElementById('vote-error');
+  errorBox.classList.add('hidden');
+
+  const table = document.getElementById('vote-table');
+  const rows = table.querySelectorAll('tbody tr');
+  const answers = {};
+  const invalid = [];
+
+  // Сброс старой подсветки
+  table.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+
+  rows.forEach(row => {
+    const subj = row.dataset.subject;
+    answers[subj] = {};
+    const inputs = row.querySelectorAll('select, textarea');
+    inputs.forEach(inp => {
+      const qid = inp.dataset.question;
+      const optional = inp.dataset.optional === '1';
+      const val = (inp.value || '').trim();
+      if (!val && !optional) {
+        inp.classList.add('invalid');
+        invalid.push({ subj, qid });
+      }
+      if (val) answers[subj][qid] = val;
+    });
+  });
+
+  if (invalid.length > 0) {
+    errorBox.textContent = 'Заполните все обязательные поля (подсвечены красным). Пропущено: ' + invalid.length + '.';
+    errorBox.classList.remove('hidden');
+    // Прокрутить к первому невалидному
+    const first = table.querySelector('.invalid');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  if (!confirm('Ответ будет сохранён окончательно. Изменить его потом нельзя. Продолжить?')) {
+    return;
+  }
+
+  console.log('[vote] saving');
+  const payload = { answers };
+  const { error } = await sb.from('responses').insert({
+    survey_id: currentSurvey.id,
+    user_id: currentUser.id,
+    respondent_name: currentProfile.pseudonym,
+    payload
+  });
+  if (error) {
+    console.error('[vote] error:', error);
+    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[vote] saved');
+  // Перезагрузим свой ответ и перерисуем экран
+  const { data: ownResp } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', currentSurvey.id)
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+  currentOwnResponse = ownResp;
+  renderSurveyScreen();
 }
 
 async function openNewSurveyModal() {
@@ -939,6 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-cancel-survey', 'click', closeNewSurveyModal);
   bind('btn-save-survey', 'click', saveNewSurvey);
   bind('btn-add-question', 'click', addQuestion);
+  bind('btn-back-to-list', 'click', backToList);
 
   document.querySelectorAll('input[name="ns-type"]').forEach(r => {
     r.addEventListener('change', updateTypeVisibility);
