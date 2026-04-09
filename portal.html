@@ -248,6 +248,33 @@
   }
   .v1-slot .invalid { border-color: var(--danger); background: #fff5f5; }
 
+  /* Таблица участников группы */
+  .members-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  .members-table th, .members-table td {
+    border: 1px solid var(--border);
+    padding: 10px;
+    text-align: left;
+    vertical-align: middle;
+  }
+  .members-table th {
+    background: #f5f5f7;
+    font-weight: 600;
+  }
+  .members-table .member-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .members-table .member-self {
+    background: #fff9e6;
+  }
+  .members-table-wrapper { overflow-x: auto; }
+
   /* Таблица результатов */
   .results-table {
     width: 100%;
@@ -445,7 +472,10 @@
     <div class="card">
       <div class="header">
         <h2>Опросы группы</h2>
-        <button id="btn-new-survey" class="hidden">+ Новый опрос</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="btn-group-settings" class="secondary hidden">⚙ Настройки группы</button>
+          <button id="btn-new-survey" class="hidden">+ Новый опрос</button>
+        </div>
       </div>
       <div id="surveys-list">
         <div class="empty-state">Загрузка списка опросов…</div>
@@ -455,6 +485,27 @@
 
   <div id="screen-loading" class="card">
     <p>Загрузка…</p>
+  </div>
+
+  <!-- ============ ЭКРАН НАСТРОЕК ГРУППЫ ============ -->
+  <div id="screen-group" class="hidden">
+    <div class="card">
+      <div class="header">
+        <div style="flex:1;">
+          <button class="link-btn" id="btn-back-from-group">← Назад к списку</button>
+          <h1 style="margin-top:8px;">Настройки группы</h1>
+          <p>Управление участниками и ролями</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Участники группы</h2>
+      <p style="color:var(--muted); font-size:13px;">Главный организатор всегда один. Он может назначать и снимать со-организаторов, а также передать главную роль другому участнику.</p>
+      <div id="group-members-list">
+        <div class="empty-state">Загрузка…</div>
+      </div>
+    </div>
   </div>
 
   <!-- ============ ЭКРАН ОПРОСА ============ -->
@@ -470,6 +521,40 @@
     </div>
 
     <div id="survey-body"></div>
+  </div>
+
+  <!-- ============ МОДАЛКА ПЕРЕДАЧИ ГЛАВНОЙ РОЛИ ============ -->
+  <div id="modal-transfer" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:500px;">
+      <div class="modal-header">
+        <h2>Передача главной роли</h2>
+        <button class="link-btn" id="btn-close-transfer">✕ Закрыть</button>
+      </div>
+      <div id="transfer-error" class="error hidden"></div>
+      <p>Вы действительно хотите передать роль главного организатора <strong id="transfer-target-name">—</strong>?</p>
+      <p style="color:var(--muted); font-size:13px;">После передачи вы потеряете права управлять ролями в группе.</p>
+      <h3>Кем вы останетесь после передачи?</h3>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="transfer-new-role" value="co_organizer" checked>
+          <div class="radio-option-content">
+            <div class="radio-option-label">Стать со-организатором</div>
+            <div class="radio-option-desc">Сможете создавать и архивировать опросы, смотреть результаты, но не сможете менять роли других.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="transfer-new-role" value="participant">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Стать обычным участником</div>
+            <div class="radio-option-desc">Сможете только голосовать и смотреть свои результаты.</div>
+          </div>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" id="btn-cancel-transfer">Отмена</button>
+        <button class="danger" id="btn-confirm-transfer">Передать роль</button>
+      </div>
+    </div>
   </div>
 
   <div id="modal-new-survey" class="modal-backdrop hidden">
@@ -672,6 +757,7 @@ function showScreen(name) {
   document.getElementById('screen-dashboard').classList.add('hidden');
   document.getElementById('screen-loading').classList.add('hidden');
   document.getElementById('screen-survey').classList.add('hidden');
+  document.getElementById('screen-group').classList.add('hidden');
   document.getElementById('screen-' + name).classList.remove('hidden');
 }
 
@@ -867,6 +953,7 @@ function renderDashboard() {
 
   const isOrganizer = (role === 'main_organizer' || role === 'co_organizer');
   document.getElementById('btn-new-survey').classList.toggle('hidden', !isOrganizer);
+  document.getElementById('btn-group-settings').classList.toggle('hidden', !isOrganizer);
 
   showScreen('dashboard');
   loadSurveys();
@@ -1658,7 +1745,7 @@ function renderV1Rating(aggForQuestion) {
     .sort((a, b) => b.count - a.count);
   if (entries.length === 0) return '<p style="color:var(--muted);">Никого не выбрали.</p>';
   let html = '<div class="vote-table-wrapper"><table class="vote-table">';
-  html += '<thead><tr><th>Имя</th><th>Выборов</th></tr></thead><tbody>';
+  html += '<thead><tr><th>Имя</th><th>Голосов</th></tr></thead><tbody>';
   entries.forEach(e => {
     html += `<tr><td class="subject-name">${escapeHtml(e.name)}</td><td><strong>${e.count}</strong></td></tr>`;
   });
@@ -1770,7 +1857,7 @@ async function renderResultsV1ForOrganizer() {
       .sort((a, b) => b.total - a.total);
     if (rows.length > 0) {
       html += '<h3 style="margin-top:24px;">Сводный индекс тональности</h3>';
-      html += '<p style="color:var(--muted); font-size:13px;">Сближающие выборы минус отталкивающие, по убыванию.</p>';
+      html += '<p style="color:var(--muted); font-size:13px;">Сближающие голоса минус отталкивающие, по убыванию.</p>';
       html += '<div class="vote-table-wrapper"><table class="vote-table">';
       html += '<thead><tr><th>Имя</th><th>Сближающие</th><th>Отталкивающие</th><th>Итого</th></tr></thead><tbody>';
       rows.forEach(r => {
@@ -1947,7 +2034,7 @@ async function renderResultsV1ForParticipant() {
         .sort((a, b) => b.total - a.total);
       if (rows.length > 0) {
         html += '<h3 style="margin-top:24px;">Сводный индекс тональности</h3>';
-        html += '<p style="color:var(--muted); font-size:13px;">Сближающие выборы минус отталкивающие, по убыванию.</p>';
+        html += '<p style="color:var(--muted); font-size:13px;">Сближающие голоса минус отталкивающие, по убыванию.</p>';
         html += '<div class="vote-table-wrapper"><table class="vote-table">';
         html += '<thead><tr><th>Имя</th><th>Сближающие</th><th>Отталкивающие</th><th>Итого</th></tr></thead><tbody>';
         rows.forEach(r => {
@@ -2138,6 +2225,196 @@ async function submitVoteV2() {
     .maybeSingle();
   currentOwnResponse = ownResp;
   renderSurveyScreen();
+}
+
+// ============================================================
+// ЭКРАН НАСТРОЕК ГРУППЫ — УПРАВЛЕНИЕ РОЛЯМИ
+// ============================================================
+let groupMembers = []; // кэш участников группы
+let transferTargetId = null; // id пользователя, которому передаём главную роль
+
+async function openGroupSettings() {
+  console.log('[group] open settings');
+  stopPolling();
+  showScreen('loading');
+  await loadGroupMembers();
+  renderGroupMembers();
+  showScreen('group');
+}
+
+function backFromGroup() {
+  console.log('[group] back to dashboard');
+  startPolling();
+  renderDashboard();
+}
+
+async function loadGroupMembers() {
+  console.log('[group] loading members');
+  const { data, error } = await sb
+    .from('profiles')
+    .select('id, pseudonym, role, email')
+    .order('pseudonym');
+  if (error) {
+    console.error('[group] error loading members:', error);
+    groupMembers = [];
+    return;
+  }
+  // Сортировка: главный → со-организаторы → участники, внутри — по алфавиту
+  const roleOrder = { main_organizer: 0, co_organizer: 1, participant: 2 };
+  groupMembers = (data || []).slice().sort((a, b) => {
+    const ra = roleOrder[a.role] ?? 99;
+    const rb = roleOrder[b.role] ?? 99;
+    if (ra !== rb) return ra - rb;
+    return (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru');
+  });
+  console.log('[group] loaded ' + groupMembers.length + ' members');
+}
+
+function renderGroupMembers() {
+  const container = document.getElementById('group-members-list');
+  const myRole = currentProfile?.role;
+  const isMain = myRole === 'main_organizer';
+  const isOrganizer = isMain || myRole === 'co_organizer';
+  const myId = currentUser?.id;
+
+  if (groupMembers.length === 0) {
+    container.innerHTML = '<div class="empty-state">Участников нет.</div>';
+    return;
+  }
+
+  let html = '<div class="members-table-wrapper"><table class="members-table">';
+  html += '<thead><tr><th>Псевдоним</th><th>Email</th><th>Роль</th>';
+  if (isOrganizer) html += '<th>Действия</th>';
+  html += '</tr></thead><tbody>';
+
+  groupMembers.forEach(m => {
+    const isSelf = m.id === myId;
+    const rowClass = isSelf ? 'member-self' : '';
+    let roleLabel = 'Участник';
+    let roleBadgeClass = 'participant';
+    if (m.role === 'main_organizer') { roleLabel = 'Главный организатор'; roleBadgeClass = 'organizer'; }
+    else if (m.role === 'co_organizer') { roleLabel = 'Со-организатор'; roleBadgeClass = 'organizer'; }
+
+    html += `<tr class="${rowClass}">`;
+    html += `<td><strong>${escapeHtml(m.pseudonym || '—')}</strong>${isSelf ? ' <span style="color:var(--muted); font-size:12px;">(вы)</span>' : ''}</td>`;
+    html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(m.email || '—')}</td>`;
+    html += `<td><span class="badge ${roleBadgeClass}">${roleLabel}</span></td>`;
+
+    if (isOrganizer) {
+      html += '<td><div class="member-actions">';
+      if (isSelf) {
+        html += '<span style="color:var(--muted); font-size:12px;">—</span>';
+      } else if (m.role === 'main_organizer') {
+        // Главного нельзя понизить со стороны со-организатора
+        html += '<span style="color:var(--muted); font-size:12px;">—</span>';
+      } else if (m.role === 'participant') {
+        html += `<button class="secondary small" data-action="promote" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Сделать со-организатором</button>`;
+        if (isMain) {
+          html += `<button class="secondary small" data-action="transfer" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Сделать главным</button>`;
+        }
+      } else if (m.role === 'co_organizer') {
+        html += `<button class="secondary small" data-action="demote" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Снять со-организатора</button>`;
+        if (isMain) {
+          html += `<button class="secondary small" data-action="transfer" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Сделать главным</button>`;
+        }
+      }
+      html += '</div></td>';
+    }
+
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+
+  // Привязка обработчиков кнопок
+  container.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      if (action === 'promote') promoteMember(id, name);
+      else if (action === 'demote') demoteMember(id, name);
+      else if (action === 'transfer') openTransferModal(id, name);
+    });
+  });
+}
+
+async function promoteMember(id, name) {
+  if (!confirm(`Назначить «${name}» со-организатором? У этого участника появятся права создавать и архивировать опросы, видеть полные результаты.`)) return;
+  console.log('[group] promote ' + id);
+  const { error } = await sb.from('profiles').update({ role: 'co_organizer' }).eq('id', id);
+  if (error) {
+    alert('Ошибка: ' + error.message);
+    return;
+  }
+  await loadGroupMembers();
+  renderGroupMembers();
+}
+
+async function demoteMember(id, name) {
+  if (!confirm(`Снять со-организатора с «${name}»? Этот участник потеряет права управлять опросами и вернётся в обычные участники.`)) return;
+  console.log('[group] demote ' + id);
+  const { error } = await sb.from('profiles').update({ role: 'participant' }).eq('id', id);
+  if (error) {
+    alert('Ошибка: ' + error.message);
+    return;
+  }
+  await loadGroupMembers();
+  renderGroupMembers();
+}
+
+function openTransferModal(id, name) {
+  console.log('[group] open transfer modal for ' + id);
+  transferTargetId = id;
+  document.getElementById('transfer-target-name').textContent = name;
+  document.querySelector('input[name="transfer-new-role"][value="co_organizer"]').checked = true;
+  document.getElementById('transfer-error').classList.add('hidden');
+  document.getElementById('modal-transfer').classList.remove('hidden');
+}
+
+function closeTransferModal() {
+  document.getElementById('modal-transfer').classList.add('hidden');
+  transferTargetId = null;
+}
+
+async function confirmTransfer() {
+  const errorBox = document.getElementById('transfer-error');
+  errorBox.classList.add('hidden');
+  if (!transferTargetId) {
+    errorBox.textContent = 'Не выбран получатель роли.';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  const myNewRole = document.querySelector('input[name="transfer-new-role"]:checked').value;
+  console.log('[group] transfer main to ' + transferTargetId + ', my new role: ' + myNewRole);
+
+  const { error } = await sb.rpc('transfer_main_organizer', {
+    new_main_id: transferTargetId,
+    my_new_role: myNewRole
+  });
+  if (error) {
+    console.error('[group] transfer error:', error);
+    errorBox.textContent = 'Ошибка передачи: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[group] transfer ok');
+  closeTransferModal();
+
+  // Перезагружаем свой профиль — роль изменилась
+  currentProfile = await loadProfile(currentUser.id);
+
+  // Если я больше не организатор — возвращаемся на дашборд
+  if (currentProfile?.role !== 'main_organizer' && currentProfile?.role !== 'co_organizer') {
+    alert('Роль главного организатора передана. Вы теперь обычный участник.');
+    backFromGroup();
+    return;
+  }
+
+  // Если я стал со-организатором — остаюсь на экране, но перерисовываю с учётом новой роли
+  await loadGroupMembers();
+  renderGroupMembers();
+  alert('Роль главного организатора передана.');
 }
 
 async function openNewSurveyModal() {
@@ -2543,6 +2820,11 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-add-question', 'click', addQuestion);
   bind('btn-add-v1-question', 'click', addV1Question);
   bind('btn-back-to-list', 'click', backToList);
+  bind('btn-group-settings', 'click', openGroupSettings);
+  bind('btn-back-from-group', 'click', backFromGroup);
+  bind('btn-close-transfer', 'click', closeTransferModal);
+  bind('btn-cancel-transfer', 'click', closeTransferModal);
+  bind('btn-confirm-transfer', 'click', confirmTransfer);
 
   document.querySelectorAll('input[name="ns-type"]').forEach(r => {
     r.addEventListener('change', updateTypeVisibility);
