@@ -440,7 +440,28 @@
       </div>
 
       <div id="ns-v1-settings">
-        <div class="info" style="margin-top:16px;">Редактор Варианта 1 будет переделан в шаге 5а. Сейчас создание опросов Варианта 1 временно отключено. Используйте Вариант 2.</div>
+        <h3>Вопросы</h3>
+        <p style="margin-top:0;">В каждом вопросе участник выбирает заданное количество имён из группы. Если добавить под-вопросы — участник опишет каждого выбранного.</p>
+        <div id="ns-v1-questions-list"></div>
+        <button class="secondary small" id="btn-add-v1-question" type="button">+ Добавить вопрос</button>
+
+        <h3>Самооценка</h3>
+        <label class="checkbox-option" style="margin-bottom: 12px;">
+          <input type="checkbox" id="ns-v1-allow-self">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Разрешить выбирать самого себя</div>
+            <div class="radio-option-desc">Если выключено — в выпадающих списках не будет имени отвечающего.</div>
+          </div>
+        </label>
+
+        <h3>Тональность</h3>
+        <label class="checkbox-option" style="margin-bottom: 12px;">
+          <input type="checkbox" id="ns-v1-use-tone">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Использовать тональность вопросов (сближение / отторжение)</div>
+            <div class="radio-option-desc">Если включено — у каждого вопроса нужно указать тональность, а в результатах появится сводный индекс «сближающие минус отталкивающие». Если сомневаетесь — оставьте выключенным. Позже изменить настройку нельзя, только создать новый опрос.</div>
+          </div>
+        </label>
       </div>
 
       <div id="ns-v2-settings" class="hidden">
@@ -528,6 +549,7 @@ let currentProfile = null;
 let pollingInterval = null;
 let allPseudonyms = [];
 let questionCounter = 0;
+let v1QuestionCounter = 0;
 
 function createSbClient() {
   const uniqueKey = 'sb-portal-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
@@ -1426,9 +1448,15 @@ async function submitVoteV2() {
 async function openNewSurveyModal() {
   console.log('[new-survey] open modal');
   document.getElementById('ns-title').value = '';
-  // Вариант 1 временно отключён — сразу ставим Вариант 2
-  document.querySelector('input[name="ns-type"][value="variant_2"]').checked = true;
+  document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
 
+  // Сброс V1
+  document.getElementById('ns-v1-allow-self').checked = false;
+  document.getElementById('ns-v1-use-tone').checked = false;
+  document.getElementById('ns-v1-questions-list').innerHTML = '';
+  v1QuestionCounter = 0;
+
+  // Сброс V2
   document.querySelector('input[name="ns-v2-subjects-mode"][value="all"]').checked = true;
   document.getElementById('ns-v2-allow-self').checked = false;
   document.querySelector('input[name="ns-visibility"][value="self_only"]').checked = true;
@@ -1441,8 +1469,12 @@ async function openNewSurveyModal() {
   }
   renderSubjectsGrid();
 
+  // По умолчанию добавляем один пустой V1-вопрос
+  addV1Question();
+
   updateTypeVisibility();
   updateSubjectsListVisibility();
+  updateV1ToneVisibility();
 
   document.getElementById('modal-new-survey').classList.remove('hidden');
 }
@@ -1467,6 +1499,67 @@ function renderSubjectsGrid() {
   grid.innerHTML = allPseudonyms.map(name =>
     `<label><input type="checkbox" value="${escapeHtml(name)}"> ${escapeHtml(name)}</label>`
   ).join('');
+}
+
+function updateV1ToneVisibility() {
+  const useTone = document.getElementById('ns-v1-use-tone').checked;
+  document.querySelectorAll('#ns-v1-questions-list [data-tone-block]').forEach(el => {
+    el.style.display = useTone ? 'flex' : 'none';
+  });
+}
+
+function addV1Question() {
+  v1QuestionCounter++;
+  const id = 'v1q-' + v1QuestionCounter;
+  const num = v1QuestionCounter;
+  // Максимум выборов = число participant-профилей (без организаторов)
+  const maxCount = allPseudonyms.length || 10;
+  const html = `
+    <div class="question-item" data-v1qid="${id}">
+      <div class="question-item-header">
+        <span class="question-item-num">Вопрос ${num}</span>
+        <button class="link-btn" data-remove-v1q="${id}">✕ удалить вопрос</button>
+      </div>
+      <textarea placeholder="Текст вопроса (например: «С кем бы я хотел работать в одной команде?»)" data-field="text"></textarea>
+      <div class="question-item-options" style="margin-bottom:8px;">
+        <label>Количество имён:
+          <input type="number" data-field="count" min="1" max="${maxCount}" value="1" style="width:60px;">
+        </label>
+        <label data-tone-block style="display:none;">Тональность:
+          <select data-field="tone">
+            <option value="positive">Сближение</option>
+            <option value="negative">Отторжение</option>
+          </select>
+        </label>
+      </div>
+      <div style="margin-top:8px; padding:8px; background:#fff; border:1px dashed var(--border); border-radius:6px;">
+        <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">Под-вопросы (необязательно) — текстовые поля, на которые участник ответит про каждое выбранное имя:</div>
+        <div data-subq-list></div>
+        <button class="link-btn" data-add-subq type="button">+ Добавить под-вопрос</button>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById('ns-v1-questions-list');
+  list.insertAdjacentHTML('beforeend', html);
+  const item = list.querySelector(`[data-v1qid="${id}"]`);
+  item.querySelector('[data-remove-v1q]').addEventListener('click', () => item.remove());
+  item.querySelector('[data-add-subq]').addEventListener('click', () => addV1SubQuestion(item));
+  // Применить текущее состояние тональности
+  const useTone = document.getElementById('ns-v1-use-tone').checked;
+  item.querySelector('[data-tone-block]').style.display = useTone ? 'flex' : 'none';
+}
+
+function addV1SubQuestion(questionItem) {
+  const subqList = questionItem.querySelector('[data-subq-list]');
+  const idx = subqList.children.length + 1;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; align-items:center; margin-bottom:4px;';
+  row.innerHTML = `
+    <input type="text" data-field="subq-text" placeholder="Например: «Какие качества позволяют так считать?»" style="flex:1; margin-bottom:0;">
+    <button class="link-btn" data-remove-subq type="button">✕</button>
+  `;
+  row.querySelector('[data-remove-subq]').addEventListener('click', () => row.remove());
+  subqList.appendChild(row);
 }
 
 function addQuestion() {
@@ -1511,7 +1604,56 @@ function collectFormData() {
   const settings = {};
 
   if (type === 'variant_1') {
-    return { error: 'Создание опросов Варианта 1 временно отключено. Редактор будет переделан в шаге 5а. Используйте Вариант 2.' };
+    const allowSelf = document.getElementById('ns-v1-allow-self').checked;
+    const useTone = document.getElementById('ns-v1-use-tone').checked;
+    const maxCount = allPseudonyms.length || 10;
+
+    const questionItems = document.querySelectorAll('#ns-v1-questions-list .question-item');
+    if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос' };
+
+    const questions = [];
+    let qNum = 0;
+    for (const item of questionItems) {
+      qNum++;
+      const text = item.querySelector('[data-field="text"]').value.trim();
+      if (!text) return { error: 'Заполните текст вопроса ' + qNum };
+
+      const countVal = parseInt(item.querySelector('[data-field="count"]').value, 10);
+      if (isNaN(countVal) || countVal < 1) {
+        return { error: 'Укажите количество имён для вопроса ' + qNum + ' (минимум 1)' };
+      }
+      if (countVal > maxCount) {
+        return { error: 'В вопросе ' + qNum + ' количество имён (' + countVal + ') превышает число участников группы (' + maxCount + ')' };
+      }
+
+      // Под-вопросы
+      const subRows = item.querySelectorAll('[data-subq-list] [data-field="subq-text"]');
+      const subQuestions = [];
+      let sqNum = 0;
+      for (const row of subRows) {
+        sqNum++;
+        const sqText = row.value.trim();
+        if (!sqText) return { error: 'В вопросе ' + qNum + ' заполните текст под-вопроса ' + sqNum + ' или удалите его' };
+        subQuestions.push({ id: 'sq' + sqNum, text: sqText });
+      }
+
+      const q = {
+        id: 'q' + qNum,
+        text,
+        count: countVal,
+        sub_questions: subQuestions
+      };
+
+      if (useTone) {
+        q.tone = item.querySelector('[data-field="tone"]').value;
+      }
+
+      questions.push(q);
+    }
+
+    settings.allow_self = allowSelf;
+    settings.use_tone = useTone;
+    settings.questions = questions;
   }
 
   if (type === 'variant_2') {
@@ -1693,6 +1835,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-cancel-survey', 'click', closeNewSurveyModal);
   bind('btn-save-survey', 'click', saveNewSurvey);
   bind('btn-add-question', 'click', addQuestion);
+  bind('btn-add-v1-question', 'click', addV1Question);
   bind('btn-back-to-list', 'click', backToList);
 
   document.querySelectorAll('input[name="ns-type"]').forEach(r => {
@@ -1701,6 +1844,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('input[name="ns-v2-subjects-mode"]').forEach(r => {
     r.addEventListener('change', updateSubjectsListVisibility);
   });
+  const useToneCheck = document.getElementById('ns-v1-use-tone');
+  if (useToneCheck) useToneCheck.addEventListener('change', updateV1ToneVisibility);
 
   init();
 });
