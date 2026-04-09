@@ -106,6 +106,7 @@
   .error { background: #ffe6e6; color: var(--danger); padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
   .info { background: #e8f4ff; color: #004085; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
   .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .group-name-line { margin-top: 4px; font-size: 13px; color: var(--muted); }
   .link-btn { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; }
   .hidden { display: none !important; }
 
@@ -464,6 +465,7 @@
             <span id="user-pseudonym">—</span>
             <span class="badge" id="user-role-badge">—</span>
           </p>
+          <p class="group-name-line"><span id="user-group-name"></span></p>
         </div>
         <button class="secondary" id="btn-logout">Выйти</button>
       </div>
@@ -694,10 +696,15 @@ const SURVEY_TYPES = {
 let sb = null;
 let currentUser = null;
 let currentProfile = null;
+let currentGroupId = null;        // id текущей активной группы
+let currentGroupName = '';        // название текущей группы (для шапки)
+let currentUserMemberships = [];  // все memberships текущего юзера (для будущего переключателя)
 let pollingInterval = null;
 let allPseudonyms = [];
 let questionCounter = 0;
 let v1QuestionCounter = 0;
+
+const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
 function createSbClient() {
   const uniqueKey = 'sb-portal-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
@@ -731,6 +738,9 @@ function hardLocalLogout() {
   sb = createSbClient();
   currentUser = null;
   currentProfile = null;
+  currentGroupId = null;
+  currentGroupName = '';
+  currentUserMemberships = [];
   console.log('[hardLogout] done');
 }
 
@@ -763,24 +773,66 @@ function showScreen(name) {
 
 async function loadProfile(userId) {
   console.log('[profile] loading for ' + userId);
-  const { data, error } = await sb
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) {
-    console.error('[profile] error:', error);
+
+  // 1. Загружаем все memberships юзера + названия групп через join
+  const { data: memberships, error: mErr } = await sb
+    .from('memberships')
+    .select('group_id, role, pseudonym, groups(name)')
+    .eq('user_id', userId);
+
+  if (mErr) {
+    console.error('[profile] memberships error:', mErr);
     return null;
   }
-  console.log('[profile] loaded:', data);
-  return data;
+  if (!memberships || memberships.length === 0) {
+    console.warn('[profile] user has no memberships');
+    return null;
+  }
+  console.log('[profile] memberships loaded: ' + memberships.length);
+  currentUserMemberships = memberships;
+
+  // 2. Выбираем текущую группу: из localStorage если юзер в ней состоит, иначе первую
+  let savedGid = null;
+  try { savedGid = localStorage.getItem(LS_CURRENT_GROUP_KEY); } catch(e) {}
+  let chosen = null;
+  if (savedGid) {
+    chosen = memberships.find(m => m.group_id === savedGid) || null;
+  }
+  if (!chosen) chosen = memberships[0];
+
+  currentGroupId = chosen.group_id;
+  currentGroupName = chosen.groups?.name || chosen.group_id;
+  try { localStorage.setItem(LS_CURRENT_GROUP_KEY, currentGroupId); } catch(e) {}
+  console.log('[profile] current group: ' + currentGroupId + ' (' + currentGroupName + ')');
+
+  // 3. Подгружаем email из profiles (нужен для шапки и для legacy-кода)
+  const { data: prof, error: pErr } = await sb
+    .from('profiles')
+    .select('id, email')
+    .eq('id', userId)
+    .maybeSingle();
+  if (pErr) {
+    console.error('[profile] profiles email error:', pErr);
+  }
+
+  // 4. Собираем объект с тем же интерфейсом, что был раньше
+  const result = {
+    id: userId,
+    pseudonym: chosen.pseudonym,
+    role: chosen.role,
+    email: prof?.email || null,
+    group_id: chosen.group_id
+  };
+  console.log('[profile] loaded:', result);
+  return result;
 }
 
 async function loadPseudonyms() {
-  console.log('[pseudonyms] loading');
+  console.log('[pseudonyms] loading for group ' + currentGroupId);
   const { data, error } = await sb
     .from('pseudonyms')
     .select('name')
+    .eq('group_id', currentGroupId)
     .order('name');
   if (error) {
     console.error('[pseudonyms] error:', error);
@@ -791,10 +843,11 @@ async function loadPseudonyms() {
 }
 
 async function loadSurveys() {
-  console.log('[surveys] loading');
+  console.log('[surveys] loading for group ' + currentGroupId);
   const { data, error } = await sb
     .from('surveys')
     .select('*')
+    .eq('group_id', currentGroupId)
     .order('created_at', { ascending: false });
   if (error) {
     console.error('[surveys] error:', error);
@@ -939,6 +992,11 @@ function renderDashboard() {
   const role = currentProfile?.role || 'participant';
   document.getElementById('user-pseudonym').textContent = pseudonym;
 
+  const groupNameEl = document.getElementById('user-group-name');
+  if (groupNameEl) {
+    groupNameEl.textContent = currentGroupName ? ('Группа: ' + currentGroupName) : '';
+  }
+
   const badge = document.getElementById('user-role-badge');
   if (role === 'main_organizer') {
     badge.textContent = 'Главный организатор';
@@ -967,10 +1025,11 @@ let currentOwnResponse = null;   // свой ответ в этом опросе
 let allGroupParticipants = [];   // список активных участников группы (псевдонимы)
 
 async function loadGroupParticipants() {
-  console.log('[participants] loading');
+  console.log('[participants] loading for group ' + currentGroupId);
   const { data, error } = await sb
-    .from('profiles')
+    .from('memberships')
     .select('pseudonym, role')
+    .eq('group_id', currentGroupId)
     .order('pseudonym');
   if (error) {
     console.error('[participants] error:', error);
@@ -2249,19 +2308,41 @@ function backFromGroup() {
 }
 
 async function loadGroupMembers() {
-  console.log('[group] loading members');
-  const { data, error } = await sb
-    .from('profiles')
-    .select('id, pseudonym, role, email')
-    .order('pseudonym');
-  if (error) {
-    console.error('[group] error loading members:', error);
+  console.log('[group] loading members for group ' + currentGroupId);
+  // 1. Все memberships текущей группы
+  const { data: members, error: mErr } = await sb
+    .from('memberships')
+    .select('user_id, pseudonym, role')
+    .eq('group_id', currentGroupId);
+  if (mErr) {
+    console.error('[group] error loading memberships:', mErr);
     groupMembers = [];
     return;
   }
+  // 2. Email'ы из profiles (одним запросом по списку id)
+  const ids = members.map(m => m.user_id);
+  let emailById = {};
+  if (ids.length > 0) {
+    const { data: profs, error: pErr } = await sb
+      .from('profiles')
+      .select('id, email')
+      .in('id', ids);
+    if (pErr) {
+      console.error('[group] error loading emails:', pErr);
+    } else {
+      (profs || []).forEach(p => { emailById[p.id] = p.email; });
+    }
+  }
+  // 3. Сборка в формате старого groupMembers (id/pseudonym/role/email)
+  const merged = members.map(m => ({
+    id: m.user_id,
+    pseudonym: m.pseudonym,
+    role: m.role,
+    email: emailById[m.user_id] || null
+  }));
   // Сортировка: главный → со-организаторы → участники, внутри — по алфавиту
   const roleOrder = { main_organizer: 0, co_organizer: 1, participant: 2 };
-  groupMembers = (data || []).slice().sort((a, b) => {
+  groupMembers = merged.sort((a, b) => {
     const ra = roleOrder[a.role] ?? 99;
     const rb = roleOrder[b.role] ?? 99;
     if (ra !== rb) return ra - rb;
@@ -2342,10 +2423,19 @@ function renderGroupMembers() {
 async function promoteMember(id, name) {
   if (!confirm(`Назначить «${name}» со-организатором? У этого участника появятся права создавать и архивировать опросы, видеть полные результаты.`)) return;
   console.log('[group] promote ' + id);
-  const { error } = await sb.from('profiles').update({ role: 'co_organizer' }).eq('id', id);
-  if (error) {
-    alert('Ошибка: ' + error.message);
+  // memberships в текущей группе
+  const { error: mErr } = await sb.from('memberships')
+    .update({ role: 'co_organizer' })
+    .eq('user_id', id)
+    .eq('group_id', currentGroupId);
+  if (mErr) {
+    alert('Ошибка: ' + mErr.message);
     return;
+  }
+  // legacy: profiles.role (для совместимости, пока поле не удалено)
+  const { error: pErr } = await sb.from('profiles').update({ role: 'co_organizer' }).eq('id', id);
+  if (pErr) {
+    console.warn('[group] profiles legacy update failed:', pErr);
   }
   await loadGroupMembers();
   renderGroupMembers();
@@ -2354,10 +2444,17 @@ async function promoteMember(id, name) {
 async function demoteMember(id, name) {
   if (!confirm(`Снять со-организатора с «${name}»? Этот участник потеряет права управлять опросами и вернётся в обычные участники.`)) return;
   console.log('[group] demote ' + id);
-  const { error } = await sb.from('profiles').update({ role: 'participant' }).eq('id', id);
-  if (error) {
-    alert('Ошибка: ' + error.message);
+  const { error: mErr } = await sb.from('memberships')
+    .update({ role: 'participant' })
+    .eq('user_id', id)
+    .eq('group_id', currentGroupId);
+  if (mErr) {
+    alert('Ошибка: ' + mErr.message);
     return;
+  }
+  const { error: pErr } = await sb.from('profiles').update({ role: 'participant' }).eq('id', id);
+  if (pErr) {
+    console.warn('[group] profiles legacy update failed:', pErr);
   }
   await loadGroupMembers();
   renderGroupMembers();
@@ -2696,7 +2793,8 @@ async function saveNewSurvey() {
     status: 'active',
     visibility: data.visibility,
     settings: data.settings,
-    created_by: currentUser.id
+    created_by: currentUser.id,
+    group_id: currentGroupId
   });
   if (error) {
     console.error('[new-survey] error:', error);
