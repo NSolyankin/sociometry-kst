@@ -1199,6 +1199,10 @@ async function saveNewSurvey() {
   if (data.error) {
     errorBox.textContent = data.error;
     errorBox.classList.remove('hidden');
+    // Прокрутить модалку к началу, чтобы ошибка была видна
+    const modalBackdrop = document.getElementById('modal-new-survey');
+    if (modalBackdrop) modalBackdrop.scrollTop = 0;
+    errorBox.scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
   }
 
