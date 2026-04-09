@@ -185,6 +185,69 @@
     border: 1px solid #c3e6cb;
   }
 
+  /* Форма голосования Варианта 1 */
+  .v1-question-block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #fff;
+  }
+  .v1-question-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .v1-question-hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .v1-slot {
+    padding: 10px;
+    margin-bottom: 8px;
+    background: #f9f9fb;
+    border-radius: 6px;
+  }
+  .v1-slot.has-sub {
+    border: 1px solid var(--border);
+    padding: 12px;
+  }
+  .v1-slot-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .v1-slot-num {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .v1-slot select {
+    flex: 1;
+    margin: 0;
+  }
+  .v1-sub-list {
+    margin-top: 8px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+  }
+  .v1-sub-item {
+    margin-bottom: 8px;
+  }
+  .v1-sub-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .v1-sub-item textarea {
+    margin-bottom: 0;
+    min-height: 50px;
+  }
+  .v1-slot .invalid { border-color: var(--danger); background: #fff5f5; }
+
   /* Таблица результатов */
   .results-table {
     width: 100%;
@@ -908,13 +971,23 @@ function renderSurveyScreen() {
     return;
   }
 
-  // Участник — Вариант 1 пока заглушка
+  // Участник + Вариант 1
   if (s.type === 'variant_1') {
-    body.innerHTML = `
-      <div class="card">
-        <div class="info">Голосование по Варианту 1 (взаимные выборы) будет реализовано в шаге 5.</div>
-      </div>
-    `;
+    if (s.status === 'archived') {
+      body.innerHTML = `
+        <div class="card">
+          <div class="info">Просмотр результатов архивного опроса Варианта 1 будет в шаге 5в.</div>
+          ${currentOwnResponse ? '<h3>Ваш ответ</h3>' + renderOwnResponseV1(currentOwnResponse.payload) : '<p style="color:var(--muted);">Вы не участвовали в этом опросе.</p>'}
+        </div>
+      `;
+      return;
+    }
+    // Активный
+    if (currentOwnResponse) {
+      renderAlreadyVotedV1();
+      return;
+    }
+    renderVoteFormV1();
     return;
   }
 
@@ -1266,6 +1339,262 @@ async function renderResultsV2ForParticipant() {
 
   html += '</div>';
   body.innerHTML = html;
+}
+
+// ============================================================
+// ГОЛОСОВАНИЕ ПО ВАРИАНТУ 1
+// ============================================================
+
+// Возвращает список participant-профилей для выпадашек с учётом allow_self
+function getV1Candidates() {
+  const settings = currentSurvey.settings || {};
+  let candidates = [...allGroupParticipants];
+  if (!settings.allow_self) {
+    const myName = currentProfile?.pseudonym;
+    candidates = candidates.filter(n => n !== myName);
+  }
+  return candidates;
+}
+
+function renderVoteFormV1() {
+  const body = document.getElementById('survey-body');
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const candidates = getV1Candidates();
+
+  if (questions.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В этом опросе нет вопросов.</div></div>';
+    return;
+  }
+  if (candidates.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В группе нет участников для голосования.</div></div>';
+    return;
+  }
+
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя.</div>';
+  html += '<div id="vote-error" class="error hidden"></div>';
+
+  questions.forEach((q, qIdx) => {
+    const subs = q.sub_questions || [];
+    const hasSub = subs.length > 0;
+    html += `<div class="v1-question-block" data-qid="${escapeHtml(q.id)}">`;
+    html += `<div class="v1-question-title">${escapeHtml(q.text)}</div>`;
+    html += `<div class="v1-question-hint">Выберите ${q.count} ${pluralNames(q.count)}${hasSub ? ' и опишите каждого по под-вопросам' : ''}.</div>`;
+
+    for (let slotIdx = 0; slotIdx < q.count; slotIdx++) {
+      html += `<div class="v1-slot${hasSub ? ' has-sub' : ''}" data-slot-idx="${slotIdx}">`;
+      html += '<div class="v1-slot-header">';
+      if (q.count > 1) {
+        html += `<span class="v1-slot-num">${slotIdx + 1}.</span>`;
+      }
+      html += '<select data-field="name"><option value="">— выберите имя —</option>';
+      candidates.forEach(name => {
+        html += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+      });
+      html += '</select>';
+      html += '</div>';
+
+      if (hasSub) {
+        html += '<div class="v1-sub-list">';
+        subs.forEach(sq => {
+          html += '<div class="v1-sub-item">';
+          html += `<div class="v1-sub-label">${escapeHtml(sq.text)}</div>`;
+          html += `<textarea data-field="sub" data-sqid="${escapeHtml(sq.id)}" placeholder="Ваш ответ"></textarea>`;
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>'; // v1-slot
+    }
+
+    html += '</div>'; // v1-question-block
+  });
+
+  html += '<div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">';
+  html += '<button class="secondary" id="btn-vote-cancel">Отмена</button>';
+  html += '<button id="btn-vote-submit">Подтвердить и отправить</button>';
+  html += '</div>';
+  html += '</div>';
+  body.innerHTML = html;
+
+  document.getElementById('btn-vote-cancel').addEventListener('click', backToList);
+  document.getElementById('btn-vote-submit').addEventListener('click', submitVoteV1);
+}
+
+function pluralNames(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'имя';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'имени';
+  return 'имён';
+}
+
+async function submitVoteV1() {
+  console.log('[vote-v1] submit start');
+  const errorBox = document.getElementById('vote-error');
+  errorBox.classList.add('hidden');
+
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const answers = {};
+  const invalidEls = [];
+
+  // Сброс старой подсветки
+  document.querySelectorAll('.v1-slot .invalid').forEach(el => el.classList.remove('invalid'));
+
+  for (const q of questions) {
+    const qBlock = document.querySelector(`.v1-question-block[data-qid="${q.id}"]`);
+    const slots = qBlock.querySelectorAll('.v1-slot');
+    const slotAnswers = [];
+    const chosenNames = new Set();
+
+    slots.forEach(slot => {
+      const nameSelect = slot.querySelector('select[data-field="name"]');
+      const name = (nameSelect.value || '').trim();
+      if (!name) {
+        nameSelect.classList.add('invalid');
+        invalidEls.push(nameSelect);
+        slotAnswers.push(null);
+        return;
+      }
+      if (chosenNames.has(name)) {
+        nameSelect.classList.add('invalid');
+        invalidEls.push(nameSelect);
+        slotAnswers.push(null);
+        return;
+      }
+      chosenNames.add(name);
+
+      const entry = { name };
+      // Под-вопросы
+      const subs = q.sub_questions || [];
+      if (subs.length > 0) {
+        entry.sub = {};
+        const subInputs = slot.querySelectorAll('textarea[data-field="sub"]');
+        subInputs.forEach(ta => {
+          const sqid = ta.dataset.sqid;
+          const val = (ta.value || '').trim();
+          if (!val) {
+            ta.classList.add('invalid');
+            invalidEls.push(ta);
+          }
+          entry.sub[sqid] = val;
+        });
+      }
+      slotAnswers.push(entry);
+    });
+    answers[q.id] = slotAnswers;
+  }
+
+  // Отдельно проверяем повторы в каждом вопросе (чтобы выдать конкретное сообщение)
+  let duplicateError = null;
+  for (const q of questions) {
+    const slotAnswers = answers[q.id].filter(x => x && x.name);
+    const seen = new Set();
+    for (const a of slotAnswers) {
+      if (seen.has(a.name)) {
+        duplicateError = `В вопросе «${q.text}» одно и то же имя выбрано несколько раз. Каждое имя можно выбрать только один раз в рамках одного вопроса.`;
+        break;
+      }
+      seen.add(a.name);
+    }
+    if (duplicateError) break;
+  }
+
+  if (invalidEls.length > 0 || duplicateError) {
+    if (duplicateError) {
+      errorBox.textContent = duplicateError;
+    } else {
+      errorBox.textContent = 'Заполните все обязательные поля (подсвечены красным).';
+    }
+    errorBox.classList.remove('hidden');
+    const first = document.querySelector('.v1-slot .invalid');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  if (!confirm('Ответ будет сохранён окончательно. Изменить его потом нельзя. Продолжить?')) {
+    return;
+  }
+
+  console.log('[vote-v1] saving');
+  const payload = { answers };
+  const { error } = await sb.from('responses').insert({
+    survey_id: currentSurvey.id,
+    user_id: currentUser.id,
+    respondent_name: currentProfile.pseudonym,
+    payload
+  });
+  if (error) {
+    console.error('[vote-v1] error:', error);
+    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[vote-v1] saved');
+  // Перезагружаем свой ответ
+  const { data: ownResp } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', currentSurvey.id)
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+  currentOwnResponse = ownResp;
+  renderSurveyScreen();
+}
+
+function renderAlreadyVotedV1() {
+  const body = document.getElementById('survey-body');
+  let html = '<div class="card">';
+  html += '<div class="success-box"><strong>Ваш ответ сохранён.</strong><br>Общий результат появится после того, как организатор закроет опрос.</div>';
+  html += '<h3>Ваш ответ</h3>';
+  html += renderOwnResponseV1(currentOwnResponse.payload);
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderOwnResponseV1(payload) {
+  if (!payload || !payload.answers) return '<p style="color:var(--muted);">(ответ пустой)</p>';
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const answers = payload.answers;
+
+  let html = '';
+  questions.forEach(q => {
+    const slots = answers[q.id] || [];
+    html += `<div class="v1-question-block">`;
+    html += `<div class="v1-question-title">${escapeHtml(q.text)}</div>`;
+    if (slots.length === 0 || !slots.some(s => s && s.name)) {
+      html += '<p style="color:var(--muted); margin:0;">(нет ответа)</p>';
+    } else {
+      slots.forEach((entry, idx) => {
+        if (!entry || !entry.name) return;
+        const subs = q.sub_questions || [];
+        const hasSub = subs.length > 0;
+        html += `<div class="v1-slot${hasSub ? ' has-sub' : ''}">`;
+        html += '<div class="v1-slot-header">';
+        if (q.count > 1) html += `<span class="v1-slot-num">${idx + 1}.</span>`;
+        html += `<strong>${escapeHtml(entry.name)}</strong>`;
+        html += '</div>';
+        if (hasSub && entry.sub) {
+          html += '<div class="v1-sub-list">';
+          subs.forEach(sq => {
+            const val = entry.sub[sq.id] || '';
+            html += '<div class="v1-sub-item">';
+            html += `<div class="v1-sub-label">${escapeHtml(sq.text)}</div>`;
+            html += `<div>${val ? escapeHtml(val) : '<span style="color:var(--muted);">—</span>'}</div>`;
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+  });
+  return html;
 }
 
 function renderAlreadyVoted() {
