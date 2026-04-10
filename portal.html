@@ -107,6 +107,52 @@
   .info { background: #e8f4ff; color: #004085; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
   .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
   .group-name-line { margin-top: 4px; font-size: 13px; color: var(--muted); }
+
+  /* Переключатель групп */
+  .group-switcher-wrap { position: relative; display: inline-block; margin-top: 4px; }
+  .group-switcher-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+  }
+  .group-switcher-btn:hover { background: #f0f4f9; border-color: #e0e6ed; }
+  .group-switcher-caret { font-size: 10px; opacity: 0.7; }
+  .group-switcher-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    background: white;
+    border: 1px solid #e0e6ed;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    padding: 4px;
+    min-width: 220px;
+    z-index: 100;
+  }
+  .group-switcher-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 6px;
+    user-select: none;
+  }
+  .group-switcher-item:hover { background: #f0f4f9; }
+  .group-switcher-item.active { font-weight: 600; }
+  .group-switcher-item .check { width: 14px; display: inline-block; color: var(--primary); }
+  .group-switcher-item-role { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .group-switcher-sep { height: 1px; background: #e0e6ed; margin: 4px 0; }
   .link-btn { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; }
   .hidden { display: none !important; }
 
@@ -498,7 +544,13 @@
             <span id="user-pseudonym">—</span>
             <span class="badge" id="user-role-badge">—</span>
           </p>
-          <p class="group-name-line"><span id="user-group-name"></span></p>
+          <div class="group-switcher-wrap">
+            <button type="button" id="btn-group-switcher" class="group-switcher-btn">
+              <span id="user-group-name">Группа: —</span>
+              <span class="group-switcher-caret">▾</span>
+            </button>
+            <div id="group-switcher-menu" class="group-switcher-menu hidden"></div>
+          </div>
         </div>
         <button class="secondary" id="btn-logout">Выйти</button>
       </div>
@@ -1021,15 +1073,109 @@ async function deleteSurvey(id) {
   loadSurveys();
 }
 
+// ============================================================
+// ПЕРЕКЛЮЧАТЕЛЬ ГРУПП
+// ============================================================
+
+function roleShortLabel(role) {
+  if (role === 'main_organizer') return 'главный';
+  if (role === 'co_organizer') return 'со-орг.';
+  return 'участник';
+}
+
+function renderGroupSwitcher() {
+  const nameEl = document.getElementById('user-group-name');
+  const menuEl = document.getElementById('group-switcher-menu');
+  if (!nameEl || !menuEl) return;
+
+  // Текст на кнопке — текущая группа
+  nameEl.textContent = currentGroupName ? ('Группа: ' + currentGroupName) : 'Группа: —';
+
+  // Рендер пунктов меню по списку memberships
+  const items = (currentUserMemberships || []).slice().sort((a, b) => {
+    const na = a.groups?.name || a.group_id;
+    const nb = b.groups?.name || b.group_id;
+    return na.localeCompare(nb, 'ru');
+  });
+
+  let html = '';
+  items.forEach(m => {
+    const isActive = m.group_id === currentGroupId;
+    const gname = escapeHtml(m.groups?.name || m.group_id);
+    const check = isActive ? '✓' : '';
+    html += `<div class="group-switcher-item ${isActive ? 'active' : ''}" data-gid="${escapeHtml(m.group_id)}">
+      <span class="check">${check}</span>
+      <span>${gname}</span>
+      <span class="group-switcher-item-role">${roleShortLabel(m.role)}</span>
+    </div>`;
+  });
+
+  menuEl.innerHTML = html;
+
+  // Привязка обработчиков клика по пунктам
+  menuEl.querySelectorAll('.group-switcher-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const gid = el.dataset.gid;
+      closeGroupSwitcher();
+      if (gid && gid !== currentGroupId) {
+        switchGroup(gid);
+      }
+    });
+  });
+}
+
+function toggleGroupSwitcher() {
+  const menuEl = document.getElementById('group-switcher-menu');
+  if (!menuEl) return;
+  if (menuEl.classList.contains('hidden')) {
+    renderGroupSwitcher(); // пересобрать перед открытием
+    menuEl.classList.remove('hidden');
+  } else {
+    menuEl.classList.add('hidden');
+  }
+}
+
+function closeGroupSwitcher() {
+  const menuEl = document.getElementById('group-switcher-menu');
+  if (menuEl) menuEl.classList.add('hidden');
+}
+
+async function switchGroup(gid) {
+  console.log('[group-switch] switching to ' + gid);
+  // Найти новый membership в уже загруженном списке
+  const target = (currentUserMemberships || []).find(m => m.group_id === gid);
+  if (!target) {
+    console.error('[group-switch] target membership not found for ' + gid);
+    return;
+  }
+
+  // Обновить глобальные переменные
+  currentGroupId = target.group_id;
+  currentGroupName = target.groups?.name || target.group_id;
+  try { localStorage.setItem(LS_CURRENT_GROUP_KEY, currentGroupId); } catch(e) {}
+
+  // Обновить currentProfile так, чтобы он отражал новый membership
+  // (остальные 20 мест в коде читают currentProfile.role и .pseudonym)
+  if (currentProfile) {
+    currentProfile.role = target.role;
+    currentProfile.pseudonym = target.pseudonym;
+    currentProfile.group_id = target.group_id;
+  }
+
+  console.log('[group-switch] switched to ' + currentGroupId + ' (' + currentGroupName + '), role=' + target.role);
+
+  // Перерисовать дашборд целиком — это обновит шапку, флаги isOrganizer,
+  // список опросов, кнопки «Настройки группы» / «Новый опрос».
+  renderDashboard();
+}
+
 function renderDashboard() {
   const pseudonym = currentProfile?.pseudonym || '(без псевдонима)';
   const role = currentProfile?.role || 'participant';
   document.getElementById('user-pseudonym').textContent = pseudonym;
 
-  const groupNameEl = document.getElementById('user-group-name');
-  if (groupNameEl) {
-    groupNameEl.textContent = currentGroupName ? ('Группа: ' + currentGroupName) : '';
-  }
+  // Название группы и выпадающее меню
+  renderGroupSwitcher();
 
   const badge = document.getElementById('user-role-badge');
   if (role === 'main_organizer') {
@@ -3117,6 +3263,18 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-go-register', 'click', openRegisterScreen);
   bind('btn-go-login', 'click', goToLogin);
   bind('btn-register', 'click', doRegister);
+  bind('btn-group-switcher', 'click', (e) => {
+    e.stopPropagation();
+    toggleGroupSwitcher();
+  });
+
+  // Закрытие переключателя при клике вне него
+  document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.group-switcher-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      closeGroupSwitcher();
+    }
+  });
 
   const regGroup = document.getElementById('register-group');
   if (regGroup) {
