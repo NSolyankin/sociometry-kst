@@ -444,7 +444,6 @@
 
   <div id="screen-login" class="card hidden">
     <h1>Портал опросов КСТ</h1>
-    <p>Группа 161</p>
     <div id="login-error" class="error hidden"></div>
     <label>Email</label>
     <input type="email" id="login-email" autocomplete="email">
@@ -453,6 +452,40 @@
     <button id="btn-login">Войти</button>
     <p style="margin-top: 16px;">
       <button class="link-btn" id="btn-forgot">Забыли пароль?</button>
+    </p>
+    <p style="margin-top: 8px;">
+      Нет аккаунта? <button class="link-btn" id="btn-go-register">Регистрация</button>
+    </p>
+  </div>
+
+  <div id="screen-register" class="card hidden">
+    <h1>Регистрация</h1>
+    <p style="color: var(--muted); font-size: 14px;">Создание нового аккаунта в портале опросов КСТ</p>
+    <div id="register-error" class="error hidden"></div>
+    <div id="register-info" class="info hidden"></div>
+
+    <label>Email</label>
+    <input type="email" id="register-email" autocomplete="email">
+
+    <label>Пароль</label>
+    <input type="password" id="register-password" autocomplete="new-password">
+
+    <label>Повторите пароль</label>
+    <input type="password" id="register-password2" autocomplete="new-password">
+
+    <label>Группа</label>
+    <select id="register-group">
+      <option value="">— Загрузка списка групп… —</option>
+    </select>
+
+    <label>Псевдоним</label>
+    <select id="register-pseudonym" disabled>
+      <option value="">— Сначала выберите группу —</option>
+    </select>
+
+    <button id="btn-register" style="margin-top: 16px;">Зарегистрироваться</button>
+    <p style="margin-top: 16px;">
+      Уже есть аккаунт? <button class="link-btn" id="btn-go-login">Войти</button>
     </p>
   </div>
 
@@ -764,6 +797,7 @@ function stopPolling() {
 function showScreen(name) {
   console.log('[ui] show screen: ' + name);
   document.getElementById('screen-login').classList.add('hidden');
+  document.getElementById('screen-register').classList.add('hidden');
   document.getElementById('screen-dashboard').classList.add('hidden');
   document.getElementById('screen-loading').classList.add('hidden');
   document.getElementById('screen-survey').classList.add('hidden');
@@ -2807,6 +2841,181 @@ async function saveNewSurvey() {
   loadSurveys();
 }
 
+// ============================================================
+// ЭКРАН РЕГИСТРАЦИИ
+// ============================================================
+
+async function openRegisterScreen() {
+  console.log('[register] open');
+  // Сбросить поля и сообщения
+  document.getElementById('register-email').value = '';
+  document.getElementById('register-password').value = '';
+  document.getElementById('register-password2').value = '';
+  document.getElementById('register-error').classList.add('hidden');
+  document.getElementById('register-info').classList.add('hidden');
+  const groupSel = document.getElementById('register-group');
+  groupSel.innerHTML = '<option value="">— Загрузка списка групп… —</option>';
+  const psSel = document.getElementById('register-pseudonym');
+  psSel.innerHTML = '<option value="">— Сначала выберите группу —</option>';
+  psSel.disabled = true;
+
+  showScreen('register');
+
+  await loadGroupsForRegister();
+}
+
+async function loadGroupsForRegister() {
+  console.log('[register] loading groups');
+  const { data, error } = await sb
+    .from('groups')
+    .select('id, name')
+    .order('name');
+  const groupSel = document.getElementById('register-group');
+  if (error) {
+    console.error('[register] groups error:', error);
+    groupSel.innerHTML = '<option value="">— Ошибка загрузки групп —</option>';
+    showRegisterError('Не удалось загрузить список групп: ' + error.message);
+    return;
+  }
+  console.log('[register] groups loaded: ' + data.length);
+  groupSel.innerHTML = '<option value="">— Выберите группу —</option>';
+  data.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name;
+    groupSel.appendChild(opt);
+  });
+}
+
+async function loadFreePseudonymsForRegister() {
+  const groupId = document.getElementById('register-group').value;
+  const psSel = document.getElementById('register-pseudonym');
+  if (!groupId) {
+    psSel.innerHTML = '<option value="">— Сначала выберите группу —</option>';
+    psSel.disabled = true;
+    return;
+  }
+  console.log('[register] loading free pseudonyms for ' + groupId);
+  psSel.innerHTML = '<option value="">— Загрузка… —</option>';
+  psSel.disabled = true;
+
+  const { data, error } = await sb.rpc('free_pseudonyms', { gid: groupId });
+  if (error) {
+    console.error('[register] free_pseudonyms error:', error);
+    psSel.innerHTML = '<option value="">— Ошибка загрузки —</option>';
+    showRegisterError('Не удалось загрузить список псевдонимов: ' + error.message);
+    return;
+  }
+  console.log('[register] free pseudonyms: ' + data.length);
+  if (data.length === 0) {
+    psSel.innerHTML = '<option value="">— В этой группе нет свободных имён —</option>';
+    psSel.disabled = true;
+    showRegisterError('В выбранной группе нет свободных псевдонимов. Обратитесь к организатору этой группы.');
+    return;
+  }
+  psSel.innerHTML = '<option value="">— Выберите псевдоним —</option>';
+  data.forEach(row => {
+    const opt = document.createElement('option');
+    opt.value = row.name;
+    opt.textContent = row.name;
+    psSel.appendChild(opt);
+  });
+  psSel.disabled = false;
+}
+
+function showRegisterError(msg) {
+  const box = document.getElementById('register-error');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+  document.getElementById('register-info').classList.add('hidden');
+  box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function hideRegisterMessages() {
+  document.getElementById('register-error').classList.add('hidden');
+  document.getElementById('register-info').classList.add('hidden');
+}
+
+async function doRegister() {
+  hideRegisterMessages();
+
+  const email = document.getElementById('register-email').value.trim();
+  const password = document.getElementById('register-password').value;
+  const password2 = document.getElementById('register-password2').value;
+  const groupId = document.getElementById('register-group').value;
+  const pseudonym = document.getElementById('register-pseudonym').value;
+
+  // Валидация
+  if (!email) { showRegisterError('Введите email'); return; }
+  if (!password || password.length < 6) { showRegisterError('Пароль должен быть не короче 6 символов'); return; }
+  if (password !== password2) { showRegisterError('Пароли не совпадают'); return; }
+  if (!groupId) { showRegisterError('Выберите группу'); return; }
+  if (!pseudonym) { showRegisterError('Выберите псевдоним'); return; }
+
+  console.log('[register] attempt:', { email, groupId, pseudonym });
+
+  // Отключаем кнопку, чтобы не было двойных кликов
+  const btn = document.getElementById('btn-register');
+  btn.disabled = true;
+  btn.textContent = 'Регистрация…';
+
+  try {
+    const { data, error } = await sb.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        data: {
+          pseudonym: pseudonym,
+          group_id: groupId
+        }
+      }
+    });
+    if (error) {
+      console.error('[register] signUp error:', error);
+      // handle_new_user() кидает исключения с текстом, Supabase оборачивает их
+      // в сообщение вида "Database error saving new user". Покажем оригинал если есть.
+      let msg = error.message || 'Ошибка регистрации';
+      if (msg.includes('pseudonym') && msg.includes('already taken')) {
+        msg = 'Этот псевдоним уже занят в выбранной группе. Обновите страницу и выберите другой.';
+      } else if (msg.includes('already registered') || msg.includes('User already')) {
+        msg = 'Пользователь с таким email уже зарегистрирован. Попробуйте войти.';
+      }
+      showRegisterError(msg);
+      return;
+    }
+    console.log('[register] signUp success:', data);
+
+    // Успех: показать сообщение и вернуть на экран входа с заполненным email
+    const infoBox = document.getElementById('register-info');
+    infoBox.textContent = 'Регистрация прошла успешно! Сейчас переведу вас на экран входа…';
+    infoBox.classList.remove('hidden');
+
+    setTimeout(() => {
+      goToLogin();
+      document.getElementById('login-email').value = email;
+      const loginInfo = document.getElementById('login-error');
+      loginInfo.className = 'info';
+      loginInfo.textContent = 'Регистрация завершена. Войдите со своим email и паролем.';
+      loginInfo.classList.remove('hidden');
+    }, 1500);
+  } catch (e) {
+    console.error('[register] unexpected:', e);
+    showRegisterError('Неожиданная ошибка: ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Зарегистрироваться';
+  }
+}
+
+function goToLogin() {
+  console.log('[register] go to login');
+  // Сбросить поля логина и сообщение об ошибке
+  const errBox = document.getElementById('login-error');
+  errBox.className = 'error hidden';
+  errBox.textContent = '';
+  showScreen('login');
+}
+
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
@@ -2905,6 +3114,14 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-login', 'click', doLogin);
   bind('btn-logout', 'click', doLogout);
   bind('btn-forgot', 'click', doForgotPassword);
+  bind('btn-go-register', 'click', openRegisterScreen);
+  bind('btn-go-login', 'click', goToLogin);
+  bind('btn-register', 'click', doRegister);
+
+  const regGroup = document.getElementById('register-group');
+  if (regGroup) {
+    regGroup.addEventListener('change', loadFreePseudonymsForRegister);
+  }
 
   const loginPwd = document.getElementById('login-password');
   if (loginPwd) {
