@@ -644,6 +644,35 @@
     </div>
   </div>
 
+  <!-- ============ МОДАЛКА ВСТУПЛЕНИЯ В ГРУППУ ============ -->
+  <div id="modal-join-group" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:500px;">
+      <div class="modal-header">
+        <h2>Вступить ещё в одну группу</h2>
+        <button class="link-btn" id="btn-close-join">✕ Закрыть</button>
+      </div>
+      <div id="join-error" class="error hidden"></div>
+      <div id="join-info" class="info hidden"></div>
+
+      <p style="color:var(--muted); font-size:14px;">Выберите группу, в которую хотите вступить, и свободный псевдоним. Вы станете обычным участником этой группы.</p>
+
+      <label>Группа</label>
+      <select id="join-group">
+        <option value="">— Загрузка… —</option>
+      </select>
+
+      <label>Псевдоним</label>
+      <select id="join-pseudonym" disabled>
+        <option value="">— Сначала выберите группу —</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" id="btn-cancel-join">Отмена</button>
+        <button id="btn-confirm-join">Вступить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-new-survey" class="modal-backdrop hidden">
     <div class="modal">
       <div class="modal-header">
@@ -1110,14 +1139,24 @@ function renderGroupSwitcher() {
     </div>`;
   });
 
+  // Разделитель и пункт "вступить ещё в одну группу"
+  html += '<div class="group-switcher-sep"></div>';
+  html += `<div class="group-switcher-item" data-action="join">
+    <span class="check"></span>
+    <span>+ Вступить ещё в одну группу</span>
+  </div>`;
+
   menuEl.innerHTML = html;
 
   // Привязка обработчиков клика по пунктам
   menuEl.querySelectorAll('.group-switcher-item').forEach(el => {
     el.addEventListener('click', () => {
+      const action = el.dataset.action;
       const gid = el.dataset.gid;
       closeGroupSwitcher();
-      if (gid && gid !== currentGroupId) {
+      if (action === 'join') {
+        openJoinGroupModal();
+      } else if (gid && gid !== currentGroupId) {
         switchGroup(gid);
       }
     });
@@ -1167,6 +1206,164 @@ async function switchGroup(gid) {
   // Перерисовать дашборд целиком — это обновит шапку, флаги isOrganizer,
   // список опросов, кнопки «Настройки группы» / «Новый опрос».
   renderDashboard();
+}
+
+// ============================================================
+// МОДАЛКА "ВСТУПИТЬ В ГРУППУ"
+// ============================================================
+
+async function openJoinGroupModal() {
+  console.log('[join] open modal');
+  // Сброс полей и сообщений
+  document.getElementById('join-error').classList.add('hidden');
+  document.getElementById('join-info').classList.add('hidden');
+  const groupSel = document.getElementById('join-group');
+  groupSel.innerHTML = '<option value="">— Загрузка… —</option>';
+  const psSel = document.getElementById('join-pseudonym');
+  psSel.innerHTML = '<option value="">— Сначала выберите группу —</option>';
+  psSel.disabled = true;
+
+  document.getElementById('modal-join-group').classList.remove('hidden');
+
+  // Загрузить все группы
+  const { data, error } = await sb
+    .from('groups')
+    .select('id, name')
+    .order('name');
+  if (error) {
+    console.error('[join] groups error:', error);
+    showJoinError('Не удалось загрузить список групп: ' + error.message);
+    return;
+  }
+
+  // Исключить те, в которых пользователь уже состоит
+  const myGids = new Set((currentUserMemberships || []).map(m => m.group_id));
+  const available = data.filter(g => !myGids.has(g.id));
+
+  console.log('[join] total=' + data.length + ', available=' + available.length);
+
+  if (available.length === 0) {
+    groupSel.innerHTML = '<option value="">— Нет доступных групп —</option>';
+    showJoinError('Вы уже состоите во всех существующих группах.');
+    return;
+  }
+
+  groupSel.innerHTML = '<option value="">— Выберите группу —</option>';
+  available.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name;
+    groupSel.appendChild(opt);
+  });
+}
+
+function closeJoinGroupModal() {
+  document.getElementById('modal-join-group').classList.add('hidden');
+}
+
+async function loadFreePseudonymsForJoin() {
+  const gid = document.getElementById('join-group').value;
+  const psSel = document.getElementById('join-pseudonym');
+  document.getElementById('join-error').classList.add('hidden');
+  if (!gid) {
+    psSel.innerHTML = '<option value="">— Сначала выберите группу —</option>';
+    psSel.disabled = true;
+    return;
+  }
+  console.log('[join] loading free pseudonyms for ' + gid);
+  psSel.innerHTML = '<option value="">— Загрузка… —</option>';
+  psSel.disabled = true;
+
+  const { data, error } = await sb.rpc('free_pseudonyms', { gid: gid });
+  if (error) {
+    console.error('[join] free_pseudonyms error:', error);
+    psSel.innerHTML = '<option value="">— Ошибка загрузки —</option>';
+    showJoinError('Не удалось загрузить список псевдонимов: ' + error.message);
+    return;
+  }
+  console.log('[join] free pseudonyms: ' + data.length);
+  if (data.length === 0) {
+    psSel.innerHTML = '<option value="">— В этой группе нет свободных имён —</option>';
+    psSel.disabled = true;
+    showJoinError('В выбранной группе нет свободных псевдонимов. Обратитесь к организатору этой группы.');
+    return;
+  }
+  psSel.innerHTML = '<option value="">— Выберите псевдоним —</option>';
+  data.forEach(row => {
+    const opt = document.createElement('option');
+    opt.value = row.name;
+    opt.textContent = row.name;
+    psSel.appendChild(opt);
+  });
+  psSel.disabled = false;
+}
+
+function showJoinError(msg) {
+  const box = document.getElementById('join-error');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+  document.getElementById('join-info').classList.add('hidden');
+}
+
+async function doJoinGroup() {
+  document.getElementById('join-error').classList.add('hidden');
+  document.getElementById('join-info').classList.add('hidden');
+
+  const gid = document.getElementById('join-group').value;
+  const ps = document.getElementById('join-pseudonym').value;
+
+  if (!gid) { showJoinError('Выберите группу'); return; }
+  if (!ps) { showJoinError('Выберите псевдоним'); return; }
+
+  console.log('[join] attempt:', { gid, ps });
+
+  const btn = document.getElementById('btn-confirm-join');
+  btn.disabled = true;
+  btn.textContent = 'Вступаем…';
+
+  try {
+    const { error } = await sb.rpc('join_group', { gid: gid, ps: ps });
+    if (error) {
+      console.error('[join] rpc error:', error);
+      let msg = error.message || 'Ошибка вступления';
+      // Дружественные сообщения для типовых исключений из функции
+      if (msg.includes('already a member')) {
+        msg = 'Вы уже состоите в этой группе.';
+      } else if (msg.includes('already taken')) {
+        msg = 'Этот псевдоним уже занят. Выберите другой.';
+        // Перезагрузить список свободных псевдонимов, вдруг кто-то успел занять
+        await loadFreePseudonymsForJoin();
+      } else if (msg.includes('not in the pseudonym list')) {
+        msg = 'Псевдоним не найден в справочнике группы. Выберите из списка.';
+      }
+      showJoinError(msg);
+      return;
+    }
+    console.log('[join] success, reloading profile with new group as current');
+
+    // Переключить текущую группу на новую до перезагрузки профиля,
+    // чтобы loadProfile выбрал её как активную
+    try { localStorage.setItem(LS_CURRENT_GROUP_KEY, gid); } catch(e) {}
+
+    // Перезагрузить профиль — это подтянет новый membership и обновит
+    // currentUserMemberships, currentGroupId, currentGroupName, currentProfile
+    const newProfile = await loadProfile(currentUser.id);
+    if (!newProfile) {
+      showJoinError('Вступление прошло, но не удалось перезагрузить профиль. Попробуйте перелогиниться.');
+      return;
+    }
+    currentProfile = newProfile;
+
+    // Закрыть модалку и перерисовать дашборд — теперь он в новой группе
+    closeJoinGroupModal();
+    renderDashboard();
+  } catch (e) {
+    console.error('[join] unexpected:', e);
+    showJoinError('Неожиданная ошибка: ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Вступить';
+  }
 }
 
 function renderDashboard() {
@@ -3275,6 +3472,15 @@ document.addEventListener('DOMContentLoaded', () => {
       closeGroupSwitcher();
     }
   });
+
+  // Модалка вступления в группу
+  bind('btn-close-join', 'click', closeJoinGroupModal);
+  bind('btn-cancel-join', 'click', closeJoinGroupModal);
+  bind('btn-confirm-join', 'click', doJoinGroup);
+  const joinGroupSel = document.getElementById('join-group');
+  if (joinGroupSel) {
+    joinGroupSel.addEventListener('change', loadFreePseudonymsForJoin);
+  }
 
   const regGroup = document.getElementById('register-group');
   if (regGroup) {
