@@ -153,6 +153,15 @@
   .group-switcher-item .check { width: 14px; display: inline-block; color: var(--primary); }
   .group-switcher-item-role { margin-left: auto; font-size: 11px; color: var(--muted); }
   .group-switcher-sep { height: 1px; background: #e0e6ed; margin: 4px 0; }
+
+  /* Таблица псевдонимов в Настройках группы */
+  .pseudonyms-table { width: 100%; border-collapse: collapse; }
+  .pseudonyms-table th, .pseudonyms-table td { padding: 8px 12px; border-bottom: 1px solid #f0f4f9; text-align: left; font-size: 14px; }
+  .pseudonyms-table th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pseudonyms-table .ps-status-free { color: #16a34a; font-size: 13px; }
+  .pseudonyms-table .ps-status-taken { color: var(--text); font-size: 13px; }
+  .pseudonyms-table .ps-status-excluded { color: var(--muted); font-size: 13px; font-style: italic; }
+  .pseudonyms-summary { margin-bottom: 12px; color: var(--muted); font-size: 13px; }
   .link-btn { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; }
   .hidden { display: none !important; }
 
@@ -593,6 +602,33 @@
         <div class="empty-state">Загрузка…</div>
       </div>
     </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Псевдонимы группы</h2>
+      <p style="color:var(--muted); font-size:13px;">Список всех имён, разрешённых в этой группе. Имя занятого участника помечено его псевдонимом. Имена исключённых участников остаются закреплёнными за ними и не возвращаются в свободные.</p>
+      <div id="group-pseudonyms-list">
+        <div class="empty-state">Загрузка…</div>
+      </div>
+      <div id="add-pseudonym-block" class="hidden" style="margin-top:16px; padding-top:16px; border-top:1px solid #e0e6ed;">
+        <h3 style="margin-top:0;">Добавить новое имя</h3>
+        <div id="add-pseudonym-error" class="error hidden"></div>
+        <div id="add-pseudonym-info" class="info hidden"></div>
+        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+          <div style="flex:1; min-width:200px;">
+            <input type="text" id="new-pseudonym-input" placeholder="Например: Зевс" maxlength="50">
+          </div>
+          <button id="btn-add-pseudonym">Добавить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="excluded-card" class="card hidden">
+      <h2 style="margin-top:0;">Исключённые из группы</h2>
+      <p style="color:var(--muted); font-size:13px;">Участники, исключённые организатором. Они больше не появляются в новых опросах и не могут зайти в эту группу. Их голоса в архивных опросах сохраняются. Можно восстановить — тогда участник снова получит доступ.</p>
+      <div id="excluded-members-list">
+        <div class="empty-state">Загрузка…</div>
+      </div>
+    </div>
   </div>
 
   <!-- ============ ЭКРАН ОПРОСА ============ -->
@@ -889,21 +925,22 @@ function showScreen(name) {
 async function loadProfile(userId) {
   console.log('[profile] loading for ' + userId);
 
-  // 1. Загружаем все memberships юзера + названия групп через join
+  // 1. Загружаем все ACTIVE memberships юзера + названия групп через join
   const { data: memberships, error: mErr } = await sb
     .from('memberships')
     .select('group_id, role, pseudonym, groups(name)')
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('active', true);
 
   if (mErr) {
     console.error('[profile] memberships error:', mErr);
     return null;
   }
   if (!memberships || memberships.length === 0) {
-    console.warn('[profile] user has no memberships');
+    console.warn('[profile] user has no active memberships');
     return null;
   }
-  console.log('[profile] memberships loaded: ' + memberships.length);
+  console.log('[profile] active memberships loaded: ' + memberships.length);
   currentUserMemberships = memberships;
 
   // 2. Выбираем текущую группу: из localStorage если юзер в ней состоит, иначе первую
@@ -1407,6 +1444,7 @@ async function loadGroupParticipants() {
     .from('memberships')
     .select('pseudonym, role')
     .eq('group_id', currentGroupId)
+    .eq('active', true)
     .order('pseudonym');
   if (error) {
     console.error('[participants] error:', error);
@@ -2675,6 +2713,9 @@ async function openGroupSettings() {
   showScreen('loading');
   await loadGroupMembers();
   renderGroupMembers();
+  await loadPseudonymsAndExcluded();
+  renderPseudonymsBlock();
+  renderExcludedBlock();
   showScreen('group');
 }
 
@@ -2686,11 +2727,12 @@ function backFromGroup() {
 
 async function loadGroupMembers() {
   console.log('[group] loading members for group ' + currentGroupId);
-  // 1. Все memberships текущей группы
+  // 1. Все ACTIVE memberships текущей группы (исключённые здесь не показываются)
   const { data: members, error: mErr } = await sb
     .from('memberships')
     .select('user_id, pseudonym, role')
-    .eq('group_id', currentGroupId);
+    .eq('group_id', currentGroupId)
+    .eq('active', true);
   if (mErr) {
     console.error('[group] error loading memberships:', mErr);
     groupMembers = [];
@@ -2726,6 +2768,255 @@ async function loadGroupMembers() {
     return (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru');
   });
   console.log('[group] loaded ' + groupMembers.length + ' members');
+}
+
+// ============================================================
+// БЛОК "ПСЕВДОНИМЫ ГРУППЫ" в Настройках
+// ============================================================
+
+let groupPseudonyms = [];   // [{name, takenBy: {pseudonym, active} | null}]
+let excludedMembers = [];   // [{id, pseudonym, email}]
+
+async function loadPseudonymsAndExcluded() {
+  console.log('[group-ps] loading pseudonyms and excluded for ' + currentGroupId);
+
+  // 1. Все имена справочника
+  const { data: psList, error: psErr } = await sb
+    .from('pseudonyms')
+    .select('name')
+    .eq('group_id', currentGroupId)
+    .order('name');
+  if (psErr) {
+    console.error('[group-ps] pseudonyms error:', psErr);
+    groupPseudonyms = [];
+    excludedMembers = [];
+    return;
+  }
+
+  // 2. Все memberships этой группы (включая неактивные!) — нужно для статусов
+  //    и для отдельного списка исключённых
+  const { data: allMembs, error: mErr } = await sb
+    .from('memberships')
+    .select('user_id, pseudonym, active')
+    .eq('group_id', currentGroupId);
+  if (mErr) {
+    console.error('[group-ps] memberships error:', mErr);
+    groupPseudonyms = [];
+    excludedMembers = [];
+    return;
+  }
+
+  // 3. Индекс по pseudonym → membership
+  const byPseudo = {};
+  (allMembs || []).forEach(m => { byPseudo[m.pseudonym] = m; });
+
+  // 4. Сборка псевдонимов со статусом
+  groupPseudonyms = (psList || []).map(p => ({
+    name: p.name,
+    membership: byPseudo[p.name] || null
+  }));
+
+  // 5. Сборка исключённых: те, у кого active=false
+  const excludedRaw = (allMembs || []).filter(m => !m.active);
+  // Подгружаем email'ы
+  const ids = excludedRaw.map(m => m.user_id);
+  let emailById = {};
+  if (ids.length > 0) {
+    const { data: profs, error: pErr } = await sb
+      .from('profiles')
+      .select('id, email')
+      .in('id', ids);
+    if (pErr) {
+      console.error('[group-ps] profiles email error:', pErr);
+    } else {
+      (profs || []).forEach(p => { emailById[p.id] = p.email; });
+    }
+  }
+  excludedMembers = excludedRaw.map(m => ({
+    id: m.user_id,
+    pseudonym: m.pseudonym,
+    email: emailById[m.user_id] || null
+  })).sort((a, b) => (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru'));
+
+  console.log('[group-ps] loaded: pseudonyms=' + groupPseudonyms.length + ', excluded=' + excludedMembers.length);
+}
+
+function renderPseudonymsBlock() {
+  const container = document.getElementById('group-pseudonyms-list');
+  const myRole = currentProfile?.role;
+  const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
+
+  if (!groupPseudonyms || groupPseudonyms.length === 0) {
+    container.innerHTML = '<div class="empty-state">В этой группе пока нет псевдонимов.</div>';
+  } else {
+    // Счётчик: сколько свободных
+    const freeCount = groupPseudonyms.filter(p => !p.membership).length;
+    let html = `<div class="pseudonyms-summary">Всего имён в справочнике: <strong>${groupPseudonyms.length}</strong> · свободных: <strong>${freeCount}</strong></div>`;
+    html += '<div class="members-table-wrapper"><table class="pseudonyms-table">';
+    html += '<thead><tr><th>Псевдоним</th><th>Статус</th></tr></thead><tbody>';
+    groupPseudonyms.forEach(p => {
+      const m = p.membership;
+      let statusHtml;
+      if (!m) {
+        statusHtml = '<span class="ps-status-free">свободно</span>';
+      } else if (m.active) {
+        statusHtml = '<span class="ps-status-taken">занят участником</span>';
+      } else {
+        statusHtml = '<span class="ps-status-excluded">за исключённым участником</span>';
+      }
+      html += `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td>${statusHtml}</td></tr>`;
+    });
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  }
+
+  // Блок добавления имени — только для организаторов
+  document.getElementById('add-pseudonym-block').classList.toggle('hidden', !isOrganizer);
+}
+
+function renderExcludedBlock() {
+  const card = document.getElementById('excluded-card');
+  const container = document.getElementById('excluded-members-list');
+  const myRole = currentProfile?.role;
+  const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
+
+  if (!excludedMembers || excludedMembers.length === 0) {
+    card.classList.add('hidden');
+    return;
+  }
+  card.classList.remove('hidden');
+
+  let html = '<div class="members-table-wrapper"><table class="members-table">';
+  html += '<thead><tr><th>Псевдоним</th><th>Email</th>';
+  if (isOrganizer) html += '<th>Действия</th>';
+  html += '</tr></thead><tbody>';
+
+  excludedMembers.forEach(m => {
+    html += '<tr>';
+    html += `<td><strong>${escapeHtml(m.pseudonym || '—')}</strong></td>`;
+    html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(m.email || '—')}</td>`;
+    if (isOrganizer) {
+      html += `<td><button class="secondary small" data-action="restore" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Восстановить</button></td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+
+  container.querySelectorAll('[data-action="restore"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      restoreMember(id, name);
+    });
+  });
+}
+
+async function excludeMember(id, name) {
+  if (!confirm(`Исключить «${name}» из группы? Этот участник перестанет появляться в новых опросах и не сможет зайти в эту группу. Его голоса в архивных опросах сохранятся. Имя «${name}» останется закреплённым за ним — другой человек его не сможет занять. Восстановить можно через блок «Исключённые из группы».`)) return;
+  console.log('[group-ps] exclude ' + id);
+  const { error } = await sb.rpc('exclude_member', {
+    target_user_id: id,
+    gid: currentGroupId
+  });
+  if (error) {
+    console.error('[group-ps] exclude error:', error);
+    alert('Ошибка исключения: ' + error.message);
+    return;
+  }
+  // Перезагрузить таблицы участников и псевдонимов
+  await loadGroupMembers();
+  renderGroupMembers();
+  await loadPseudonymsAndExcluded();
+  renderPseudonymsBlock();
+  renderExcludedBlock();
+}
+
+async function restoreMember(id, name) {
+  if (!confirm(`Восстановить «${name}» в группе? Этот участник снова получит доступ и сможет участвовать в новых опросах.`)) return;
+  console.log('[group-ps] restore ' + id);
+  const { error } = await sb.rpc('restore_member', {
+    target_user_id: id,
+    gid: currentGroupId
+  });
+  if (error) {
+    console.error('[group-ps] restore error:', error);
+    alert('Ошибка восстановления: ' + error.message);
+    return;
+  }
+  await loadGroupMembers();
+  renderGroupMembers();
+  await loadPseudonymsAndExcluded();
+  renderPseudonymsBlock();
+  renderExcludedBlock();
+}
+
+async function addPseudonymToGroup() {
+  const errorBox = document.getElementById('add-pseudonym-error');
+  const infoBox = document.getElementById('add-pseudonym-info');
+  errorBox.classList.add('hidden');
+  infoBox.classList.add('hidden');
+
+  const input = document.getElementById('new-pseudonym-input');
+  const raw = input.value || '';
+  const name = raw.trim();
+
+  if (!name) {
+    errorBox.textContent = 'Введите имя псевдонима';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  if (name.length > 50) {
+    errorBox.textContent = 'Имя слишком длинное (максимум 50 символов)';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  // Проверка на дубликат на клиенте (вторая линия — на сервере)
+  if (groupPseudonyms.some(p => p.name === name)) {
+    errorBox.textContent = 'Такое имя уже есть в справочнике этой группы';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  console.log('[group-ps] add pseudonym: ' + name);
+  const btn = document.getElementById('btn-add-pseudonym');
+  btn.disabled = true;
+  btn.textContent = 'Добавляем…';
+
+  try {
+    const { error } = await sb.rpc('add_pseudonym', {
+      new_name: name,
+      gid: currentGroupId
+    });
+    if (error) {
+      console.error('[group-ps] add error:', error);
+      let msg = error.message || 'Ошибка добавления';
+      if (msg.includes('already exists')) {
+        msg = 'Такое имя уже есть в справочнике этой группы';
+      } else if (msg.includes('too long')) {
+        msg = 'Имя слишком длинное (максимум 50 символов)';
+      } else if (msg.includes('cannot be empty')) {
+        msg = 'Имя не может быть пустым';
+      }
+      errorBox.textContent = msg;
+      errorBox.classList.remove('hidden');
+      return;
+    }
+    console.log('[group-ps] add ok');
+    input.value = '';
+    infoBox.textContent = 'Имя «' + name + '» добавлено в справочник.';
+    infoBox.classList.remove('hidden');
+    // Перезагружаем список псевдонимов
+    await loadPseudonymsAndExcluded();
+    renderPseudonymsBlock();
+  } catch (e) {
+    console.error('[group-ps] unexpected:', e);
+    errorBox.textContent = 'Неожиданная ошибка: ' + (e.message || e);
+    errorBox.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Добавить';
+  }
 }
 
 function renderGroupMembers() {
@@ -2770,6 +3061,7 @@ function renderGroupMembers() {
         if (isMain) {
           html += `<button class="secondary small" data-action="transfer" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Сделать главным</button>`;
         }
+        html += `<button class="danger small" data-action="exclude" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Исключить</button>`;
       } else if (m.role === 'co_organizer') {
         html += `<button class="secondary small" data-action="demote" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Снять со-организатора</button>`;
         if (isMain) {
@@ -2793,6 +3085,7 @@ function renderGroupMembers() {
       if (action === 'promote') promoteMember(id, name);
       else if (action === 'demote') demoteMember(id, name);
       else if (action === 'transfer') openTransferModal(id, name);
+      else if (action === 'exclude') excludeMember(id, name);
     });
   });
 }
@@ -2888,6 +3181,8 @@ async function confirmTransfer() {
   // Если я стал со-организатором — остаюсь на экране, но перерисовываю с учётом новой роли
   await loadGroupMembers();
   renderGroupMembers();
+  // Псевдонимы тоже перерисовать — изменилась моя роль, может скрыться/показаться блок «Добавить»
+  renderPseudonymsBlock();
   alert('Роль главного организатора передана.');
 }
 
@@ -3385,7 +3680,7 @@ async function doLogin() {
   currentUser = data.user;
   currentProfile = await loadProfile(currentUser.id);
   if (!currentProfile) {
-    errorBox.textContent = 'Профиль не найден. Обратитесь к организатору.';
+    errorBox.textContent = 'Вы не состоите ни в одной активной группе. Обратитесь к организатору вашей группы.';
     errorBox.classList.remove('hidden');
     return;
   }
@@ -3480,6 +3775,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const joinGroupSel = document.getElementById('join-group');
   if (joinGroupSel) {
     joinGroupSel.addEventListener('change', loadFreePseudonymsForJoin);
+  }
+
+  // Добавление нового псевдонима в Настройках группы
+  bind('btn-add-pseudonym', 'click', addPseudonymToGroup);
+  const newPsInput = document.getElementById('new-pseudonym-input');
+  if (newPsInput) {
+    newPsInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addPseudonymToGroup(); });
   }
 
   const regGroup = document.getElementById('register-group');
