@@ -1474,6 +1474,7 @@ function renderDashboard() {
 let currentSurvey = null;        // данные текущего открытого опроса
 let currentOwnResponse = null;   // свой ответ в этом опросе (если есть)
 let allGroupParticipants = [];   // список активных участников группы (псевдонимы)
+let allGroupParticipantsV3 = []; // список активных participant'ов группы для Варианта 3: [{user_id, pseudonym}]
 
 async function loadGroupParticipants() {
   console.log('[participants] loading for group ' + currentGroupId);
@@ -1492,6 +1493,24 @@ async function loadGroupParticipants() {
     .filter(p => p.role === 'participant')
     .map(p => p.pseudonym);
   console.log('[participants] loaded ' + participants.length);
+  return participants;
+}
+
+async function loadGroupParticipantsV3() {
+  console.log('[participants-v3] loading for group ' + currentGroupId);
+  const { data, error } = await sb
+    .from('memberships')
+    .select('user_id, pseudonym, role')
+    .eq('group_id', currentGroupId)
+    .eq('active', true)
+    .eq('role', 'participant')
+    .order('pseudonym');
+  if (error) {
+    console.error('[participants-v3] error:', error);
+    return [];
+  }
+  const participants = (data || []).map(p => ({ user_id: p.user_id, pseudonym: p.pseudonym }));
+  console.log('[participants-v3] loaded ' + participants.length);
   return participants;
 }
 
@@ -1525,6 +1544,11 @@ async function openSurvey(id) {
   // Загружаем список участников группы
   if (allGroupParticipants.length === 0) {
     allGroupParticipants = await loadGroupParticipants();
+  }
+
+  // Для Варианта 3 нужен отдельный список с user_id
+  if (survey.type === 'variant_3') {
+    allGroupParticipantsV3 = await loadGroupParticipantsV3();
   }
 
   renderSurveyScreen();
@@ -1562,7 +1586,10 @@ function renderSurveyScreen() {
       return;
     }
     if (s.type === 'variant_3') {
-      body.innerHTML = '<div class="card"><div class="empty-state">Вариант 3 создан. Просмотр результатов для организатора ещё в разработке. В следующем подшаге появятся рендер голосования и результатов.</div></div>';
+      // Организатор не голосует в Варианте 3. Активный опрос — показываем
+      // управление (архивировать, удалить) и пояснение. Архивный — результаты
+      // (появятся в подшаге 9.4).
+      renderOrganizerViewV3();
       return;
     }
     body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
@@ -1599,9 +1626,19 @@ function renderSurveyScreen() {
     return;
   }
 
-  // Участник + Вариант 3 — заглушка
+  // Участник + Вариант 3
   if (s.type === 'variant_3') {
-    body.innerHTML = '<div class="card"><div class="empty-state">Вариант 3 создан. Голосование и просмотр результатов для участников ещё в разработке. В следующем подшаге появится рендер голосования и результатов.</div></div>';
+    if (s.status === 'archived') {
+      // Результаты для participant'а — заглушка до подшага 9.4
+      body.innerHTML = '<div class="card"><div class="empty-state">Результаты Варианта 3 для участников ещё в разработке. Появятся в подшаге 9.4.</div></div>';
+      return;
+    }
+    // Активный
+    if (currentOwnResponse) {
+      renderAlreadyVotedV3();
+      return;
+    }
+    renderVoteFormV3();
     return;
   }
 
@@ -2746,6 +2783,230 @@ async function submitVoteV2() {
     .maybeSingle();
   currentOwnResponse = ownResp;
   renderSurveyScreen();
+}
+
+// ============================================================
+// ВАРИАНТ 3 — АНКЕТА ПО УЧАСТНИКАМ
+// ============================================================
+
+function getV3Subjects() {
+  // Все активные participant'ы группы, кроме самого голосующего
+  const myId = currentUser?.id;
+  return (allGroupParticipantsV3 || []).filter(p => p.user_id !== myId);
+}
+
+function renderOrganizerViewV3() {
+  const body = document.getElementById('survey-body');
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const textVisibility = s.settings?.text_visibility || 'self_only';
+
+  let html = '<div class="card">';
+  if (s.status === 'active') {
+    html += '<div class="warning-box"><strong>Активный опрос Варианта 3.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
+  } else {
+    html += '<div class="empty-state">Просмотр результатов Варианта 3 для организатора ещё в разработке. Появится в подшаге 9.4.</div>';
+  }
+
+  html += '<h3>Вопросы анкеты</h3>';
+  if (questions.length === 0) {
+    html += '<p>(нет вопросов)</p>';
+  } else {
+    html += '<ol class="v3-questions-preview">';
+    questions.forEach(q => {
+      const kindLabel = q.kind === 'yesno' ? 'Да / Нет' : 'Свободный текст';
+      html += `<li><strong>${escapeHtml(q.text)}</strong> <span style="color:var(--muted);">— ${kindLabel}</span></li>`;
+    });
+    html += '</ol>';
+  }
+
+  html += '<h3>Оцениваемые участники</h3>';
+  const subjects = allGroupParticipantsV3 || [];
+  if (subjects.length < 2) {
+    html += '<div class="warning-box">В группе меньше двух обычных участников. Опрос не имеет смысла: каждый participant голосует про всех остальных кроме себя, поэтому нужно минимум 2 participant\'а.</div>';
+  } else {
+    html += '<p>В опросе участвуют ' + subjects.length + ' человек:</p><ul>';
+    subjects.forEach(p => { html += '<li>' + escapeHtml(p.pseudonym) + '</li>'; });
+    html += '</ul>';
+  }
+
+  html += '<h3>Видимость текстовых ответов</h3>';
+  html += '<p>' + (textVisibility === 'all_participants'
+    ? 'Все видят все тексты.'
+    : 'Каждый видит тексты только про себя.') + '</p>';
+
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderVoteFormV3() {
+  const body = document.getElementById('survey-body');
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV3Subjects();
+
+  if (questions.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В этом опросе нет вопросов.</div></div>';
+    return;
+  }
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">В группе нет других обычных участников, которых вы могли бы оценить. Голосовать не за кого.</div></div>';
+    return;
+  }
+
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя. Результаты да/нет будут видны всем проголосовавшим анонимно. Свободные тексты — по правилам, заданным организатором.</div>';
+  html += '<div id="vote-error" class="error hidden"></div>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table" id="vote-table-v3">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => {
+    html += `<th>${escapeHtml(q.text)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr data-subject-id="${escapeHtml(subj.user_id)}"><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    questions.forEach(q => {
+      html += '<td>';
+      if (q.kind === 'yesno') {
+        html += `<select data-question="${escapeHtml(q.id)}" data-kind="yesno">
+          <option value="">—</option>
+          <option value="yes">Да</option>
+          <option value="no">Нет</option>
+        </select>`;
+      } else if (q.kind === 'text') {
+        html += `<textarea data-question="${escapeHtml(q.id)}" data-kind="text" placeholder="Ваш ответ (можно оставить пустым)"></textarea>`;
+      }
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">';
+  html += '<button class="secondary" id="btn-vote-cancel-v3">Отмена</button>';
+  html += '<button id="btn-vote-submit-v3">Подтвердить и отправить</button>';
+  html += '</div>';
+  html += '</div>';
+  body.innerHTML = html;
+
+  document.getElementById('btn-vote-cancel-v3').addEventListener('click', backToList);
+  document.getElementById('btn-vote-submit-v3').addEventListener('click', submitVoteV3);
+}
+
+async function submitVoteV3() {
+  console.log('[vote-v3] submit start');
+  const errorBox = document.getElementById('vote-error');
+  errorBox.classList.add('hidden');
+
+  const table = document.getElementById('vote-table-v3');
+  const rows = table.querySelectorAll('tbody tr');
+  const answers = {};
+  const invalid = [];
+
+  // Сброс старой подсветки
+  table.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+
+  rows.forEach(row => {
+    const subjId = row.dataset.subjectId;
+    answers[subjId] = {};
+    const inputs = row.querySelectorAll('select, textarea');
+    inputs.forEach(inp => {
+      const qid = inp.dataset.question;
+      const kind = inp.dataset.kind;
+      const val = (inp.value || '').trim();
+      if (kind === 'yesno') {
+        // Да/нет обязательны
+        if (!val) {
+          inp.classList.add('invalid');
+          invalid.push({ subjId, qid });
+        } else {
+          answers[subjId][qid] = val;
+        }
+      } else if (kind === 'text') {
+        // Текст можно оставить пустым. Сохраняем только непустые.
+        if (val) answers[subjId][qid] = val;
+      }
+    });
+  });
+
+  if (invalid.length > 0) {
+    errorBox.textContent = 'Заполните все ответы «Да/Нет» (подсвечены красным). Пропущено: ' + invalid.length + '.';
+    errorBox.classList.remove('hidden');
+    const first = table.querySelector('.invalid');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  if (!confirm('Ответ будет сохранён окончательно. Изменить его потом нельзя. Продолжить?')) {
+    return;
+  }
+
+  console.log('[vote-v3] saving');
+  const payload = { answers };
+  const { error } = await sb.from('responses').insert({
+    survey_id: currentSurvey.id,
+    user_id: currentUser.id,
+    respondent_name: currentProfile.pseudonym,
+    payload
+  });
+  if (error) {
+    console.error('[vote-v3] error:', error);
+    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[vote-v3] saved');
+  // Перезагрузим свой ответ и перерисуем экран
+  const { data: ownResp } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', currentSurvey.id)
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+  currentOwnResponse = ownResp;
+  renderSurveyScreen();
+}
+
+function renderAlreadyVotedV3() {
+  const body = document.getElementById('survey-body');
+  let html = '<div class="card">';
+  html += '<div class="success-box"><strong>Ваш ответ сохранён.</strong><br>Общий результат появится после того, как организатор закроет опрос.</div>';
+  html += '<h3>Ваш ответ</h3>';
+  html += renderOwnResponseV3(currentOwnResponse.payload);
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderOwnResponseV3(payload) {
+  if (!payload || !payload.answers) return '<p>(ответ пустой)</p>';
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV3Subjects();
+
+  if (subjects.length === 0 || questions.length === 0) {
+    return '<p>(нет данных для отображения)</p>';
+  }
+
+  let html = '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => { html += `<th>${escapeHtml(q.text)}</th>`; });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    questions.forEach(q => {
+      const ans = payload.answers?.[subj.user_id]?.[q.id];
+      let display = '—';
+      if (q.kind === 'yesno') {
+        if (ans === 'yes') display = 'Да';
+        else if (ans === 'no') display = 'Нет';
+      } else if (q.kind === 'text') {
+        display = ans ? escapeHtml(ans) : '<span style="color:var(--muted);">(без ответа)</span>';
+      }
+      html += `<td>${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
 }
 
 // ============================================================
