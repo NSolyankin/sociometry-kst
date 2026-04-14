@@ -737,6 +737,13 @@
             <div class="radio-option-desc">Каждый участник отвечает «да/нет» или открытым текстом на список вопросов про каждого из коллег. Используется, когда нужно собрать оценку группы по конкретным качествам или критериям.</div>
           </div>
         </label>
+        <label class="radio-option">
+          <input type="radio" name="ns-type" value="variant_3">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Вариант 3</div>
+            <div class="radio-option-desc">Анкета по участникам. Организатор задаёт несколько одинаковых вопросов (да/нет или свободный текст), и каждый участник отвечает на них про каждого другого участника. Организаторы и со-организаторы в этом типе опроса не голосуют и не оцениваются.</div>
+          </div>
+        </label>
       </div>
 
       <div id="ns-v1-settings">
@@ -799,30 +806,58 @@
         <button class="secondary small" id="btn-add-question" type="button">+ Добавить вопрос</button>
       </div>
 
-      <h3>Видимость общего результата для участников</h3>
-      <p style="margin-top: 0;">После того как организатор архивирует опрос, участники увидят:</p>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="ns-visibility" value="self_only" checked>
-          <div class="radio-option-content">
-            <div class="radio-option-label">Только свой ответ и сводку по себе</div>
-            <div class="radio-option-desc">Участник видит, как ответили на вопросы про него, но не видит результаты других.</div>
-          </div>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="ns-visibility" value="full">
-          <div class="radio-option-content">
-            <div class="radio-option-label">Полный результат по всем</div>
-            <div class="radio-option-desc">Участник видит сводные данные про всех. Авторы голосов скрыты.</div>
-          </div>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="ns-visibility" value="none">
-          <div class="radio-option-content">
-            <div class="radio-option-label">Не показывать (только организатор)</div>
-            <div class="radio-option-desc">Участники видят только сам факт, что они проголосовали. Результаты доступны только организатору.</div>
-          </div>
-        </label>
+      <div id="ns-v3-settings" class="hidden">
+        <h3>Вопросы анкеты</h3>
+        <p style="margin-top:0;">Задайте вопросы, которые каждый участник задаст про каждого другого участника группы. Организаторы и со-организаторы в этом опросе не участвуют — ни как голосующие, ни как оцениваемые.</p>
+        <div id="ns-v3-questions-list"></div>
+        <button class="secondary small" id="btn-add-v3-question" type="button">+ Добавить вопрос</button>
+
+        <h3>Видимость свободных текстов</h3>
+        <p style="margin-top: 0;">Да/нет результаты по каждому участнику всегда видны всем голосующим в анонимной сводке. Видимость свободных текстовых ответов настраивается отдельно:</p>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="ns-v3-text-visibility" value="self_only" checked>
+            <div class="radio-option-content">
+              <div class="radio-option-label">Каждый видит тексты только про себя</div>
+              <div class="radio-option-desc">Участник видит свободные текстовые ответы, которые другие оставили про него самого. Тексты про других участников он не видит. Организатор видит все тексты.</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-v3-text-visibility" value="all_participants">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Все видят все тексты</div>
+              <div class="radio-option-desc">Каждый участник видит все свободные текстовые ответы про всех участников. Имена авторов голосов скрыты.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="ns-visibility-block">
+        <h3>Видимость общего результата для участников</h3>
+        <p style="margin-top: 0;">После того как организатор архивирует опрос, участники увидят:</p>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="ns-visibility" value="self_only">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Только свой ответ и сводку по себе</div>
+              <div class="radio-option-desc">Участник видит, как ответили на вопросы про него, но не видит результаты других.</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-visibility" value="full" checked>
+            <div class="radio-option-content">
+              <div class="radio-option-label">Полный результат по всем</div>
+              <div class="radio-option-desc">Участник видит сводные данные про всех. Авторы голосов скрыты.</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-visibility" value="none">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Не показывать (только организатор)</div>
+              <div class="radio-option-desc">Участники видят только сам факт, что они проголосовали. Результаты доступны только организатору.</div>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div class="modal-actions">
@@ -840,7 +875,8 @@ const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 
 const SURVEY_TYPES = {
   variant_1: { label: 'Вариант 1', description: 'Каждый участник выбирает несколько коллег по заданному критерию.' },
-  variant_2: { label: 'Вариант 2', description: 'Каждый участник отвечает на список вопросов про коллег.' }
+  variant_2: { label: 'Вариант 2', description: 'Каждый участник отвечает на список вопросов про коллег.' },
+  variant_3: { label: 'Вариант 3', description: 'Анкета по участникам: каждый отвечает на одинаковые вопросы про каждого.' }
 };
 
 let sb = null;
@@ -853,6 +889,7 @@ let pollingInterval = null;
 let allPseudonyms = [];
 let questionCounter = 0;
 let v1QuestionCounter = 0;
+let v3QuestionCounter = 0;
 
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
@@ -1011,7 +1048,7 @@ async function loadSurveys() {
 
   const counts = {};
   for (const s of data) {
-    if (s.type !== 'variant_1' && s.type !== 'variant_2') continue;
+    if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3') continue;
     const { count } = await sb
       .from('responses')
       .select('id', { count: 'exact', head: true })
@@ -1025,7 +1062,7 @@ function renderSurveys(surveys, counts) {
   const list = document.getElementById('surveys-list');
   const isOrganizer = currentProfile?.role === 'main_organizer' || currentProfile?.role === 'co_organizer';
 
-  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2');
+  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2' || s.type === 'variant_3');
   if (newSurveys.length === 0) {
     list.innerHTML = '<div class="empty-state">Опросов пока нет.<br><small>' +
       (isOrganizer ? 'Создайте новый опрос кнопкой «+ Новый опрос».' : 'Дождитесь, пока организатор создаст опрос.') +
@@ -1524,6 +1561,10 @@ function renderSurveyScreen() {
       renderResultsV2ForOrganizer();
       return;
     }
+    if (s.type === 'variant_3') {
+      body.innerHTML = '<div class="card"><div class="empty-state">Вариант 3 создан. Просмотр результатов для организатора ещё в разработке. В следующем подшаге появятся рендер голосования и результатов.</div></div>';
+      return;
+    }
     body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
     return;
   }
@@ -1555,6 +1596,12 @@ function renderSurveyScreen() {
       return;
     }
     renderVoteFormV2();
+    return;
+  }
+
+  // Участник + Вариант 3 — заглушка
+  if (s.type === 'variant_3') {
+    body.innerHTML = '<div class="card"><div class="empty-state">Вариант 3 создан. Голосование и просмотр результатов для участников ещё в разработке. В следующем подшаге появится рендер голосования и результатов.</div></div>';
     return;
   }
 
@@ -3227,10 +3274,15 @@ async function openNewSurveyModal() {
   // Сброс V2
   document.querySelector('input[name="ns-v2-subjects-mode"][value="all"]').checked = true;
   document.getElementById('ns-v2-allow-self').checked = false;
-  document.querySelector('input[name="ns-visibility"][value="self_only"]').checked = true;
+  document.querySelector('input[name="ns-visibility"][value="full"]').checked = true;
   document.getElementById('new-survey-error').classList.add('hidden');
   document.getElementById('ns-v2-questions-list').innerHTML = '';
   questionCounter = 0;
+
+  // Сброс V3
+  document.getElementById('ns-v3-questions-list').innerHTML = '';
+  v3QuestionCounter = 0;
+  document.querySelector('input[name="ns-v3-text-visibility"][value="self_only"]').checked = true;
 
   if (allPseudonyms.length === 0) {
     allPseudonyms = await loadPseudonyms();
@@ -3239,6 +3291,11 @@ async function openNewSurveyModal() {
 
   // По умолчанию добавляем один пустой V1-вопрос
   addV1Question();
+
+  // По умолчанию — три пустых V3-вопроса (готовый каркас анкеты)
+  addV3Question();
+  addV3Question();
+  addV3Question();
 
   updateTypeVisibility();
   updateSubjectsListVisibility();
@@ -3255,6 +3312,10 @@ function updateTypeVisibility() {
   const type = document.querySelector('input[name="ns-type"]:checked').value;
   document.getElementById('ns-v1-settings').classList.toggle('hidden', type !== 'variant_1');
   document.getElementById('ns-v2-settings').classList.toggle('hidden', type !== 'variant_2');
+  document.getElementById('ns-v3-settings').classList.toggle('hidden', type !== 'variant_3');
+  // В Варианте 3 блок общей visibility не используется: там своя логика
+  // (да/нет всегда виден, тексты управляются ns-v3-text-visibility).
+  document.getElementById('ns-visibility-block').classList.toggle('hidden', type === 'variant_3');
 }
 
 function updateSubjectsListVisibility() {
@@ -3368,6 +3429,44 @@ function addQuestion() {
   });
 }
 
+function addV3Question() {
+  v3QuestionCounter++;
+  const id = 'v3q-' + v3QuestionCounter;
+  const html = `
+    <div class="question-item" data-v3qid="${id}">
+      <div class="question-item-header">
+        <span class="question-item-num" data-v3-num>Вопрос —</span>
+        <button class="link-btn" data-remove-v3q="${id}">✕ удалить</button>
+      </div>
+      <textarea placeholder="Текст вопроса (например: «Выполнил домашнее задание»)" data-field="text"></textarea>
+      <div class="question-item-options">
+        <label>Тип ответа:
+          <select data-field="kind">
+            <option value="yesno">Да / Нет</option>
+            <option value="text">Свободный текст</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById('ns-v3-questions-list');
+  list.insertAdjacentHTML('beforeend', html);
+  const item = list.querySelector(`[data-v3qid="${id}"]`);
+  item.querySelector('[data-remove-v3q]').addEventListener('click', () => {
+    item.remove();
+    renumberV3Questions();
+  });
+  renumberV3Questions();
+}
+
+function renumberV3Questions() {
+  const items = document.querySelectorAll('#ns-v3-questions-list .question-item');
+  items.forEach((item, idx) => {
+    const numEl = item.querySelector('[data-v3-num]');
+    if (numEl) numEl.textContent = 'Вопрос ' + (idx + 1);
+  });
+}
+
 function collectFormData() {
   const title = document.getElementById('ns-title').value.trim();
   const type = document.querySelector('input[name="ns-type"]:checked').value;
@@ -3465,6 +3564,31 @@ function collectFormData() {
     settings.subjects = subjects;
     settings.allow_self = allowSelf;
     settings.questions = questions;
+  }
+
+  if (type === 'variant_3') {
+    const textVisibility = document.querySelector('input[name="ns-v3-text-visibility"]:checked').value;
+    const questionItems = document.querySelectorAll('#ns-v3-questions-list .question-item');
+    if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос в анкету' };
+
+    const questions = [];
+    let qNum = 0;
+    for (const item of questionItems) {
+      qNum++;
+      const text = item.querySelector('[data-field="text"]').value.trim();
+      if (!text) return { error: 'Заполните текст вопроса ' + qNum };
+      const kind = item.querySelector('[data-field="kind"]').value;
+      if (kind !== 'yesno' && kind !== 'text') {
+        return { error: 'Некорректный тип ответа в вопросе ' + qNum };
+      }
+      questions.push({ id: 'q' + qNum, text, kind });
+    }
+
+    settings.questions = questions;
+    settings.text_visibility = textVisibility;
+    // В Варианте 3 общее поле visibility не используется — форсируем 'full',
+    // чтобы существующие RLS/renderers не падали на null.
+    return { title, type, visibility: 'full', settings };
   }
 
   return { title, type, visibility, settings };
@@ -3827,6 +3951,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-save-survey', 'click', saveNewSurvey);
   bind('btn-add-question', 'click', addQuestion);
   bind('btn-add-v1-question', 'click', addV1Question);
+  bind('btn-add-v3-question', 'click', addV3Question);
   bind('btn-back-to-list', 'click', backToList);
   bind('btn-group-settings', 'click', openGroupSettings);
   bind('btn-back-from-group', 'click', backFromGroup);
