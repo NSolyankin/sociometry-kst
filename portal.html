@@ -491,6 +491,31 @@
   }
   .question-item-options input { width: auto; margin: 0 4px 0 0; }
   .question-item-options select { width: auto; padding: 4px 8px; margin: 0 0 0 4px; font-size: 13px; }
+
+  /* Виден только при печати */
+  .print-only { display: none; }
+  @media print { .print-only { display: block; } }
+
+  /* ===== ЭКСПОРТ В PDF (печать) ===== */
+  /* При печати скрываем всё, кроме помеченного классом .print-root.
+     Внутри .print-root скрываем элементы с классом .no-print. */
+  @media print {
+    body * { visibility: hidden; }
+    .print-root, .print-root * { visibility: visible; }
+    .print-root { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
+    .print-root .no-print { display: none !important; }
+    .print-root .card { box-shadow: none; border: none; background: white; padding: 0 0 16px 0; margin: 0 0 12px 0; }
+    .print-root .success-box, .print-root .warning-box {
+      background: white; border: 1px solid #999; color: black; padding: 8px;
+    }
+    .print-root .vote-table { border-collapse: collapse; width: 100%; }
+    .print-root .vote-table th, .print-root .vote-table td {
+      border: 1px solid #999; padding: 6px 10px; background: white; color: black;
+    }
+    .print-root .badge { background: white !important; color: black !important; border: 1px solid #999; padding: 1px 4px; }
+    .print-root h1, .print-root h2, .print-root h3, .print-root h4 { color: black; }
+    .print-root a { color: black; text-decoration: none; }
+  }
 </style>
 </head>
 <body>
@@ -3055,6 +3080,111 @@ function aggregateResponsesV3(responses, questions, subjects) {
 // Один блок (карточка) с результатами по одному оцениваемому participant'у.
 // hideTextsForOthers — true, если тексты этого subj не нужно показывать
 // (для participant'а в режиме self_only при просмотре чужой карточки).
+// ---- Экспорт результатов Варианта 3 ----
+
+// Собирает результаты опроса в форматированный plain text (Markdown-подобный).
+// hideTextsFn(subj) возвращает true для оцениваемых, чьи тексты надо скрыть
+// (применяется только к раздел свободных ответов, к Да/Нет — нет).
+function buildV3ResultsText(subjects, questions, agg, surveyTitle, responsesCount, hideTextsFn) {
+  const lines = [];
+  lines.push(surveyTitle);
+  lines.push('='.repeat(Math.max(surveyTitle.length, 10)));
+  lines.push('');
+  lines.push(`Вариант 3 — Анкета по участникам`);
+  lines.push(`Проголосовало: ${responsesCount} из ${subjects.length}`);
+  lines.push('');
+
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  const textQuestions = questions.filter(q => q.kind === 'text');
+
+  if (yesnoQuestions.length > 0) {
+    lines.push('Общий результат: Да / Нет');
+    lines.push('-'.repeat(30));
+    // Простая таблица: имя | q1 | q2 | ...
+    const header = ['Участник', ...yesnoQuestions.map(q => q.text)];
+    lines.push(header.join(' | '));
+    lines.push(header.map(h => '-'.repeat(h.length)).join('-+-'));
+    subjects.forEach(subj => {
+      const row = [subj.pseudonym];
+      yesnoQuestions.forEach(q => {
+        const cell = agg[subj.user_id]?.[q.id];
+        const total = (cell?.yes || 0) + (cell?.no || 0);
+        if (total === 0) row.push('—');
+        else row.push(`Да: ${cell.yes} / Нет: ${cell.no}`);
+      });
+      lines.push(row.join(' | '));
+    });
+    lines.push('');
+  }
+
+  if (textQuestions.length > 0) {
+    lines.push('Свободные ответы');
+    lines.push('-'.repeat(30));
+    textQuestions.forEach(q => {
+      lines.push('');
+      lines.push(q.text);
+      subjects.forEach(subj => {
+        if (hideTextsFn(subj)) {
+          lines.push(`  ${subj.pseudonym}: (скрыто настройкой видимости)`);
+          return;
+        }
+        const texts = agg[subj.user_id]?.[q.id]?.texts || [];
+        if (texts.length === 0) {
+          lines.push(`  ${subj.pseudonym}: (нет ответов)`);
+        } else {
+          lines.push(`  ${subj.pseudonym}:`);
+          texts.forEach(t => lines.push(`    - ${t}`));
+        }
+      });
+    });
+  }
+
+  return lines.join('\n');
+}
+
+async function copyV3ResultsToClipboard(hideTextsFn) {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = allGroupParticipantsV3 || [];
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV3(responses, questions, subjects);
+
+  const text = buildV3ResultsText(subjects, questions, agg, s.title, responses.length, hideTextsFn);
+
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('btn-copy-v3');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Скопировано';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  } catch (err) {
+    console.error('[v3-copy] error:', err);
+    alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст результатов:\n\n' + text);
+  }
+}
+
+function printV3Results() {
+  window.print();
+}
+
+// Рендерит панель кнопок экспорта (печать + копирование).
+// Используется в обоих рендерах архивных результатов V3.
+function renderV3ExportToolbar() {
+  return '<div class="no-print" style="margin-bottom:16px; display:flex; gap:8px; justify-content:flex-end;">' +
+    '<button class="secondary small" id="btn-copy-v3" type="button">📋 Скопировать как текст</button>' +
+    '<button class="secondary small" id="btn-print-v3" type="button">🖨️ Печать / Сохранить в PDF</button>' +
+    '</div>';
+}
+
+function bindV3ExportToolbar(hideTextsFn) {
+  const copyBtn = document.getElementById('btn-copy-v3');
+  if (copyBtn) copyBtn.addEventListener('click', () => copyV3ResultsToClipboard(hideTextsFn));
+  const printBtn = document.getElementById('btn-print-v3');
+  if (printBtn) printBtn.addEventListener('click', printV3Results);
+}
+
 // Рендерит компактную таблицу с агрегатами Да/Нет.
 // Строки: оцениваемые participant'ы. Колонки: только Да/Нет вопросы.
 // Если в анкете нет Да/Нет вопросов — возвращает пустую строку.
@@ -3145,7 +3275,12 @@ async function renderResultsV3ForOrganizer() {
 
   const agg = aggregateResponsesV3(responses, questions, subjects);
 
-  let html = '<div class="card">';
+  let html = '<div class="print-root">';
+  // Заголовок опроса для печати (в обычном UI он есть в шапке выше, но печатаем
+  // только print-root, поэтому дублируем здесь, скрывая на экране)
+  html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  html += renderV3ExportToolbar();
+  html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${subjects.length} участников.</div>`;
   html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все тексты — это право организатора.</p>';
   html += '</div>';
@@ -3155,8 +3290,12 @@ async function renderResultsV3ForOrganizer() {
 
   // Раздел свободных ответов — организатор видит всё
   html += renderV3TextSection(subjects, questions, agg, () => false);
+  html += '</div>';
 
   body.innerHTML = html;
+
+  // Биндим кнопки экспорта (организатор видит всё)
+  bindV3ExportToolbar(() => false);
 }
 
 async function renderResultsV3ForParticipant() {
@@ -3178,7 +3317,16 @@ async function renderResultsV3ForParticipant() {
 
   const agg = aggregateResponsesV3(responses, questions, subjects);
 
-  let html = '<div class="card">';
+  // Функция фильтра текстов: в режиме self_only скрываем тексты у тех, кто не я
+  const hideFn = (subj) => {
+    if (textVisibility === 'all_participants') return false;
+    return subj.user_id !== myId;
+  };
+
+  let html = '<div class="print-root">';
+  html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  html += renderV3ExportToolbar();
+  html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${subjects.length} участников. Имена голосующих скрыты.</div>`;
   if (textVisibility === 'self_only') {
     html += '<p style="color:var(--muted); font-size:13px;">По настройке видимости вы видите свободные тексты только про себя. Тексты про других участников скрыты.</p>';
@@ -3198,15 +3346,13 @@ async function renderResultsV3ForParticipant() {
   html += renderV3YesNoTable(subjects, questions, agg);
 
   // Раздел свободных ответов с фильтрацией по видимости
-  // В режиме self_only тексты видны только про самого пользователя.
-  // В режиме all_participants — видны все.
-  const hideFn = (subj) => {
-    if (textVisibility === 'all_participants') return false;
-    return subj.user_id !== myId;
-  };
   html += renderV3TextSection(subjects, questions, agg, hideFn);
+  html += '</div>';
 
   body.innerHTML = html;
+
+  // Биндим кнопки экспорта (с тем же правилом видимости, что и UI)
+  bindV3ExportToolbar(hideFn);
 }
 
 // ============================================================
