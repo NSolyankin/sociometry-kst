@@ -4558,20 +4558,29 @@ async function doForgotPassword() {
   const email = document.getElementById('login-email').value.trim();
   const errorBox = document.getElementById('login-error');
   errorBox.classList.add('hidden');
+  errorBox.className = 'error hidden';
   if (!email) {
     errorBox.textContent = 'Введите email в поле выше, затем нажмите «Забыли пароль»';
     errorBox.classList.remove('hidden');
+    errorBox.scrollIntoView({block:'center', behavior:'smooth'});
     return;
   }
-  const { error } = await sb.auth.resetPasswordForEmail(email);
+  console.log('[forgot] requesting reset for ' + email);
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://nsolyankin.github.io/sociometry-kst/portal.html'
+  });
   if (error) {
+    console.error('[forgot] error:', error);
     errorBox.textContent = 'Ошибка: ' + error.message;
     errorBox.classList.remove('hidden');
+    errorBox.scrollIntoView({block:'center', behavior:'smooth'});
     return;
   }
+  console.log('[forgot] sent to ' + email);
   errorBox.className = 'info';
-  errorBox.textContent = 'Письмо для сброса пароля отправлено на ' + email;
+  errorBox.textContent = 'Письмо для сброса пароля отправлено на ' + email + '. Проверьте почту, в том числе папку «Спам».';
   errorBox.classList.remove('hidden');
+  errorBox.scrollIntoView({block:'center', behavior:'smooth'});
 }
 
 async function init() {
