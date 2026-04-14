@@ -4692,32 +4692,48 @@ async function init() {
   console.log('[boot] init start');
   sb = createSbClient();
 
-  // Проверяем, не пришёл ли пользователь по ссылке восстановления пароля
-  // Supabase кладёт токен в хеш URL: #access_token=...&type=recovery&...
+  // Проверяем, не пришёл ли пользователь по ссылке восстановления пароля.
+  // Supabase кладёт токены в хеш URL: #access_token=...&refresh_token=...&type=recovery&...
+  // У нас в createSbClient detectSessionInUrl:false (нарочно, чтобы старые сессии не «оживали»),
+  // поэтому парсим хеш вручную и явно устанавливаем сессию через setSession.
   const hash = window.location.hash || '';
   if (hash.includes('type=recovery')) {
-    console.log('[boot] recovery link detected, waiting for session...');
-    // Supabase-клиент с detectSessionInUrl:true (дефолт) автоматически парсит хеш
-    // и создаёт сессию. Дадим ему чуть-чуть времени.
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const { data: { session: recoverySession } } = await sb.auth.getSession();
-    if (recoverySession) {
-      console.log('[boot] recovery session ready for ' + recoverySession.user.email);
-      showScreen('reset-password');
-      return;
-    } else {
-      console.warn('[boot] recovery hash present but no session — link may be expired');
-      showScreen('login');
-      const loginErr = document.getElementById('login-error');
-      loginErr.className = 'error';
-      loginErr.textContent = 'Ссылка для восстановления пароля недействительна или истекла. Запросите новое письмо.';
-      loginErr.classList.remove('hidden');
-      // Чистим хеш
-      try {
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-      } catch (e) {}
-      return;
+    console.log('[boot] recovery link detected, parsing hash manually');
+    const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    console.log('[boot] recovery tokens present: access=' + !!accessToken + ', refresh=' + !!refreshToken);
+
+    if (accessToken && refreshToken) {
+      const { data: setData, error: setErr } = await sb.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+      if (setErr) {
+        console.error('[boot] setSession error:', setErr);
+        showScreen('login');
+        const loginErr = document.getElementById('login-error');
+        loginErr.className = 'error';
+        loginErr.textContent = 'Ссылка для восстановления пароля недействительна или истекла. Запросите новое письмо.';
+        loginErr.classList.remove('hidden');
+        try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
+        return;
+      }
+      if (setData && setData.session) {
+        console.log('[boot] recovery session ready for ' + setData.session.user.email);
+        showScreen('reset-password');
+        return;
+      }
     }
+
+    console.warn('[boot] recovery hash present but tokens missing or session not created');
+    showScreen('login');
+    const loginErr = document.getElementById('login-error');
+    loginErr.className = 'error';
+    loginErr.textContent = 'Ссылка для восстановления пароля недействительна или истекла. Запросите новое письмо.';
+    loginErr.classList.remove('hidden');
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
+    return;
   }
 
   const { data: { session } } = await sb.auth.getSession();
