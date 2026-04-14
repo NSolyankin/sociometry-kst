@@ -1629,8 +1629,7 @@ function renderSurveyScreen() {
   // Участник + Вариант 3
   if (s.type === 'variant_3') {
     if (s.status === 'archived') {
-      // Результаты для participant'а — заглушка до подшага 9.4
-      body.innerHTML = '<div class="card"><div class="empty-state">Результаты Варианта 3 для участников ещё в разработке. Появятся в подшаге 9.4.</div></div>';
+      renderResultsV3ForParticipant();
       return;
     }
     // Активный
@@ -2801,12 +2800,15 @@ function renderOrganizerViewV3() {
   const questions = s.settings?.questions || [];
   const textVisibility = s.settings?.text_visibility || 'self_only';
 
-  let html = '<div class="card">';
-  if (s.status === 'active') {
-    html += '<div class="warning-box"><strong>Активный опрос Варианта 3.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
-  } else {
-    html += '<div class="empty-state">Просмотр результатов Варианта 3 для организатора ещё в разработке. Появится в подшаге 9.4.</div>';
+  if (s.status === 'archived') {
+    // Архивный опрос — показываем результаты
+    renderResultsV3ForOrganizer();
+    return;
   }
+
+  // Активный опрос — показываем сводку настроек и пояснение
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Активный опрос Варианта 3.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
 
   html += '<h3>Вопросы анкеты</h3>';
   if (questions.length === 0) {
@@ -3007,6 +3009,165 @@ function renderOwnResponseV3(payload) {
   });
   html += '</tbody></table></div>';
   return html;
+}
+
+// Агрегирует ответы V3: для каждого оцениваемого participant'а и каждого
+// вопроса собирает счётчики yes/no или массив текстов.
+//
+// Возвращает: { "<user_id>": { "q1": {yes: N, no: M}, "q2": {texts: [...]} } }
+function aggregateResponsesV3(responses, questions, subjects) {
+  const agg = {};
+  subjects.forEach(subj => {
+    agg[subj.user_id] = {};
+    questions.forEach(q => {
+      if (q.kind === 'yesno') {
+        agg[subj.user_id][q.id] = { yes: 0, no: 0 };
+      } else if (q.kind === 'text') {
+        agg[subj.user_id][q.id] = { texts: [] };
+      }
+    });
+  });
+
+  (responses || []).forEach(resp => {
+    const answers = resp.payload?.answers || {};
+    Object.keys(answers).forEach(subjId => {
+      if (!agg[subjId]) return; // голос про несуществующего/исключённого — игнорируем
+      const subjAnswers = answers[subjId] || {};
+      questions.forEach(q => {
+        const cell = agg[subjId][q.id];
+        if (!cell) return;
+        const val = subjAnswers[q.id];
+        if (q.kind === 'yesno') {
+          if (val === 'yes') cell.yes++;
+          else if (val === 'no') cell.no++;
+        } else if (q.kind === 'text') {
+          if (val && typeof val === 'string' && val.trim()) {
+            cell.texts.push(val.trim());
+          }
+        }
+      });
+    });
+  });
+
+  return agg;
+}
+
+// Один блок (карточка) с результатами по одному оцениваемому participant'у.
+// hideTextsForOthers — true, если тексты этого subj не нужно показывать
+// (для participant'а в режиме self_only при просмотре чужой карточки).
+function renderV3SubjectBlock(subj, questions, agg, hideTextsForOthers) {
+  let html = `<div class="card" style="margin-bottom:12px;">`;
+  html += `<h3 style="margin-top:0;">${escapeHtml(subj.pseudonym)}</h3>`;
+
+  questions.forEach(q => {
+    const cell = agg[subj.user_id]?.[q.id];
+    html += `<div style="margin-bottom:12px;"><strong>${escapeHtml(q.text)}</strong>`;
+    if (q.kind === 'yesno') {
+      const total = (cell?.yes || 0) + (cell?.no || 0);
+      if (total === 0) {
+        html += ' <span style="color:var(--muted);">— нет ответов</span>';
+      } else {
+        html += ` — <span class="badge active">Да: ${cell.yes}</span> <span class="badge archived">Нет: ${cell.no}</span>`;
+      }
+    } else if (q.kind === 'text') {
+      if (hideTextsForOthers) {
+        html += ' <div style="color:var(--muted); font-size:13px; margin-top:4px;">(тексты про других участников скрыты настройкой видимости)</div>';
+      } else {
+        const texts = cell?.texts || [];
+        if (texts.length === 0) {
+          html += ' <span style="color:var(--muted);">— нет ответов</span>';
+        } else {
+          html += '<ul style="margin:6px 0 0 0; padding-left:20px;">';
+          texts.forEach(t => {
+            html += `<li>${escapeHtml(t)}</li>`;
+          });
+          html += '</ul>';
+        }
+      }
+    }
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+async function renderResultsV3ForOrganizer() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses || [];
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = allGroupParticipantsV3 || [];
+
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">В этой группе нет обычных участников.</div></div>';
+    return;
+  }
+
+  const agg = aggregateResponsesV3(responses, questions, subjects);
+
+  let html = '<div class="card">';
+  html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${subjects.length} участников.</div>`;
+  html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все тексты — это право организатора.</p>';
+  html += '</div>';
+
+  // По каждому оцениваемому — отдельная карточка
+  subjects.forEach(subj => {
+    html += renderV3SubjectBlock(subj, questions, agg, false);
+  });
+
+  body.innerHTML = html;
+}
+
+async function renderResultsV3ForParticipant() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses || [];
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = allGroupParticipantsV3 || [];
+  const textVisibility = s.settings?.text_visibility || 'self_only';
+  const myId = currentUser?.id;
+
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">В этой группе нет обычных участников.</div></div>';
+    return;
+  }
+
+  const agg = aggregateResponsesV3(responses, questions, subjects);
+
+  let html = '<div class="card">';
+  html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${subjects.length} участников. Имена голосующих скрыты.</div>`;
+  if (textVisibility === 'self_only') {
+    html += '<p style="color:var(--muted); font-size:13px;">По настройке видимости вы видите свободные тексты только про себя. Тексты про других участников скрыты.</p>';
+  } else {
+    html += '<p style="color:var(--muted); font-size:13px;">По настройке видимости вы видите все свободные тексты.</p>';
+  }
+  html += '</div>';
+
+  // Если participant сам голосовал, показываем его собственный ответ отдельной таблицей
+  if (currentOwnResponse) {
+    html += '<div class="card"><h3 style="margin-top:0;">Ваш ответ</h3>';
+    html += renderOwnResponseV3(currentOwnResponse.payload);
+    html += '</div>';
+  }
+
+  html += '<h3 style="margin-top:24px;">Общий результат</h3>';
+
+  // По каждому оцениваемому — карточка
+  subjects.forEach(subj => {
+    const isSelf = subj.user_id === myId;
+    // hideTextsForOthers: скрываем тексты только если режим self_only И этот subj не я
+    const hideTexts = (textVisibility === 'self_only') && !isSelf;
+    html += renderV3SubjectBlock(subj, questions, agg, hideTexts);
+  });
+
+  body.innerHTML = html;
 }
 
 // ============================================================
