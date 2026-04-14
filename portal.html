@@ -2853,7 +2853,9 @@ function renderPseudonymsBlock() {
     const freeCount = groupPseudonyms.filter(p => !p.membership).length;
     let html = `<div class="pseudonyms-summary">Всего имён в справочнике: <strong>${groupPseudonyms.length}</strong> · свободных: <strong>${freeCount}</strong></div>`;
     html += '<div class="members-table-wrapper"><table class="pseudonyms-table">';
-    html += '<thead><tr><th>Псевдоним</th><th>Статус</th></tr></thead><tbody>';
+    html += '<thead><tr><th>Псевдоним</th><th>Статус</th>';
+    if (isOrganizer) html += '<th>Действия</th>';
+    html += '</tr></thead><tbody>';
     groupPseudonyms.forEach(p => {
       const m = p.membership;
       let statusHtml;
@@ -2864,10 +2866,28 @@ function renderPseudonymsBlock() {
       } else {
         statusHtml = '<span class="ps-status-excluded">за исключённым участником</span>';
       }
-      html += `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td>${statusHtml}</td></tr>`;
+      html += `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td>${statusHtml}</td>`;
+      if (isOrganizer) {
+        if (!m) {
+          html += `<td><button class="danger small" data-action="delete-pseudonym" data-name="${escapeHtml(p.name)}">Удалить</button></td>`;
+        } else {
+          html += '<td>—</td>';
+        }
+      }
+      html += '</tr>';
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
+
+    // Биндинг кнопок удаления
+    if (isOrganizer) {
+      container.querySelectorAll('[data-action="delete-pseudonym"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const name = btn.dataset.name;
+          deletePseudonym(name);
+        });
+      });
+    }
   }
 
   // Блок добавления имени — только для организаторов
@@ -2910,6 +2930,22 @@ function renderExcludedBlock() {
       restoreMember(id, name);
     });
   });
+}
+
+async function deletePseudonym(name) {
+  if (!confirm(`Удалить имя «${name}» из справочника группы? Удалить можно только полностью свободное имя.`)) return;
+  console.log('[group-ps] delete pseudonym ' + name);
+  const { error } = await sb.rpc('delete_pseudonym', {
+    ps_name: name,
+    gid: currentGroupId
+  });
+  if (error) {
+    console.error('[group-ps] delete pseudonym error:', error);
+    alert('Ошибка удаления: ' + error.message);
+    return;
+  }
+  await loadPseudonymsAndExcluded();
+  renderPseudonymsBlock();
 }
 
 async function excludeMember(id, name) {
