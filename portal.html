@@ -597,7 +597,7 @@
 
     <div class="card">
       <h2 style="margin-top:0;">Участники группы</h2>
-      <p style="color:var(--muted); font-size:13px;">Главный организатор всегда один. Он может назначать и снимать со-организаторов, а также передать главную роль другому участнику.</p>
+      <p style="color:var(--muted); font-size:13px;">Главный организатор всегда один. Назначать и снимать со-организаторов могут как главный, так и сами со-организаторы. Передать главную роль другому участнику может только главный организатор.</p>
       <div id="group-members-list">
         <div class="empty-state">Загрузка…</div>
       </div>
@@ -3093,19 +3093,13 @@ function renderGroupMembers() {
 async function promoteMember(id, name) {
   if (!confirm(`Назначить «${name}» со-организатором? У этого участника появятся права создавать и архивировать опросы, видеть полные результаты.`)) return;
   console.log('[group] promote ' + id);
-  // memberships в текущей группе
-  const { error: mErr } = await sb.from('memberships')
-    .update({ role: 'co_organizer' })
-    .eq('user_id', id)
-    .eq('group_id', currentGroupId);
-  if (mErr) {
-    alert('Ошибка: ' + mErr.message);
+  const { error } = await sb.rpc('promote_to_co_organizer', {
+    target_user_id: id,
+    gid: currentGroupId
+  });
+  if (error) {
+    alert('Ошибка: ' + error.message);
     return;
-  }
-  // legacy: profiles.role (для совместимости, пока поле не удалено)
-  const { error: pErr } = await sb.from('profiles').update({ role: 'co_organizer' }).eq('id', id);
-  if (pErr) {
-    console.warn('[group] profiles legacy update failed:', pErr);
   }
   await loadGroupMembers();
   renderGroupMembers();
@@ -3114,17 +3108,13 @@ async function promoteMember(id, name) {
 async function demoteMember(id, name) {
   if (!confirm(`Снять со-организатора с «${name}»? Этот участник потеряет права управлять опросами и вернётся в обычные участники.`)) return;
   console.log('[group] demote ' + id);
-  const { error: mErr } = await sb.from('memberships')
-    .update({ role: 'participant' })
-    .eq('user_id', id)
-    .eq('group_id', currentGroupId);
-  if (mErr) {
-    alert('Ошибка: ' + mErr.message);
+  const { error } = await sb.rpc('demote_to_participant', {
+    target_user_id: id,
+    gid: currentGroupId
+  });
+  if (error) {
+    alert('Ошибка: ' + error.message);
     return;
-  }
-  const { error: pErr } = await sb.from('profiles').update({ role: 'participant' }).eq('id', id);
-  if (pErr) {
-    console.warn('[group] profiles legacy update failed:', pErr);
   }
   await loadGroupMembers();
   renderGroupMembers();
