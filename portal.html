@@ -3055,36 +3055,72 @@ function aggregateResponsesV3(responses, questions, subjects) {
 // Один блок (карточка) с результатами по одному оцениваемому participant'у.
 // hideTextsForOthers — true, если тексты этого subj не нужно показывать
 // (для participant'а в режиме self_only при просмотре чужой карточки).
-function renderV3SubjectBlock(subj, questions, agg, hideTextsForOthers) {
-  let html = `<div class="card" style="margin-bottom:12px;">`;
-  html += `<h3 style="margin-top:0;">${escapeHtml(subj.pseudonym)}</h3>`;
+// Рендерит компактную таблицу с агрегатами Да/Нет.
+// Строки: оцениваемые participant'ы. Колонки: только Да/Нет вопросы.
+// Если в анкете нет Да/Нет вопросов — возвращает пустую строку.
+function renderV3YesNoTable(subjects, questions, agg) {
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  if (yesnoQuestions.length === 0) return '';
 
-  questions.forEach(q => {
-    const cell = agg[subj.user_id]?.[q.id];
-    html += `<div style="margin-bottom:12px;"><strong>${escapeHtml(q.text)}</strong>`;
-    if (q.kind === 'yesno') {
+  let html = '<div class="card"><h3 style="margin-top:0;">Общий результат: Да / Нет</h3>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  yesnoQuestions.forEach(q => {
+    html += `<th>${escapeHtml(q.text)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
       const total = (cell?.yes || 0) + (cell?.no || 0);
       if (total === 0) {
-        html += ' <span style="color:var(--muted);">— нет ответов</span>';
+        html += '<td><span style="color:var(--muted);">—</span></td>';
       } else {
-        html += ` — <span class="badge active">Да: ${cell.yes}</span> <span class="badge archived">Нет: ${cell.no}</span>`;
+        html += `<td><span class="badge active">Да: ${cell.yes}</span> <span class="badge archived">Нет: ${cell.no}</span></td>`;
       }
-    } else if (q.kind === 'text') {
-      if (hideTextsForOthers) {
-        html += ' <div style="color:var(--muted); font-size:13px; margin-top:4px;">(тексты про других участников скрыты настройкой видимости)</div>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '</div>';
+  return html;
+}
+
+// Рендерит раздел свободных ответов: по каждому Текст-вопросу — список
+// оцениваемых, под каждым — его тексты или пометка о скрытии.
+// Если в анкете нет Текст-вопросов — возвращает пустую строку.
+//
+// hideTextsFn(subj) — функция, которая по subject'у возвращает true, если
+// тексты ЭТОГО subject'а скрывать (для участника в режиме self_only).
+function renderV3TextSection(subjects, questions, agg, hideTextsFn) {
+  const textQuestions = questions.filter(q => q.kind === 'text');
+  if (textQuestions.length === 0) return '';
+
+  let html = '<div class="card"><h3 style="margin-top:0;">Свободные ответы</h3>';
+
+  textQuestions.forEach(q => {
+    html += `<div style="margin-bottom:20px;"><h4 style="margin:0 0 8px 0;">${escapeHtml(q.text)}</h4>`;
+    subjects.forEach(subj => {
+      const cell = agg[subj.user_id]?.[q.id];
+      const hidden = hideTextsFn(subj);
+      html += `<div style="margin:8px 0 8px 16px;"><strong>${escapeHtml(subj.pseudonym)}:</strong> `;
+      if (hidden) {
+        html += '<span style="color:var(--muted); font-size:13px;">(скрыто настройкой видимости)</span>';
       } else {
         const texts = cell?.texts || [];
         if (texts.length === 0) {
-          html += ' <span style="color:var(--muted);">— нет ответов</span>';
+          html += '<span style="color:var(--muted);">нет ответов</span>';
         } else {
-          html += '<ul style="margin:6px 0 0 0; padding-left:20px;">';
+          html += '<ul style="margin:4px 0 0 0; padding-left:20px;">';
           texts.forEach(t => {
             html += `<li>${escapeHtml(t)}</li>`;
           });
           html += '</ul>';
         }
       }
-    }
+      html += '</div>';
+    });
     html += '</div>';
   });
 
@@ -3114,10 +3150,11 @@ async function renderResultsV3ForOrganizer() {
   html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все тексты — это право организатора.</p>';
   html += '</div>';
 
-  // По каждому оцениваемому — отдельная карточка
-  subjects.forEach(subj => {
-    html += renderV3SubjectBlock(subj, questions, agg, false);
-  });
+  // Таблица Да/Нет
+  html += renderV3YesNoTable(subjects, questions, agg);
+
+  // Раздел свободных ответов — организатор видит всё
+  html += renderV3TextSection(subjects, questions, agg, () => false);
 
   body.innerHTML = html;
 }
@@ -3157,15 +3194,17 @@ async function renderResultsV3ForParticipant() {
     html += '</div>';
   }
 
-  html += '<h3 style="margin-top:24px;">Общий результат</h3>';
+  // Таблица Да/Нет — видна всем всегда
+  html += renderV3YesNoTable(subjects, questions, agg);
 
-  // По каждому оцениваемому — карточка
-  subjects.forEach(subj => {
-    const isSelf = subj.user_id === myId;
-    // hideTextsForOthers: скрываем тексты только если режим self_only И этот subj не я
-    const hideTexts = (textVisibility === 'self_only') && !isSelf;
-    html += renderV3SubjectBlock(subj, questions, agg, hideTexts);
-  });
+  // Раздел свободных ответов с фильтрацией по видимости
+  // В режиме self_only тексты видны только про самого пользователя.
+  // В режиме all_participants — видны все.
+  const hideFn = (subj) => {
+    if (textVisibility === 'all_participants') return false;
+    return subj.user_id !== myId;
+  };
+  html += renderV3TextSection(subjects, questions, agg, hideFn);
 
   body.innerHTML = html;
 }
