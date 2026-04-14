@@ -3147,7 +3147,8 @@ async function confirmTransfer() {
 
   const { error } = await sb.rpc('transfer_main_organizer', {
     new_main_id: transferTargetId,
-    my_new_role: myNewRole
+    my_new_role: myNewRole,
+    gid: currentGroupId
   });
   if (error) {
     console.error('[group] transfer error:', error);
