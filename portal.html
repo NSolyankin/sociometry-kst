@@ -3142,6 +3142,83 @@ function buildV3ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
   return lines.join('\n');
 }
 
+// HTML-версия результатов для буфера обмена. Word, Google Docs, Telegram
+// при вставке распознают <table> и вставят настоящую таблицу с границами.
+// Стили инлайн, потому что в буфере обмена внешние CSS не работают.
+function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCount, hideTextsFn) {
+  const escapeForHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  const textQuestions = questions.filter(q => q.kind === 'text');
+
+  const tdStyle = 'border:1px solid #888; padding:6px 10px; vertical-align:top;';
+  const thStyle = tdStyle + ' background:#f0f0f0; font-weight:bold; text-align:left;';
+
+  let html = '';
+  html += `<h2 style="margin:0 0 4px 0;">${escapeForHtml(surveyTitle)}</h2>`;
+  html += `<p style="margin:0 0 12px 0; color:#555;">Вариант 3 — Анкета по участникам. Проголосовало: ${responsesCount} из ${subjects.length}</p>`;
+
+  if (yesnoQuestions.length > 0) {
+    html += '<h3 style="margin:16px 0 6px 0;">Общий результат: Да / Нет</h3>';
+    html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
+    html += `<th style="${thStyle}">Участник</th>`;
+    yesnoQuestions.forEach(q => {
+      html += `<th style="${thStyle}">${escapeForHtml(q.text)}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    subjects.forEach(subj => {
+      html += '<tr>';
+      html += `<td style="${tdStyle}"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+      yesnoQuestions.forEach(q => {
+        const cell = agg[subj.user_id]?.[q.id];
+        const total = (cell?.yes || 0) + (cell?.no || 0);
+        if (total === 0) {
+          html += `<td style="${tdStyle}">—</td>`;
+        } else {
+          html += `<td style="${tdStyle}">Да: ${cell.yes} / Нет: ${cell.no}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  if (textQuestions.length > 0) {
+    html += '<h3 style="margin:20px 0 6px 0;">Свободные ответы</h3>';
+    textQuestions.forEach(q => {
+      html += `<h4 style="margin:12px 0 4px 0;">${escapeForHtml(q.text)}</h4>`;
+      html += '<table style="border-collapse:collapse; border:1px solid #888; width:100%;"><tbody>';
+      subjects.forEach(subj => {
+        html += '<tr>';
+        html += `<td style="${tdStyle} width:25%; white-space:nowrap;"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+        if (hideTextsFn(subj)) {
+          html += `<td style="${tdStyle} color:#888; font-style:italic;">(скрыто настройкой видимости)</td>`;
+        } else {
+          const texts = agg[subj.user_id]?.[q.id]?.texts || [];
+          if (texts.length === 0) {
+            html += `<td style="${tdStyle} color:#888;">нет ответов</td>`;
+          } else if (texts.length === 1) {
+            html += `<td style="${tdStyle}">${escapeForHtml(texts[0])}</td>`;
+          } else {
+            html += `<td style="${tdStyle}"><ul style="margin:0; padding-left:20px;">`;
+            texts.forEach(t => { html += `<li>${escapeForHtml(t)}</li>`; });
+            html += '</ul></td>';
+          }
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    });
+  }
+
+  return html;
+}
+
 async function copyV3ResultsToClipboard(hideTextsFn) {
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -3150,15 +3227,37 @@ async function copyV3ResultsToClipboard(hideTextsFn) {
   const agg = aggregateResponsesV3(responses, questions, subjects);
 
   const text = buildV3ResultsText(subjects, questions, agg, s.title, responses.length, hideTextsFn);
+  const html = buildV3ResultsHtml(subjects, questions, agg, s.title, responses.length, hideTextsFn);
 
-  try {
-    await navigator.clipboard.writeText(text);
+  const showOk = () => {
     const btn = document.getElementById('btn-copy-v3');
     if (btn) {
       const orig = btn.textContent;
       btn.textContent = '✓ Скопировано';
       setTimeout(() => { btn.textContent = orig; }, 2000);
     }
+  };
+
+  // Современный API: кладём оба формата сразу. Word/Google Docs/Telegram
+  // возьмут HTML и вставят настоящую таблицу. Блокнот/консоль возьмут plain text.
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      showOk();
+      return;
+    }
+  } catch (err) {
+    console.warn('[v3-copy] clipboard.write failed, falling back to writeText:', err);
+  }
+
+  // Fallback: только plain text
+  try {
+    await navigator.clipboard.writeText(text);
+    showOk();
   } catch (err) {
     console.error('[v3-copy] error:', err);
     alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст результатов:\n\n' + text);
