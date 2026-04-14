@@ -569,6 +569,24 @@
     </p>
   </div>
 
+  <div id="screen-reset-password" class="card hidden">
+    <h1>Восстановление пароля</h1>
+    <p style="color: var(--muted); font-size: 14px;">Задайте новый пароль для входа в портал</p>
+    <div id="reset-error" class="error hidden"></div>
+    <div id="reset-info" class="info hidden"></div>
+
+    <label>Новый пароль</label>
+    <input type="password" id="reset-password" autocomplete="new-password">
+
+    <label>Повторите новый пароль</label>
+    <input type="password" id="reset-password2" autocomplete="new-password">
+
+    <button id="btn-reset-password" style="margin-top: 16px;">Сохранить новый пароль</button>
+    <p style="margin-top: 16px;">
+      <button class="link-btn" id="btn-cancel-reset">Отмена</button>
+    </p>
+  </div>
+
   <div id="screen-dashboard" class="hidden">
     <div class="card">
       <div class="header">
@@ -977,6 +995,7 @@ function showScreen(name) {
   console.log('[ui] show screen: ' + name);
   document.getElementById('screen-login').classList.add('hidden');
   document.getElementById('screen-register').classList.add('hidden');
+  document.getElementById('screen-reset-password').classList.add('hidden');
   document.getElementById('screen-dashboard').classList.add('hidden');
   document.getElementById('screen-loading').classList.add('hidden');
   document.getElementById('screen-survey').classList.add('hidden');
@@ -4583,9 +4602,123 @@ async function doForgotPassword() {
   errorBox.scrollIntoView({block:'center', behavior:'smooth'});
 }
 
+function showResetError(msg) {
+  const errBox = document.getElementById('reset-error');
+  const infoBox = document.getElementById('reset-info');
+  infoBox.classList.add('hidden');
+  errBox.textContent = msg;
+  errBox.classList.remove('hidden');
+  errBox.scrollIntoView({block:'center', behavior:'smooth'});
+}
+
+async function doResetPassword() {
+  console.log('[reset] doResetPassword start');
+  const password = document.getElementById('reset-password').value;
+  const password2 = document.getElementById('reset-password2').value;
+  const errBox = document.getElementById('reset-error');
+  const infoBox = document.getElementById('reset-info');
+  errBox.classList.add('hidden');
+  infoBox.classList.add('hidden');
+
+  if (!password || password.length < 6) {
+    showResetError('Пароль должен быть не короче 6 символов');
+    return;
+  }
+  if (password !== password2) {
+    showResetError('Пароли не совпадают');
+    return;
+  }
+
+  // Проверяем, что у нас есть recovery-сессия
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    console.error('[reset] no session — recovery token expired or invalid');
+    showResetError('Сессия восстановления пароля недействительна. Запросите письмо для сброса пароля заново на экране входа.');
+    return;
+  }
+
+  console.log('[reset] updating password for ' + session.user.email);
+  const { error } = await sb.auth.updateUser({ password: password });
+  if (error) {
+    console.error('[reset] updateUser error:', error);
+    showResetError('Ошибка: ' + error.message);
+    return;
+  }
+
+  console.log('[reset] password updated successfully');
+
+  // Очищаем хеш из URL, чтобы при F5 не попадали снова на экран сброса
+  try {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  } catch (e) {
+    console.error('[reset] history.replaceState error:', e);
+  }
+
+  // Полный локальный логаут — это очистит recovery-сессию и пересоздаст клиент
+  hardLocalLogout();
+
+  // Очищаем поля
+  document.getElementById('reset-password').value = '';
+  document.getElementById('reset-password2').value = '';
+
+  // Переходим на экран входа с info-сообщением
+  showScreen('login');
+  const loginErr = document.getElementById('login-error');
+  loginErr.className = 'info';
+  loginErr.textContent = 'Пароль успешно изменён. Войдите со своим email и новым паролем.';
+  loginErr.classList.remove('hidden');
+}
+
+function cancelReset() {
+  console.log('[reset] cancel');
+  // Очищаем хеш из URL
+  try {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  } catch (e) {}
+  // Очищаем recovery-сессию
+  hardLocalLogout();
+  // Очищаем поля
+  document.getElementById('reset-password').value = '';
+  document.getElementById('reset-password2').value = '';
+  const errBox = document.getElementById('reset-error');
+  const infoBox = document.getElementById('reset-info');
+  errBox.classList.add('hidden');
+  infoBox.classList.add('hidden');
+  // На экран входа
+  showScreen('login');
+}
+
 async function init() {
   console.log('[boot] init start');
   sb = createSbClient();
+
+  // Проверяем, не пришёл ли пользователь по ссылке восстановления пароля
+  // Supabase кладёт токен в хеш URL: #access_token=...&type=recovery&...
+  const hash = window.location.hash || '';
+  if (hash.includes('type=recovery')) {
+    console.log('[boot] recovery link detected, waiting for session...');
+    // Supabase-клиент с detectSessionInUrl:true (дефолт) автоматически парсит хеш
+    // и создаёт сессию. Дадим ему чуть-чуть времени.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const { data: { session: recoverySession } } = await sb.auth.getSession();
+    if (recoverySession) {
+      console.log('[boot] recovery session ready for ' + recoverySession.user.email);
+      showScreen('reset-password');
+      return;
+    } else {
+      console.warn('[boot] recovery hash present but no session — link may be expired');
+      showScreen('login');
+      const loginErr = document.getElementById('login-error');
+      loginErr.className = 'error';
+      loginErr.textContent = 'Ссылка для восстановления пароля недействительна или истекла. Запросите новое письмо.';
+      loginErr.classList.remove('hidden');
+      // Чистим хеш
+      try {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch (e) {}
+      return;
+    }
+  }
 
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
@@ -4621,6 +4754,8 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-go-register', 'click', openRegisterScreen);
   bind('btn-go-login', 'click', goToLogin);
   bind('btn-register', 'click', doRegister);
+  bind('btn-reset-password', 'click', doResetPassword);
+  bind('btn-cancel-reset', 'click', cancelReset);
   bind('btn-group-switcher', 'click', (e) => {
     e.stopPropagation();
     toggleGroupSwitcher();
@@ -4658,6 +4793,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginPwd = document.getElementById('login-password');
   if (loginPwd) {
     loginPwd.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+  }
+
+  const resetPwd2 = document.getElementById('reset-password2');
+  if (resetPwd2) {
+    resetPwd2.addEventListener('keydown', (e) => { if (e.key === 'Enter') doResetPassword(); });
   }
 
   bind('btn-new-survey', 'click', openNewSurveyModal);
