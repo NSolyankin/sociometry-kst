@@ -752,6 +752,33 @@
     </div>
   </div>
 
+  <!-- ============ МОДАЛКА СОЗДАНИЯ НОВОЙ ГРУППЫ ============ -->
+  <div id="modal-create-group" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:500px;">
+      <div class="modal-header">
+        <h2>Создать новую группу</h2>
+        <button class="link-btn" id="btn-close-create-group">✕ Закрыть</button>
+      </div>
+      <div id="create-group-error" class="error hidden"></div>
+      <div id="create-group-info" class="info hidden"></div>
+
+      <p style="color:var(--muted); font-size:14px;">Создаёт пустую группу. Вы в неё не попадаете автоматически — первый, кто зарегистрируется в новой группе через экран регистрации, станет её главным организатором. Псевдонимы добавляются потом в Настройках группы её организатором.</p>
+
+      <label>Идентификатор группы</label>
+      <input type="text" id="create-group-id" placeholder="Например: novosibirsk" autocomplete="off">
+      <p style="color:var(--muted); font-size:12px; margin-top:-4px;">Латиницей, без пробелов и слешей. Этот id будет использоваться в коде и в URL. Изменить потом нельзя.</p>
+
+      <label>Название группы</label>
+      <input type="text" id="create-group-name" placeholder="Например: КСТ Новосибирск" autocomplete="off">
+      <p style="color:var(--muted); font-size:12px; margin-top:-4px;">Отображаемое имя группы — то, что участники увидят в переключателе и на экране регистрации.</p>
+
+      <div class="modal-actions">
+        <button class="secondary" id="btn-cancel-create-group">Отмена</button>
+        <button id="btn-confirm-create-group">Создать</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-new-survey" class="modal-backdrop hidden">
     <div class="modal">
       <div class="modal-header">
@@ -1264,6 +1291,14 @@ function renderGroupSwitcher() {
     <span>+ Вступить ещё в одну группу</span>
   </div>`;
 
+  // Пункт "создать группу" — виден только главным организаторам хоть где-то
+  if (isMainOrganizerAnywhere()) {
+    html += `<div class="group-switcher-item" data-action="create">
+      <span class="check"></span>
+      <span>+ Создать новую группу</span>
+    </div>`;
+  }
+
   menuEl.innerHTML = html;
 
   // Привязка обработчиков клика по пунктам
@@ -1274,11 +1309,17 @@ function renderGroupSwitcher() {
       closeGroupSwitcher();
       if (action === 'join') {
         openJoinGroupModal();
+      } else if (action === 'create') {
+        openCreateGroupModal();
       } else if (gid && gid !== currentGroupId) {
         switchGroup(gid);
       }
     });
   });
+}
+
+function isMainOrganizerAnywhere() {
+  return (currentUserMemberships || []).some(m => m.role === 'main_organizer');
 }
 
 function toggleGroupSwitcher() {
@@ -1481,6 +1522,91 @@ async function doJoinGroup() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Вступить';
+  }
+}
+
+function openCreateGroupModal() {
+  console.log('[create-group] open modal');
+  document.getElementById('create-group-id').value = '';
+  document.getElementById('create-group-name').value = '';
+  const errBox = document.getElementById('create-group-error');
+  const infoBox = document.getElementById('create-group-info');
+  errBox.classList.add('hidden');
+  errBox.textContent = '';
+  infoBox.classList.add('hidden');
+  infoBox.textContent = '';
+  document.getElementById('modal-create-group').classList.remove('hidden');
+  setTimeout(() => {
+    const idInput = document.getElementById('create-group-id');
+    if (idInput) idInput.focus();
+  }, 50);
+}
+
+function closeCreateGroupModal() {
+  document.getElementById('modal-create-group').classList.add('hidden');
+}
+
+function showCreateGroupError(msg) {
+  const box = document.getElementById('create-group-error');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+  document.getElementById('create-group-info').classList.add('hidden');
+  box.scrollIntoView({block:'center', behavior:'smooth'});
+}
+
+function showCreateGroupInfo(msg) {
+  const box = document.getElementById('create-group-info');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+  document.getElementById('create-group-error').classList.add('hidden');
+}
+
+async function doCreateGroup() {
+  const gid = document.getElementById('create-group-id').value.trim();
+  const name = document.getElementById('create-group-name').value.trim();
+
+  // Клиентская валидация — первая линия защиты, сервер всё равно проверит ещё раз
+  if (!gid) { showCreateGroupError('Введите идентификатор группы'); return; }
+  if (!name) { showCreateGroupError('Введите название группы'); return; }
+  if (gid.length > 50) { showCreateGroupError('Идентификатор не длиннее 50 символов'); return; }
+  if (name.length > 100) { showCreateGroupError('Название не длиннее 100 символов'); return; }
+  if (/\s/.test(gid)) { showCreateGroupError('Идентификатор не должен содержать пробелов'); return; }
+  if (/[/\\]/.test(gid)) { showCreateGroupError('Идентификатор не должен содержать символов / или \\'); return; }
+
+  console.log('[create-group] attempt:', { gid, name });
+
+  const btn = document.getElementById('btn-confirm-create-group');
+  btn.disabled = true;
+  btn.textContent = 'Создаём…';
+
+  try {
+    const { data, error } = await sb.rpc('create_group', { new_gid: gid, new_name: name });
+    if (error) {
+      console.error('[create-group] rpc error:', error);
+      let msg = error.message || 'Ошибка создания группы';
+      // Дружественные сообщения для типовых исключений
+      if (msg.includes('Not authenticated')) {
+        msg = 'Сессия истекла. Перезайдите в портал.';
+      } else if (msg.includes('Только главный организатор')) {
+        msg = 'Создавать группы может только главный организатор. У вас сейчас нет этой роли ни в одной группе.';
+      } else if (msg.includes('уже существует')) {
+        msg = 'Группа с таким идентификатором уже существует. Выберите другой id.';
+      }
+      showCreateGroupError(msg);
+      return;
+    }
+    console.log('[create-group] success, new group id: ' + data);
+    showCreateGroupInfo('Группа «' + name + '» (id: ' + data + ') создана. Чтобы стать её главным организатором — зайдите в портал как первый участник через экран регистрации. Вы в созданную группу не попадаете автоматически.');
+
+    // Очищаем поля на случай, если пользователь захочет создать ещё одну
+    document.getElementById('create-group-id').value = '';
+    document.getElementById('create-group-name').value = '';
+  } catch (e) {
+    console.error('[create-group] unexpected:', e);
+    showCreateGroupError('Неожиданная ошибка: ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Создать';
   }
 }
 
@@ -4792,6 +4918,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const joinGroupSel = document.getElementById('join-group');
   if (joinGroupSel) {
     joinGroupSel.addEventListener('change', loadFreePseudonymsForJoin);
+  }
+
+  // Модалка создания новой группы
+  bind('btn-close-create-group', 'click', closeCreateGroupModal);
+  bind('btn-cancel-create-group', 'click', closeCreateGroupModal);
+  bind('btn-confirm-create-group', 'click', doCreateGroup);
+  const createGroupNameInput = document.getElementById('create-group-name');
+  if (createGroupNameInput) {
+    createGroupNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doCreateGroup(); });
   }
 
   // Добавление нового псевдонима в Настройках группы
