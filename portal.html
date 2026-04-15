@@ -3796,14 +3796,197 @@ function renderOrganizerViewV4() {
   if (delBtn) delBtn.addEventListener('click', () => deleteSurvey(currentSurvey.id));
 }
 
+function getV4Subjects() {
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  let subjects;
+
+  if (settings.subjects_mode === 'selected' && Array.isArray(settings.subjects)) {
+    // Только выбранные UUID
+    subjects = (allGroupParticipantsV3 || []).filter(p => settings.subjects.includes(p.user_id));
+  } else {
+    // Все participant'ы
+    subjects = [...(allGroupParticipantsV3 || [])];
+  }
+
+  // Исключить самого себя, если allow_self = false
+  if (!settings.allow_self) {
+    const myId = currentUser?.id;
+    subjects = subjects.filter(p => p.user_id !== myId);
+  }
+
+  return subjects;
+}
+
 function renderVoteFormV4() {
   const body = document.getElementById('survey-body');
-  body.innerHTML = '<div class="card"><p>Голосование в Универсальной анкете будет доступно в следующем обновлении (шаг 14.3).</p></div>';
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV4Subjects();
+
+  if (questions.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В этом опросе нет вопросов.</div></div>';
+    return;
+  }
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">Нет участников для оценки. Возможно, вы единственный participant в группе.</div></div>';
+    return;
+  }
+
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя.</div>';
+  html += '<div id="vote-error" class="error hidden"></div>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table" id="vote-table-v4">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => {
+    const optLabel = (q.kind === 'yesno' && q.optional) ? ' <span style="color:var(--muted); font-size:11px;">(необяз.)</span>' : '';
+    html += `<th>${escapeHtml(q.text)}${optLabel}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr data-subject-id="${escapeHtml(subj.user_id)}"><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    questions.forEach(q => {
+      html += '<td>';
+      if (q.kind === 'yesno') {
+        html += `<select data-question="${escapeHtml(q.id)}" data-kind="yesno" data-optional="${q.optional ? '1' : '0'}">
+          <option value="">—</option>
+          <option value="yes">Да</option>
+          <option value="no">Нет</option>
+        </select>`;
+      } else if (q.kind === 'text') {
+        html += `<textarea data-question="${escapeHtml(q.id)}" data-kind="text" placeholder="Ваш ответ (можно оставить пустым)"></textarea>`;
+      }
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">';
+  html += '<button class="secondary" id="btn-vote-cancel-v4">Отмена</button>';
+  html += '<button id="btn-vote-submit-v4">Подтвердить и отправить</button>';
+  html += '</div>';
+  html += '</div>';
+  body.innerHTML = html;
+
+  document.getElementById('btn-vote-cancel-v4').addEventListener('click', backToList);
+  document.getElementById('btn-vote-submit-v4').addEventListener('click', submitVoteV4);
+}
+
+async function submitVoteV4() {
+  console.log('[vote-v4] submit start');
+  const errorBox = document.getElementById('vote-error');
+  errorBox.classList.add('hidden');
+
+  const table = document.getElementById('vote-table-v4');
+  const rows = table.querySelectorAll('tbody tr');
+  const answers = {};
+  const invalid = [];
+
+  // Сброс старой подсветки
+  table.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+
+  rows.forEach(row => {
+    const subjId = row.dataset.subjectId;
+    answers[subjId] = {};
+    const inputs = row.querySelectorAll('select, textarea');
+    inputs.forEach(inp => {
+      const qid = inp.dataset.question;
+      const kind = inp.dataset.kind;
+      const val = (inp.value || '').trim();
+      if (kind === 'yesno') {
+        const isOptional = inp.dataset.optional === '1';
+        if (!val && !isOptional) {
+          inp.classList.add('invalid');
+          invalid.push({ subjId, qid });
+        } else if (val) {
+          answers[subjId][qid] = val;
+        }
+        // Если optional и пустой — просто не сохраняем
+      } else if (kind === 'text') {
+        if (val) answers[subjId][qid] = val;
+      }
+    });
+  });
+
+  if (invalid.length > 0) {
+    errorBox.textContent = 'Заполните все обязательные ответы «Да/Нет» (подсвечены красным). Пропущено: ' + invalid.length + '.';
+    errorBox.classList.remove('hidden');
+    const first = table.querySelector('.invalid');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  if (!confirm('Ответ будет сохранён окончательно. Изменить его потом нельзя. Продолжить?')) {
+    return;
+  }
+
+  console.log('[vote-v4] saving');
+  const payload = { answers };
+  const { error } = await sb.from('responses').insert({
+    survey_id: currentSurvey.id,
+    user_id: currentUser.id,
+    respondent_name: currentProfile.pseudonym,
+    payload
+  });
+  if (error) {
+    console.error('[vote-v4] error:', error);
+    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[vote-v4] saved');
+  const { data: ownResp } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', currentSurvey.id)
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+  currentOwnResponse = ownResp;
+  renderSurveyScreen();
 }
 
 function renderAlreadyVotedV4() {
   const body = document.getElementById('survey-body');
-  body.innerHTML = '<div class="card"><p>Вы уже проголосовали в этом опросе. Спасибо!</p></div>';
+  let html = '<div class="card">';
+  html += '<div class="success-box"><strong>Ваш ответ сохранён.</strong><br>Общий результат появится после того, как организатор закроет опрос.</div>';
+  html += '<h3>Ваш ответ</h3>';
+  html += renderOwnResponseV4(currentOwnResponse.payload);
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderOwnResponseV4(payload) {
+  if (!payload || !payload.answers) return '<p>(ответ пустой)</p>';
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV4Subjects();
+
+  if (subjects.length === 0 || questions.length === 0) {
+    return '<p>(нет данных для отображения)</p>';
+  }
+
+  let html = '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => { html += `<th>${escapeHtml(q.text)}</th>`; });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    questions.forEach(q => {
+      const ans = payload.answers?.[subj.user_id]?.[q.id];
+      let display = '—';
+      if (q.kind === 'yesno') {
+        if (ans === 'yes') display = 'Да';
+        else if (ans === 'no') display = 'Нет';
+        else if (q.optional) display = '<span style="color:var(--muted);">(пропущен)</span>';
+      } else if (q.kind === 'text') {
+        display = ans ? escapeHtml(ans) : '<span style="color:var(--muted);">(без ответа)</span>';
+      }
+      html += `<td>${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
 }
 
 function renderParticipantViewV4() {
