@@ -762,7 +762,7 @@
       <div id="create-group-error" class="error hidden"></div>
       <div id="create-group-info" class="info hidden"></div>
 
-      <p style="color:var(--muted); font-size:14px;">Создаёт пустую группу. Вы в неё не попадаете автоматически — первый, кто зарегистрируется в новой группе через экран регистрации, станет её главным организатором. Псевдонимы добавляются потом в Настройках группы её организатором.</p>
+      <p style="color:var(--muted); font-size:14px;">Создаёт новую группу. Вы автоматически становитесь её главным организатором с указанным псевдонимом. Остальные участники зарегистрируются сами, а вы потом сможете добавить псевдонимы в Настройках группы и при необходимости передать роль главного.</p>
 
       <label>Идентификатор группы</label>
       <input type="text" id="create-group-id" placeholder="Например: novosibirsk" autocomplete="off">
@@ -771,6 +771,10 @@
       <label>Название группы</label>
       <input type="text" id="create-group-name" placeholder="Например: КСТ Новосибирск" autocomplete="off">
       <p style="color:var(--muted); font-size:12px; margin-top:-4px;">Отображаемое имя группы — то, что участники увидят в переключателе и на экране регистрации.</p>
+
+      <label>Ваш псевдоним в новой группе</label>
+      <input type="text" id="create-group-pseudonym" placeholder="Например: Альфа" autocomplete="off">
+      <p style="color:var(--muted); font-size:12px; margin-top:-4px;">Под этим именем вы войдёте в новую группу как главный организатор. Можно использовать то же имя, что и в других группах, или новое.</p>
 
       <div class="modal-actions">
         <button class="secondary" id="btn-cancel-create-group">Отмена</button>
@@ -1529,6 +1533,7 @@ function openCreateGroupModal() {
   console.log('[create-group] open modal');
   document.getElementById('create-group-id').value = '';
   document.getElementById('create-group-name').value = '';
+  document.getElementById('create-group-pseudonym').value = '';
   const errBox = document.getElementById('create-group-error');
   const infoBox = document.getElementById('create-group-info');
   errBox.classList.add('hidden');
@@ -1564,23 +1569,30 @@ function showCreateGroupInfo(msg) {
 async function doCreateGroup() {
   const gid = document.getElementById('create-group-id').value.trim();
   const name = document.getElementById('create-group-name').value.trim();
+  const ps = document.getElementById('create-group-pseudonym').value.trim();
 
   // Клиентская валидация — первая линия защиты, сервер всё равно проверит ещё раз
   if (!gid) { showCreateGroupError('Введите идентификатор группы'); return; }
   if (!name) { showCreateGroupError('Введите название группы'); return; }
+  if (!ps) { showCreateGroupError('Введите ваш псевдоним в новой группе'); return; }
   if (gid.length > 50) { showCreateGroupError('Идентификатор не длиннее 50 символов'); return; }
   if (name.length > 100) { showCreateGroupError('Название не длиннее 100 символов'); return; }
+  if (ps.length > 50) { showCreateGroupError('Псевдоним не длиннее 50 символов'); return; }
   if (/\s/.test(gid)) { showCreateGroupError('Идентификатор не должен содержать пробелов'); return; }
   if (/[/\\]/.test(gid)) { showCreateGroupError('Идентификатор не должен содержать символов / или \\'); return; }
 
-  console.log('[create-group] attempt:', { gid, name });
+  console.log('[create-group] attempt:', { gid, name, ps });
 
   const btn = document.getElementById('btn-confirm-create-group');
   btn.disabled = true;
   btn.textContent = 'Создаём…';
 
   try {
-    const { data, error } = await sb.rpc('create_group', { new_gid: gid, new_name: name });
+    const { data, error } = await sb.rpc('create_group', {
+      new_gid: gid,
+      new_name: name,
+      my_pseudonym: ps
+    });
     if (error) {
       console.error('[create-group] rpc error:', error);
       let msg = error.message || 'Ошибка создания группы';
@@ -1591,16 +1603,30 @@ async function doCreateGroup() {
         msg = 'Создавать группы может только главный организатор. У вас сейчас нет этой роли ни в одной группе.';
       } else if (msg.includes('уже существует')) {
         msg = 'Группа с таким идентификатором уже существует. Выберите другой id.';
+      } else if (msg.includes('Псевдоним')) {
+        // оставляем как есть — серверное сообщение про псевдоним уже понятное
       }
       showCreateGroupError(msg);
       return;
     }
-    console.log('[create-group] success, new group id: ' + data);
-    showCreateGroupInfo('Группа «' + name + '» (id: ' + data + ') создана. Чтобы стать её главным организатором — зайдите в портал как первый участник через экран регистрации. Вы в созданную группу не попадаете автоматически.');
+    console.log('[create-group] success, new group id: ' + data + ', switching to it');
 
-    // Очищаем поля на случай, если пользователь захочет создать ещё одну
-    document.getElementById('create-group-id').value = '';
-    document.getElementById('create-group-name').value = '';
+    // Переключаем активную группу на новую до перезагрузки профиля,
+    // чтобы loadProfile выбрал её как текущую
+    try { localStorage.setItem(LS_CURRENT_GROUP_KEY, data); } catch(e) {}
+
+    // Перезагружаем профиль — это подтянет новый membership и обновит
+    // currentUserMemberships, currentGroupId, currentGroupName, currentProfile
+    const newProfile = await loadProfile(currentUser.id);
+    if (!newProfile) {
+      showCreateGroupError('Группа создана, но не удалось перезагрузить профиль. Попробуйте перелогиниться.');
+      return;
+    }
+    currentProfile = newProfile;
+
+    // Закрываем модалку и перерисовываем дашборд — теперь он в новой группе
+    closeCreateGroupModal();
+    renderDashboard();
   } catch (e) {
     console.error('[create-group] unexpected:', e);
     showCreateGroupError('Неожиданная ошибка: ' + (e.message || e));
@@ -4924,9 +4950,9 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-close-create-group', 'click', closeCreateGroupModal);
   bind('btn-cancel-create-group', 'click', closeCreateGroupModal);
   bind('btn-confirm-create-group', 'click', doCreateGroup);
-  const createGroupNameInput = document.getElementById('create-group-name');
-  if (createGroupNameInput) {
-    createGroupNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doCreateGroup(); });
+  const createGroupPsInput = document.getElementById('create-group-pseudonym');
+  if (createGroupPsInput) {
+    createGroupPsInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doCreateGroup(); });
   }
 
   // Добавление нового псевдонима в Настройках группы
