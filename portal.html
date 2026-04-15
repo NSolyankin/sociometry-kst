@@ -796,7 +796,7 @@
       <input type="text" id="ns-title" placeholder="Например: Опрос группы 161, апрель 2026">
 
       <h3>Тип опроса</h3>
-      <p style="margin-top:0; color:var(--muted); font-size:14px;">Во всех трёх вариантах голосуют только обычные участники. Организаторы и со-организаторы не голосуют и не оцениваются — если организатор хочет получить обратную связь и про себя, ему нужно заранее передать главную роль другому и стать обычным участником.</p>
+      <p style="margin-top:0; color:var(--muted); font-size:14px;">Во всех вариантах голосуют только обычные участники. Организаторы и со-организаторы не голосуют и не оцениваются — если организатор хочет получить обратную связь и про себя, ему нужно заранее передать главную роль другому и стать обычным участником.</p>
       <div class="radio-group" id="ns-type-group">
         <label class="radio-option">
           <input type="radio" name="ns-type" value="variant_1" checked>
@@ -817,6 +817,13 @@
           <div class="radio-option-content">
             <div class="radio-option-label">Вариант 3 — Взаимная анкета участников</div>
             <div class="radio-option-desc"><strong>Когда выбирать:</strong> нужна симметричная анонимная обратная связь между равными — каждый участник анонимно отвечает на одни и те же вопросы про каждого другого, и потом каждый видит сводку «что про меня думают». Это «360 градусов внутри группы». Сводка Да/Нет всегда видна всем — каждый увидит результат про себя.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="ns-type" value="variant_4">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Универсальная анкета</div>
+            <div class="radio-option-desc"><strong>Когда выбирать:</strong> почти всегда, кроме классической социометрии (Вариант 1). Универсальный опрос «участник × вопрос»: организатор сам решает, про кого задавать вопросы (про всех или про выбранных), разрешать ли отвечать про самого себя, какие вопросы — Да/Нет, какие — свободным текстом, и кто что увидит в результатах. Покрывает сценарии аттестации, структурированной обратной связи, «360 градусов внутри группы» и любые их комбинации.</div>
           </div>
         </label>
       </div>
@@ -907,6 +914,79 @@
         </div>
       </div>
 
+      <div id="ns-v4-settings" class="hidden">
+        <h3>Про кого задаются вопросы</h3>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="ns-v4-subjects-mode" value="all" checked>
+            <div class="radio-option-content">
+              <div class="radio-option-label">Про всех участников группы</div>
+              <div class="radio-option-desc">Каждый голосующий заполняет ответы про всех остальных participant'ов группы. Если ниже включена самооценка — ещё и про себя.</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-v4-subjects-mode" value="selected">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Про выбранных участников</div>
+              <div class="radio-option-desc">Вопросы задаются только про тех, кого организатор отметит ниже. Полезно для аттестации одного человека или фокус-группы.</div>
+            </div>
+          </label>
+        </div>
+        <div id="ns-v4-subjects-list" class="hidden">
+          <label>Выберите, про кого задавать вопросы:</label>
+          <div class="subjects-grid" id="ns-v4-subjects-grid"></div>
+        </div>
+
+        <h3>Самооценка</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v4-allow-self">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Разрешить отвечать на вопросы про самого себя</div>
+            <div class="radio-option-desc">Если выключено — каждый участник заполняет ответы про всех остальных, кроме себя.</div>
+          </div>
+        </label>
+
+        <h3>Видимость Да/Нет результатов</h3>
+        <p style="margin-top:0;">Кому будут видны результаты по вопросам с ответами Да/Нет после архивации опроса:</p>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="ns-v4-yesno-visibility" value="organizer_only" checked>
+            <div class="radio-option-content">
+              <div class="radio-option-label">Только организатор</div>
+              <div class="radio-option-desc">Участники видят только сам факт, что они проголосовали. Все Да/Нет результаты доступны только организатору. Подходит для аттестации и закрытой обратной связи.</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-v4-yesno-visibility" value="self_only">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Каждый видит сводку про себя</div>
+              <div class="radio-option-desc">Каждый участник видит, как ответили на вопросы Да/Нет про него самого. Результаты про других участников не видны. Организатор видит всё.</div>
+            </div>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="ns-v4-yesno-visibility" value="all_anonymous">
+            <div class="radio-option-content">
+              <div class="radio-option-label">Все видят все Да/Нет результаты анонимно</div>
+              <div class="radio-option-desc">Каждый участник видит сводку Да/Нет по всем участникам. Имена авторов голосов скрыты — анонимность по автору сохраняется.</div>
+            </div>
+          </label>
+        </div>
+
+        <h3>Сводный рейтинг</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v4-show-aggregate">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Показывать сводный рейтинг «Сколько Да на каждого»</div>
+            <div class="radio-option-desc">В результатах появится таблица: для каждого участника — общее число «Да» по всем Да/Нет вопросам. Рейтинг видят все, кому видны Да/Нет результаты (по настройке выше). Если все вопросы свободно-текстовые — настройка не имеет эффекта.</div>
+          </div>
+        </label>
+
+        <h3>Вопросы</h3>
+        <p style="margin-top:0;">Каждый вопрос задаётся про каждого выбранного выше participant'а. Тип ответа можно выбрать у каждого вопроса отдельно.</p>
+        <div id="ns-v4-questions-list"></div>
+        <button class="secondary small" id="btn-add-v4-question" type="button">+ Добавить вопрос</button>
+      </div>
+
       <div id="ns-visibility-block">
         <h3>Видимость общего результата для участников</h3>
         <p style="margin-top: 0;">После того как организатор архивирует опрос, участники увидят:</p>
@@ -965,6 +1045,7 @@ let allPseudonyms = [];
 let questionCounter = 0;
 let v1QuestionCounter = 0;
 let v3QuestionCounter = 0;
+let v4QuestionCounter = 0;
 
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
@@ -4162,10 +4243,24 @@ async function openNewSurveyModal() {
   v3QuestionCounter = 0;
   document.querySelector('input[name="ns-v3-text-visibility"][value="self_only"]').checked = true;
 
+  // Сброс V4
+  document.querySelector('input[name="ns-v4-subjects-mode"][value="all"]').checked = true;
+  document.getElementById('ns-v4-allow-self').checked = false;
+  document.querySelector('input[name="ns-v4-yesno-visibility"][value="organizer_only"]').checked = true;
+  document.getElementById('ns-v4-show-aggregate').checked = false;
+  document.getElementById('ns-v4-questions-list').innerHTML = '';
+  v4QuestionCounter = 0;
+
   if (allPseudonyms.length === 0) {
     allPseudonyms = await loadPseudonyms();
   }
   renderSubjectsGrid();
+
+  // Для V4 grid нужны реальные participant'ы (с user_id) — те же, что используются в V3
+  if (!allGroupParticipantsV3 || allGroupParticipantsV3.length === 0) {
+    allGroupParticipantsV3 = await loadGroupParticipantsV3();
+  }
+  renderV4SubjectsGrid();
 
   // По умолчанию добавляем один пустой V1-вопрос
   addV1Question();
@@ -4175,8 +4270,12 @@ async function openNewSurveyModal() {
   addV3Question();
   addV3Question();
 
+  // По умолчанию — один пустой V4-вопрос
+  addV4Question();
+
   updateTypeVisibility();
   updateSubjectsListVisibility();
+  updateV4SubjectsListVisibility();
   updateV1ToneVisibility();
 
   document.getElementById('modal-new-survey').classList.remove('hidden');
@@ -4191,9 +4290,11 @@ function updateTypeVisibility() {
   document.getElementById('ns-v1-settings').classList.toggle('hidden', type !== 'variant_1');
   document.getElementById('ns-v2-settings').classList.toggle('hidden', type !== 'variant_2');
   document.getElementById('ns-v3-settings').classList.toggle('hidden', type !== 'variant_3');
-  // В Варианте 3 блок общей visibility не используется: там своя логика
-  // (да/нет всегда виден, тексты управляются ns-v3-text-visibility).
-  document.getElementById('ns-visibility-block').classList.toggle('hidden', type === 'variant_3');
+  document.getElementById('ns-v4-settings').classList.toggle('hidden', type !== 'variant_4');
+  // В Вариантах 3 и 4 блок общей visibility не используется: там своя логика
+  // (V3: да/нет всегда виден, тексты управляются ns-v3-text-visibility;
+  //  V4: yesno_visibility + флажки на каждом текстовом вопросе).
+  document.getElementById('ns-visibility-block').classList.toggle('hidden', type === 'variant_3' || type === 'variant_4');
 }
 
 function updateSubjectsListVisibility() {
@@ -4201,10 +4302,27 @@ function updateSubjectsListVisibility() {
   document.getElementById('ns-v2-subjects-list').classList.toggle('hidden', mode !== 'selected');
 }
 
+function updateV4SubjectsListVisibility() {
+  const mode = document.querySelector('input[name="ns-v4-subjects-mode"]:checked').value;
+  document.getElementById('ns-v4-subjects-list').classList.toggle('hidden', mode !== 'selected');
+}
+
 function renderSubjectsGrid() {
   const grid = document.getElementById('ns-v2-subjects-grid');
   grid.innerHTML = allPseudonyms.map(name =>
     `<label><input type="checkbox" value="${escapeHtml(name)}"> ${escapeHtml(name)}</label>`
+  ).join('');
+}
+
+function renderV4SubjectsGrid() {
+  const grid = document.getElementById('ns-v4-subjects-grid');
+  const list = allGroupParticipantsV3 || [];
+  if (list.length === 0) {
+    grid.innerHTML = '<div style="color:var(--muted); font-size:13px;">Нет зарегистрированных participant\'ов в группе. Сначала пригласите участников зарегистрироваться, потом создавайте опрос с выбранными subjects.</div>';
+    return;
+  }
+  grid.innerHTML = list.map(p =>
+    `<label><input type="checkbox" value="${escapeHtml(p.user_id)}"> ${escapeHtml(p.pseudonym)}</label>`
   ).join('');
 }
 
@@ -4345,6 +4463,51 @@ function renumberV3Questions() {
   });
 }
 
+function addV4Question() {
+  v4QuestionCounter++;
+  const id = 'v4q-' + v4QuestionCounter;
+  const html = `
+    <div class="question-item" data-v4qid="${id}">
+      <div class="question-item-header">
+        <span class="question-item-num" data-v4-num>Вопрос —</span>
+        <button class="link-btn" data-remove-v4q="${id}">✕ удалить</button>
+      </div>
+      <textarea placeholder="Текст вопроса (например: «Я доверил бы этому человеку важное поручение»)" data-field="text"></textarea>
+      <div class="question-item-options">
+        <label>Тип ответа:
+          <select data-field="kind">
+            <option value="yesno">Да / Нет</option>
+            <option value="text">Свободный текст</option>
+          </select>
+        </label>
+        <label data-show-for="yesno"><input type="checkbox" data-field="optional"> Необязательный</label>
+        <label data-show-for="text" style="display:none;"><input type="checkbox" data-field="show_to_participants"> Показывать ответы участникам анонимно</label>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById('ns-v4-questions-list');
+  list.insertAdjacentHTML('beforeend', html);
+  const item = list.querySelector(`[data-v4qid="${id}"]`);
+  item.querySelector('[data-remove-v4q]').addEventListener('click', () => {
+    item.remove();
+    renumberV4Questions();
+  });
+  item.querySelector('[data-field="kind"]').addEventListener('change', (e) => {
+    const isText = e.target.value === 'text';
+    item.querySelector('[data-show-for="yesno"]').style.display = isText ? 'none' : 'flex';
+    item.querySelector('[data-show-for="text"]').style.display = isText ? 'flex' : 'none';
+  });
+  renumberV4Questions();
+}
+
+function renumberV4Questions() {
+  const items = document.querySelectorAll('#ns-v4-questions-list .question-item');
+  items.forEach((item, idx) => {
+    const numEl = item.querySelector('[data-v4-num]');
+    if (numEl) numEl.textContent = 'Вопрос ' + (idx + 1);
+  });
+}
+
 function collectFormData() {
   const title = document.getElementById('ns-title').value.trim();
   const type = document.querySelector('input[name="ns-type"]:checked').value;
@@ -4466,6 +4629,51 @@ function collectFormData() {
     settings.text_visibility = textVisibility;
     // В Варианте 3 общее поле visibility не используется — форсируем 'full',
     // чтобы существующие RLS/renderers не падали на null.
+    return { title, type, visibility: 'full', settings };
+  }
+
+  if (type === 'variant_4') {
+    const subjectsMode = document.querySelector('input[name="ns-v4-subjects-mode"]:checked').value;
+    let subjects = null;
+    if (subjectsMode === 'selected') {
+      subjects = Array.from(document.querySelectorAll('#ns-v4-subjects-grid input:checked')).map(c => c.value);
+      if (subjects.length === 0) return { error: 'Выберите хотя бы одного участника, про кого задавать вопросы' };
+    }
+    const allowSelf = document.getElementById('ns-v4-allow-self').checked;
+    const yesnoVisibility = document.querySelector('input[name="ns-v4-yesno-visibility"]:checked').value;
+    const showAggregate = document.getElementById('ns-v4-show-aggregate').checked;
+
+    const questionItems = document.querySelectorAll('#ns-v4-questions-list .question-item');
+    if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос' };
+
+    const questions = [];
+    let qNum = 0;
+    for (const item of questionItems) {
+      qNum++;
+      const text = item.querySelector('[data-field="text"]').value.trim();
+      if (!text) return { error: 'Заполните текст вопроса ' + qNum };
+      const kind = item.querySelector('[data-field="kind"]').value;
+      if (kind !== 'yesno' && kind !== 'text') {
+        return { error: 'Некорректный тип ответа в вопросе ' + qNum };
+      }
+      const q = { id: 'q' + qNum, text, kind };
+      if (kind === 'yesno') {
+        q.optional = item.querySelector('[data-field="optional"]').checked;
+      } else {
+        q.show_to_participants = item.querySelector('[data-field="show_to_participants"]').checked;
+      }
+      questions.push(q);
+    }
+
+    settings.subjects_mode = subjectsMode;
+    settings.subjects = subjects;
+    settings.allow_self = allowSelf;
+    settings.yesno_visibility = yesnoVisibility;
+    settings.show_aggregate = showAggregate;
+    settings.questions = questions;
+
+    // В Варианте 4 общее поле visibility не используется — своя модель видимости
+    // (yesno_visibility + флажки на текстовых вопросах). Форсируем 'full' для совместимости.
     return { title, type, visibility: 'full', settings };
   }
 
@@ -4985,6 +5193,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-add-question', 'click', addQuestion);
   bind('btn-add-v1-question', 'click', addV1Question);
   bind('btn-add-v3-question', 'click', addV3Question);
+  bind('btn-add-v4-question', 'click', addV4Question);
   bind('btn-back-to-list', 'click', backToList);
   bind('btn-group-settings', 'click', openGroupSettings);
   bind('btn-back-from-group', 'click', backFromGroup);
@@ -4997,6 +5206,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.querySelectorAll('input[name="ns-v2-subjects-mode"]').forEach(r => {
     r.addEventListener('change', updateSubjectsListVisibility);
+  });
+  document.querySelectorAll('input[name="ns-v4-subjects-mode"]').forEach(r => {
+    r.addEventListener('change', updateV4SubjectsListVisibility);
   });
   const useToneCheck = document.getElementById('ns-v1-use-tone');
   if (useToneCheck) useToneCheck.addEventListener('change', updateV1ToneVisibility);
