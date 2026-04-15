@@ -3763,8 +3763,8 @@ async function renderOrganizerViewV4() {
   const questions = s.settings?.questions || [];
 
   if (s.status === 'archived') {
-    // Результаты V4 — будут в шаге 14.4
-    body.innerHTML = '<div class="card"><p>Результаты Универсальной анкеты будут доступны в следующем обновлении (шаг 14.4).</p></div>';
+    // Архивный V4 — полные результаты
+    renderResultsV4ForOrganizer();
     return;
   }
 
@@ -4018,9 +4018,476 @@ function renderOwnResponseV4(payload) {
   return html;
 }
 
-function renderParticipantViewV4() {
+// ---- Агрегация ответов V4 (по той же модели, что V3 — payload по UUID) ----
+function aggregateResponsesV4(responses, questions, subjects) {
+  const agg = {};
+  subjects.forEach(subj => {
+    agg[subj.user_id] = {};
+    questions.forEach(q => {
+      if (q.kind === 'yesno') {
+        agg[subj.user_id][q.id] = { yes: 0, no: 0 };
+      } else if (q.kind === 'text') {
+        agg[subj.user_id][q.id] = { texts: [] };
+      }
+    });
+  });
+
+  (responses || []).forEach(resp => {
+    const answers = resp.payload?.answers || {};
+    Object.keys(answers).forEach(subjId => {
+      if (!agg[subjId]) return; // голос про несуществующего/исключённого — игнорируем
+      const subjAnswers = answers[subjId] || {};
+      questions.forEach(q => {
+        const cell = agg[subjId][q.id];
+        if (!cell) return;
+        const val = subjAnswers[q.id];
+        if (q.kind === 'yesno') {
+          if (val === 'yes') cell.yes++;
+          else if (val === 'no') cell.no++;
+        } else if (q.kind === 'text') {
+          if (val && typeof val === 'string' && val.trim()) {
+            cell.texts.push(val.trim());
+          }
+        }
+      });
+    });
+  });
+
+  return agg;
+}
+
+// Сводный рейтинг V4: для каждого subj — сумма «да» по всем yesno-вопросам.
+// Возвращает массив [{user_id, pseudonym, yes, no, total}], отсортированный по yes desc.
+function computeV4Aggregate(subjects, questions, agg) {
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  const rows = subjects.map(subj => {
+    let yes = 0, no = 0;
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      if (cell) { yes += cell.yes; no += cell.no; }
+    });
+    return { user_id: subj.user_id, pseudonym: subj.pseudonym, yes, no, total: yes + no };
+  });
+  rows.sort((a, b) => b.yes - a.yes || a.pseudonym.localeCompare(b.pseudonym, 'ru'));
+  return rows;
+}
+
+// Сводная таблица «Сколько Да на каждого»
+function renderV4AggregateTable(subjects, questions, agg) {
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  if (yesnoQuestions.length === 0) return '';
+
+  const rows = computeV4Aggregate(subjects, questions, agg);
+
+  let html = '<div class="card"><h3 style="margin-top:0;">Сводный рейтинг</h3>';
+  html += '<p style="color:var(--muted); font-size:13px; margin-top:0;">Сумма всех ответов «Да» по всем Да/Нет вопросам, по убыванию.</p>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th><th>Всего «Да»</th><th>Всего «Нет»</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>';
+    html += `<td class="subject-name">${escapeHtml(r.pseudonym)}</td>`;
+    html += `<td><strong>${r.yes}</strong></td>`;
+    html += `<td>${r.no}</td>`;
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// Таблица Да/Нет для V4. rowFilterFn(subj) — true если строку показывать.
+function renderV4YesNoTable(subjects, questions, agg, rowFilterFn) {
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  if (yesnoQuestions.length === 0) return '';
+
+  const visibleSubjects = subjects.filter(rowFilterFn);
+  if (visibleSubjects.length === 0) return '';
+
+  let html = '<div class="card"><h3 style="margin-top:0;">Результаты Да / Нет</h3>';
+  html += '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  yesnoQuestions.forEach(q => {
+    html += `<th>${escapeHtml(q.text)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  visibleSubjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      const total = (cell?.yes || 0) + (cell?.no || 0);
+      if (total === 0) {
+        html += '<td><span style="color:var(--muted);">—</span></td>';
+      } else {
+        html += `<td><span class="badge active">Да: ${cell.yes}</span> <span class="badge archived">Нет: ${cell.no}</span></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// Раздел свободных текстов V4. Видимость каждого вопроса определяется
+// его флажком show_to_participants (для participant'а) или всегда true (для организатора).
+// questionVisibleFn(q) — true если этот вопрос полностью показывать.
+function renderV4TextSection(subjects, questions, agg, questionVisibleFn) {
+  const textQuestions = questions.filter(q => q.kind === 'text');
+  if (textQuestions.length === 0) return '';
+
+  const visibleQuestions = textQuestions.filter(questionVisibleFn);
+  if (visibleQuestions.length === 0) return '';
+
+  let html = '<div class="card"><h3 style="margin-top:0;">Свободные ответы</h3>';
+
+  visibleQuestions.forEach(q => {
+    html += `<div style="margin-bottom:20px;"><h4 style="margin:0 0 8px 0;">${escapeHtml(q.text)}</h4>`;
+    subjects.forEach(subj => {
+      const cell = agg[subj.user_id]?.[q.id];
+      html += `<div style="margin:8px 0 8px 16px;"><strong>${escapeHtml(subj.pseudonym)}:</strong> `;
+      const texts = cell?.texts || [];
+      if (texts.length === 0) {
+        html += '<span style="color:var(--muted);">нет ответов</span>';
+      } else {
+        html += '<ul style="margin:4px 0 0 0; padding-left:20px;">';
+        texts.forEach(t => {
+          html += `<li>${escapeHtml(t)}</li>`;
+        });
+        html += '</ul>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+// ---- Экспорт V4: panel + buffer + print ----
+
+function renderV4ExportToolbar() {
+  return '<div class="no-print" style="margin-bottom:16px; display:flex; gap:8px; justify-content:flex-end;">' +
+    '<button class="secondary small" id="btn-copy-v4" type="button">📋 Скопировать как текст</button>' +
+    '<button class="secondary small" id="btn-print-v4" type="button">🖨️ Печать / Сохранить в PDF</button>' +
+    '</div>';
+}
+
+function bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregate) {
+  const copyBtn = document.getElementById('btn-copy-v4');
+  if (copyBtn) copyBtn.addEventListener('click', () => copyV4ResultsToClipboard(rowFilterFn, questionVisibleFn, showAggregate));
+  const printBtn = document.getElementById('btn-print-v4');
+  if (printBtn) printBtn.addEventListener('click', () => window.print());
+}
+
+function buildV4ResultsText(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, rowFilterFn, questionVisibleFn, showAggregate) {
+  const lines = [];
+  lines.push(surveyTitle);
+  lines.push('='.repeat(Math.max(surveyTitle.length, 10)));
+  lines.push('');
+  lines.push('Универсальная анкета');
+  lines.push(`Проголосовало: ${responsesCount} из ${totalParticipants}`);
+  lines.push('');
+
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  const textQuestions = questions.filter(q => q.kind === 'text');
+  const visibleSubjects = subjects.filter(rowFilterFn);
+
+  if (showAggregate && yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
+    lines.push('Сводный рейтинг (всего «Да»)');
+    lines.push('-'.repeat(30));
+    const rows = computeV4Aggregate(visibleSubjects, questions, agg);
+    rows.forEach(r => {
+      lines.push(`  ${r.pseudonym}: Да ${r.yes} / Нет ${r.no}`);
+    });
+    lines.push('');
+  }
+
+  if (yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
+    lines.push('Результаты Да / Нет');
+    lines.push('-'.repeat(30));
+    const header = ['Участник', ...yesnoQuestions.map(q => q.text)];
+    lines.push(header.join(' | '));
+    lines.push(header.map(h => '-'.repeat(h.length)).join('-+-'));
+    visibleSubjects.forEach(subj => {
+      const row = [subj.pseudonym];
+      yesnoQuestions.forEach(q => {
+        const cell = agg[subj.user_id]?.[q.id];
+        const total = (cell?.yes || 0) + (cell?.no || 0);
+        if (total === 0) row.push('—');
+        else row.push(`Да: ${cell.yes} / Нет: ${cell.no}`);
+      });
+      lines.push(row.join(' | '));
+    });
+    lines.push('');
+  }
+
+  const visibleTextQuestions = textQuestions.filter(questionVisibleFn);
+  if (visibleTextQuestions.length > 0) {
+    lines.push('Свободные ответы');
+    lines.push('-'.repeat(30));
+    visibleTextQuestions.forEach(q => {
+      lines.push('');
+      lines.push(q.text);
+      subjects.forEach(subj => {
+        const texts = agg[subj.user_id]?.[q.id]?.texts || [];
+        if (texts.length === 0) {
+          lines.push(`  ${subj.pseudonym}: (нет ответов)`);
+        } else {
+          lines.push(`  ${subj.pseudonym}:`);
+          texts.forEach(t => lines.push(`    - ${t}`));
+        }
+      });
+    });
+  }
+
+  return lines.join('\n');
+}
+
+function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, rowFilterFn, questionVisibleFn, showAggregate) {
+  const escapeForHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  const textQuestions = questions.filter(q => q.kind === 'text');
+  const visibleSubjects = subjects.filter(rowFilterFn);
+
+  const tdStyle = 'border:1px solid #888; padding:6px 10px; vertical-align:top;';
+  const thStyle = tdStyle + ' background:#f0f0f0; font-weight:bold; text-align:left;';
+
+  let html = '';
+  html += `<h2 style="margin:0 0 4px 0;">${escapeForHtml(surveyTitle)}</h2>`;
+  html += `<p style="margin:0 0 12px 0; color:#555;">Универсальная анкета. Проголосовало: ${responsesCount} из ${totalParticipants}</p>`;
+
+  if (showAggregate && yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
+    html += '<h3 style="margin:16px 0 6px 0;">Сводный рейтинг</h3>';
+    const rows = computeV4Aggregate(visibleSubjects, questions, agg);
+    html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
+    html += `<th style="${thStyle}">Участник</th><th style="${thStyle}">Всего «Да»</th><th style="${thStyle}">Всего «Нет»</th>`;
+    html += '</tr></thead><tbody>';
+    rows.forEach(r => {
+      html += `<tr><td style="${tdStyle}"><strong>${escapeForHtml(r.pseudonym)}</strong></td><td style="${tdStyle}"><strong>${r.yes}</strong></td><td style="${tdStyle}">${r.no}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  if (yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
+    html += '<h3 style="margin:16px 0 6px 0;">Результаты Да / Нет</h3>';
+    html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
+    html += `<th style="${thStyle}">Участник</th>`;
+    yesnoQuestions.forEach(q => { html += `<th style="${thStyle}">${escapeForHtml(q.text)}</th>`; });
+    html += '</tr></thead><tbody>';
+    visibleSubjects.forEach(subj => {
+      html += '<tr>';
+      html += `<td style="${tdStyle}"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+      yesnoQuestions.forEach(q => {
+        const cell = agg[subj.user_id]?.[q.id];
+        const total = (cell?.yes || 0) + (cell?.no || 0);
+        if (total === 0) {
+          html += `<td style="${tdStyle}">—</td>`;
+        } else {
+          html += `<td style="${tdStyle}">Да: ${cell.yes} / Нет: ${cell.no}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  const visibleTextQuestions = textQuestions.filter(questionVisibleFn);
+  if (visibleTextQuestions.length > 0) {
+    html += '<h3 style="margin:20px 0 6px 0;">Свободные ответы</h3>';
+    visibleTextQuestions.forEach(q => {
+      html += `<h4 style="margin:12px 0 4px 0;">${escapeForHtml(q.text)}</h4>`;
+      html += '<table style="border-collapse:collapse; border:1px solid #888; width:100%;"><tbody>';
+      subjects.forEach(subj => {
+        html += '<tr>';
+        html += `<td style="${tdStyle} width:25%; white-space:nowrap;"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+        const texts = agg[subj.user_id]?.[q.id]?.texts || [];
+        if (texts.length === 0) {
+          html += `<td style="${tdStyle} color:#888;">нет ответов</td>`;
+        } else if (texts.length === 1) {
+          html += `<td style="${tdStyle}">${escapeForHtml(texts[0])}</td>`;
+        } else {
+          html += `<td style="${tdStyle}"><ul style="margin:0; padding-left:20px;">`;
+          texts.forEach(t => { html += `<li>${escapeForHtml(t)}</li>`; });
+          html += '</ul></td>';
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    });
+  }
+
+  return html;
+}
+
+async function copyV4ResultsToClipboard(rowFilterFn, questionVisibleFn, showAggregate) {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV4SubjectsForResults();
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV4(responses, questions, subjects);
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+
+  const text = buildV4ResultsText(subjects, questions, agg, s.title, responses.length, totalParticipants, rowFilterFn, questionVisibleFn, showAggregate);
+  const html = buildV4ResultsHtml(subjects, questions, agg, s.title, responses.length, totalParticipants, rowFilterFn, questionVisibleFn, showAggregate);
+
+  const showOk = () => {
+    const btn = document.getElementById('btn-copy-v4');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Скопировано';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  };
+
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      showOk();
+      return;
+    }
+  } catch (err) {
+    console.warn('[v4-copy] clipboard.write failed, falling back to writeText:', err);
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showOk();
+  } catch (err) {
+    console.error('[v4-copy] error:', err);
+    alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст результатов:\n\n' + text);
+  }
+}
+
+// Subjects для результатов V4: учитываем subjects_mode из settings,
+// НО НЕ учитываем allow_self (это про голосующего, а в результатах
+// мы показываем всех оцениваемых — самооценка была опцией для каждого голосующего отдельно).
+function getV4SubjectsForResults() {
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  if (settings.subjects_mode === 'selected' && Array.isArray(settings.subjects)) {
+    return (allGroupParticipantsV3 || []).filter(p => settings.subjects.includes(p.user_id));
+  }
+  return [...(allGroupParticipantsV3 || [])];
+}
+
+async function renderResultsV4ForOrganizer() {
   const body = document.getElementById('survey-body');
-  body.innerHTML = '<div class="card"><p>Результаты Универсальной анкеты будут доступны в следующем обновлении (шаг 14.4).</p></div>';
+  body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses || [];
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV4SubjectsForResults();
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+  const showAggregate = !!s.settings?.show_aggregate;
+
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">Нет оцениваемых participant\'ов в этом опросе.</div></div>';
+    return;
+  }
+
+  const agg = aggregateResponsesV4(responses, questions, subjects);
+
+  // Организатор видит всё всегда: все строки, все тексты
+  const rowFilterFn = () => true;
+  const questionVisibleFn = () => true;
+
+  let html = '<div class="print-root">';
+  html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  html += renderV4ExportToolbar();
+  html += '<div class="card">';
+  html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants} ${pluralize(totalParticipants, 'участника', 'участников', 'участников')}.</div>`;
+  html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все результаты — это право организатора.</p>';
+  html += '</div>';
+
+  if (showAggregate) html += renderV4AggregateTable(subjects, questions, agg);
+  html += renderV4YesNoTable(subjects, questions, agg, rowFilterFn);
+  html += renderV4TextSection(subjects, questions, agg, questionVisibleFn);
+  html += '</div>';
+
+  body.innerHTML = html;
+  bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregate);
+}
+
+async function renderResultsV4ForParticipant() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses || [];
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const questions = settings.questions || [];
+  const subjects = getV4SubjectsForResults();
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+  const myId = currentUser?.id;
+  const yesnoVisibility = settings.yesno_visibility || 'organizer_only';
+  const showAggregate = !!settings.show_aggregate;
+
+  if (subjects.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">Нет оцениваемых participant\'ов в этом опросе.</div></div>';
+    return;
+  }
+
+  const agg = aggregateResponsesV4(responses, questions, subjects);
+
+  // Видимость Да/Нет строк для participant'а
+  let rowFilterFn;
+  if (yesnoVisibility === 'organizer_only') {
+    rowFilterFn = () => false;       // вообще ничего
+  } else if (yesnoVisibility === 'self_only') {
+    rowFilterFn = (subj) => subj.user_id === myId; // только своя строка
+  } else {
+    rowFilterFn = () => true;        // all_anonymous
+  }
+
+  // Видимость текстов: каждый вопрос со снятым флажком — только организатору
+  const questionVisibleFn = (q) => !!q.show_to_participants;
+
+  // Сводный рейтинг: показываем только если показываются все Да/Нет (all_anonymous)
+  const showAggregateForMe = showAggregate && yesnoVisibility === 'all_anonymous';
+
+  let html = '<div class="print-root">';
+  html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  html += renderV4ExportToolbar();
+  html += '<div class="card">';
+  html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants}. Имена голосующих скрыты.</div>`;
+
+  // Поясняем настройки видимости
+  const visExplain = {
+    organizer_only: 'По настройке видимости результаты Да/Нет видны только организатору. Ниже показано только то, что доступно вам.',
+    self_only: 'По настройке видимости вы видите Да/Нет только про себя. Результаты про других — только у организатора.',
+    all_anonymous: 'По настройке видимости все Да/Нет результаты видны всем участникам анонимно.'
+  };
+  html += `<p style="color:var(--muted); font-size:13px;">${visExplain[yesnoVisibility] || ''}</p>`;
+  html += '</div>';
+
+  // Свой ответ — если participant голосовал, показываем его таблицей
+  if (currentOwnResponse) {
+    html += '<div class="card"><h3 style="margin-top:0;">Ваш ответ</h3>';
+    html += renderOwnResponseV4(currentOwnResponse.payload);
+    html += '</div>';
+  }
+
+  if (showAggregateForMe) html += renderV4AggregateTable(subjects, questions, agg);
+  html += renderV4YesNoTable(subjects, questions, agg, rowFilterFn);
+  html += renderV4TextSection(subjects, questions, agg, questionVisibleFn);
+  html += '</div>';
+
+  body.innerHTML = html;
+  bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregateForMe);
+}
+
+function renderParticipantViewV4() {
+  // Архивный V4-опрос для participant'а — реальная функция результатов.
+  renderResultsV4ForParticipant();
 }
 
 function describeV4Settings(settings) {
