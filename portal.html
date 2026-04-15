@@ -3096,7 +3096,7 @@ function getV3Subjects() {
   return (allGroupParticipantsV3 || []).filter(p => p.user_id !== myId);
 }
 
-function renderOrganizerViewV3() {
+async function renderOrganizerViewV3() {
   const body = document.getElementById('survey-body');
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -3108,9 +3108,20 @@ function renderOrganizerViewV3() {
     return;
   }
 
+  body.innerHTML = '<div class="card"><p>Загрузка…</p></div>';
+
+  // Загрузим ответы, чтобы показать явку
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses;
+
+  const isMain = currentProfile?.role === 'main_organizer';
+
   // Активный опрос — показываем сводку настроек и пояснение
   let html = '<div class="card">';
   html += '<div class="warning-box"><strong>Активный опрос Варианта 3.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
+
+  // Явка
+  html += buildTurnoutHtml(responses, allGroupParticipantsV3 || []);
 
   html += '<h3>Вопросы анкеты</h3>';
   if (questions.length === 0) {
@@ -3139,8 +3150,17 @@ function renderOrganizerViewV3() {
     ? 'Все видят все тексты.'
     : 'Каждый видит тексты только про себя.') + '</p>';
 
+  html += '<div class="actions" style="margin-top:16px;">';
+  html += '<button class="secondary" id="btn-archive-v3">Архивировать</button>';
+  if (isMain) html += '<button class="danger small" id="btn-delete-v3" style="margin-left:8px;">Удалить опрос</button>';
+  html += '</div>';
+
   html += '</div>';
   body.innerHTML = html;
+
+  document.getElementById('btn-archive-v3').addEventListener('click', archiveSurveyFromScreen);
+  const delBtn3 = document.getElementById('btn-delete-v3');
+  if (delBtn3) delBtn3.addEventListener('click', () => deleteSurvey(currentSurvey.id));
 }
 
 function renderVoteFormV3() {
@@ -3735,7 +3755,7 @@ async function renderResultsV3ForParticipant() {
 // УНИВЕРСАЛЬНАЯ АНКЕТА (V4) — ЗАГЛУШКИ ДЛЯ ШАГОВ 14.3–14.4
 // ============================================================
 
-function renderOrganizerViewV4() {
+async function renderOrganizerViewV4() {
   const s = currentSurvey;
   const body = document.getElementById('survey-body');
   const isMain = currentProfile?.role === 'main_organizer';
@@ -3748,9 +3768,18 @@ function renderOrganizerViewV4() {
     return;
   }
 
+  body.innerHTML = '<div class="card"><p>Загрузка…</p></div>';
+
+  // Загрузим ответы для явки
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses;
+
   // Активный V4 — показываем сводку настроек (аналогично V3)
   let html = '<div class="card">';
   html += '<div class="warning-box"><strong>Активный опрос: Универсальная анкета.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
+
+  // Явка
+  html += buildTurnoutHtml(responses, allGroupParticipantsV3 || []);
 
   html += '<h3>Настройки</h3>';
   html += '<p style="color:var(--muted);">' + describeV4Settings(s.settings) + '</p>';
@@ -4014,6 +4043,24 @@ function pluralize(n, one, few, many) {
   if (lastDigit === 1) return one;
   if (lastDigit >= 2 && lastDigit <= 4) return few;
   return many;
+}
+
+// Блок «Явка» для организатора (V3/V4).
+// participants: [{user_id, pseudonym}], responses: [{user_id, respondent_name, ...}]
+function buildTurnoutHtml(responses, participants) {
+  const votedIds = new Set(responses.map(r => r.user_id));
+  const voted = participants.filter(p => votedIds.has(p.user_id));
+  const notVoted = participants.filter(p => !votedIds.has(p.user_id));
+
+  let html = '<h3 style="margin-top:0;">Явка</h3>';
+  html += `<p>Проголосовали: <strong>${voted.length}</strong> из <strong>${participants.length}</strong></p>`;
+  if (voted.length > 0) {
+    html += '<p style="font-size:13px;"><span style="color:var(--muted);">Отметились:</span> ' + voted.map(p => escapeHtml(p.pseudonym)).join(', ') + '</p>';
+  }
+  if (notVoted.length > 0) {
+    html += '<p style="font-size:13px;"><span style="color:var(--muted);">Ещё не проголосовали:</span> <strong>' + notVoted.map(p => escapeHtml(p.pseudonym)).join(', ') + '</strong></p>';
+  }
+  return html;
 }
 
 // ============================================================
