@@ -1031,7 +1031,8 @@ const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 const SURVEY_TYPES = {
   variant_1: { label: 'Вариант 1', description: 'Каждый участник выбирает несколько коллег по заданному критерию.' },
   variant_2: { label: 'Вариант 2', description: 'Каждый участник отвечает на список вопросов про коллег.' },
-  variant_3: { label: 'Вариант 3', description: 'Анкета по участникам: каждый отвечает на одинаковые вопросы про каждого.' }
+  variant_3: { label: 'Вариант 3', description: 'Анкета по участникам: каждый отвечает на одинаковые вопросы про каждого.' },
+  variant_4: { label: 'Универсальная анкета', description: 'Универсальный опрос «участник × вопрос» с гибкими настройками видимости.' }
 };
 
 let sb = null;
@@ -1205,7 +1206,7 @@ async function loadSurveys() {
 
   const counts = {};
   for (const s of data) {
-    if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3') continue;
+    if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3' && s.type !== 'variant_4') continue;
     const { count } = await sb
       .from('responses')
       .select('id', { count: 'exact', head: true })
@@ -1219,7 +1220,7 @@ function renderSurveys(surveys, counts) {
   const list = document.getElementById('surveys-list');
   const isOrganizer = currentProfile?.role === 'main_organizer' || currentProfile?.role === 'co_organizer';
 
-  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2' || s.type === 'variant_3');
+  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2' || s.type === 'variant_3' || s.type === 'variant_4');
   if (newSurveys.length === 0) {
     list.innerHTML = '<div class="empty-state">Опросов пока нет.<br><small>' +
       (isOrganizer ? 'Создайте новый опрос кнопкой «+ Новый опрос».' : 'Дождитесь, пока организатор создаст опрос.') +
@@ -1824,8 +1825,8 @@ async function openSurvey(id) {
     allGroupParticipants = await loadGroupParticipants();
   }
 
-  // Для Варианта 3 нужен отдельный список с user_id
-  if (survey.type === 'variant_3') {
+  // Для Варианта 3 и 4 нужен отдельный список с user_id
+  if (survey.type === 'variant_3' || survey.type === 'variant_4') {
     allGroupParticipantsV3 = await loadGroupParticipantsV3();
   }
 
@@ -1868,6 +1869,12 @@ function renderSurveyScreen() {
       // управление (архивировать, удалить) и пояснение. Архивный — результаты
       // (появятся в подшаге 9.4).
       renderOrganizerViewV3();
+      return;
+    }
+    if (s.type === 'variant_4') {
+      // V4: организатор не голосует — аналогично V3.
+      // Голосование и результаты будут реализованы в шагах 14.3–14.4.
+      renderOrganizerViewV4();
       return;
     }
     body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
@@ -1916,6 +1923,23 @@ function renderSurveyScreen() {
       return;
     }
     renderVoteFormV3();
+    return;
+  }
+
+  // Участник + Универсальная анкета (V4)
+  if (s.type === 'variant_4') {
+    if (s.status === 'archived') {
+      // Результаты V4 — будут реализованы в шаге 14.4
+      renderParticipantViewV4();
+      return;
+    }
+    // Активный
+    if (currentOwnResponse) {
+      renderAlreadyVotedV4();
+      return;
+    }
+    // Голосование V4 — будет реализовано в шаге 14.3
+    renderVoteFormV4();
     return;
   }
 
@@ -3705,6 +3729,108 @@ async function renderResultsV3ForParticipant() {
 
   // Биндим кнопки экспорта (с тем же правилом видимости, что и UI)
   bindV3ExportToolbar(hideFn);
+}
+
+// ============================================================
+// УНИВЕРСАЛЬНАЯ АНКЕТА (V4) — ЗАГЛУШКИ ДЛЯ ШАГОВ 14.3–14.4
+// ============================================================
+
+function renderOrganizerViewV4() {
+  const s = currentSurvey;
+  const body = document.getElementById('survey-body');
+  const isMain = currentProfile?.role === 'main_organizer';
+  const isOrganizer = isMain || currentProfile?.role === 'co_organizer';
+  const questions = s.settings?.questions || [];
+
+  if (s.status === 'archived') {
+    // Результаты V4 — будут в шаге 14.4
+    body.innerHTML = '<div class="card"><p>Результаты Универсальной анкеты будут доступны в следующем обновлении (шаг 14.4).</p></div>';
+    return;
+  }
+
+  // Активный V4 — показываем сводку настроек (аналогично V3)
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Активный опрос: Универсальная анкета.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
+
+  html += '<h3>Настройки</h3>';
+  html += '<p style="color:var(--muted);">' + describeV4Settings(s.settings) + '</p>';
+
+  html += '<h3>Вопросы</h3>';
+  if (questions.length === 0) {
+    html += '<p>(нет вопросов)</p>';
+  } else {
+    html += '<ol class="v3-questions-preview">';
+    questions.forEach(q => {
+      const kindLabel = q.kind === 'yesno' ? 'Да / Нет' : 'Свободный текст';
+      html += `<li><strong>${escapeHtml(q.text)}</strong> <span style="color:var(--muted);">— ${kindLabel}</span></li>`;
+    });
+    html += '</ol>';
+  }
+
+  html += '<h3>Оцениваемые участники</h3>';
+  let subjects;
+  if (s.settings?.subjects_mode === 'selected' && Array.isArray(s.settings.subjects)) {
+    subjects = (allGroupParticipantsV3 || []).filter(p => s.settings.subjects.includes(p.user_id));
+  } else {
+    subjects = allGroupParticipantsV3 || [];
+  }
+  if (subjects.length === 0) {
+    html += '<div class="warning-box">Нет подходящих participant\'ов для оценки.</div>';
+  } else {
+    html += '<p>В опросе оцениваются ' + subjects.length + ' ' + pluralize(subjects.length, 'участник', 'участника', 'участников') + ':</p><ul>';
+    subjects.forEach(p => { html += '<li>' + escapeHtml(p.pseudonym) + '</li>'; });
+    html += '</ul>';
+  }
+
+  html += '<div class="actions" style="margin-top:16px;">';
+  if (isOrganizer) html += '<button id="btn-archive-v4" class="secondary">Архивировать</button>';
+  if (isMain) html += '<button id="btn-delete-v4" class="danger small" style="margin-left:8px;">Удалить опрос</button>';
+  html += '</div>';
+  html += '</div>';
+
+  body.innerHTML = html;
+
+  const archBtn = document.getElementById('btn-archive-v4');
+  if (archBtn) archBtn.addEventListener('click', archiveSurveyFromScreen);
+  const delBtn = document.getElementById('btn-delete-v4');
+  if (delBtn) delBtn.addEventListener('click', () => deleteSurvey(currentSurvey.id));
+}
+
+function renderVoteFormV4() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><p>Голосование в Универсальной анкете будет доступно в следующем обновлении (шаг 14.3).</p></div>';
+}
+
+function renderAlreadyVotedV4() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><p>Вы уже проголосовали в этом опросе. Спасибо!</p></div>';
+}
+
+function renderParticipantViewV4() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><p>Результаты Универсальной анкеты будут доступны в следующем обновлении (шаг 14.4).</p></div>';
+}
+
+function describeV4Settings(settings) {
+  if (!settings) return '—';
+  const parts = [];
+  parts.push(settings.subjects_mode === 'selected' ? 'про выбранных' : 'про всех');
+  if (settings.allow_self) parts.push('с самооценкой');
+  const visLabels = { organizer_only: 'Да/Нет только организатору', self_only: 'каждый видит Да/Нет про себя', all_anonymous: 'все видят Да/Нет' };
+  parts.push(visLabels[settings.yesno_visibility] || settings.yesno_visibility);
+  if (settings.show_aggregate) parts.push('со сводным рейтингом');
+  const qCount = (settings.questions || []).length;
+  parts.push(qCount + ' ' + pluralize(qCount, 'вопрос', 'вопроса', 'вопросов'));
+  return parts.join(', ');
+}
+
+function pluralize(n, one, few, many) {
+  const abs = Math.abs(n) % 100;
+  const lastDigit = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (lastDigit === 1) return one;
+  if (lastDigit >= 2 && lastDigit <= 4) return few;
+  return many;
 }
 
 // ============================================================
