@@ -991,6 +991,15 @@
           </div>
         </label>
 
+        <h3>Детализация для организатора</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v4-reveal-voters">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Организатор видит авторов голосов</div>
+            <div class="radio-option-desc">В результатах для организатора появится блок «Детализация по респондентам» — можно развернуть каждого участника и увидеть, как именно он голосовал. Участники эту детализацию не видят никогда — для них анонимность по автору сохраняется. Подходит для аттестации и разборов, где организатору нужна полная прозрачность.</div>
+          </div>
+        </label>
+
         <h3>Вопросы</h3>
         <p style="margin-top:0;">Каждый вопрос задаётся про каждого выбранного выше participant'а. Тип ответа можно выбрать у каждого вопроса отдельно.</p>
         <div id="ns-v4-questions-list"></div>
@@ -4172,6 +4181,59 @@ function renderV4TextSection(subjects, questions, agg, questionVisibleFn) {
   return html;
 }
 
+// Таблица одного ответа конкретного голосующего (для детализации).
+// payload.answers — {<UUID subject>: {q1: 'yes', q2: 'текст', ...}}.
+function renderSingleResponseTableV4(payload, questions, subjects) {
+  if (!payload || !payload.answers) return '<p style="color:var(--muted);">(пустой ответ)</p>';
+  const answers = payload.answers;
+  let html = '<div class="vote-table-wrapper"><table class="vote-table">';
+  html += '<thead><tr><th>Участник</th>';
+  questions.forEach(q => { html += `<th>${escapeHtml(q.text)}</th>`; });
+  html += '</tr></thead><tbody>';
+  subjects.forEach(subj => {
+    html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+    questions.forEach(q => {
+      const val = answers[subj.user_id]?.[q.id];
+      let display = '<span style="color:var(--muted);">—</span>';
+      if (q.kind === 'yesno') {
+        if (val === 'yes') display = 'Да';
+        else if (val === 'no') display = 'Нет';
+        else if (q.optional) display = '<span style="color:var(--muted);">(пропущен)</span>';
+      } else if (q.kind === 'text') {
+        if (val) display = escapeHtml(val);
+      }
+      html += `<td>${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// Раздел «Детализация по респондентам» — только для организатора, когда
+// в настройках опроса включено reveal_voters. Показывает, как каждый
+// конкретный голосующий ответил про каждого оцениваемого.
+function renderV4VoterDetailsSection(responses, questions, subjects) {
+  if (!responses || responses.length === 0) return '';
+
+  let html = '<div class="card no-print"><h3 style="margin-top:0;">Детализация по респондентам</h3>';
+  html += '<p style="color:var(--muted); font-size:13px;">Эта секция видна только вам как организатору. Участники её не видят. Развернуть, чтобы увидеть, как проголосовал конкретный человек.</p>';
+
+  responses.forEach(resp => {
+    const name = resp.respondent_name || '(аноним)';
+    const date = new Date(resp.created_at).toLocaleString('ru-RU');
+    html += `<details style="margin-bottom:8px; border:1px solid var(--border); border-radius:8px; padding:8px 12px;">`;
+    html += `<summary style="cursor:pointer; font-weight:500;">${escapeHtml(name)} <span style="color:var(--muted); font-weight:normal; font-size:12px;">· ${date}</span></summary>`;
+    html += '<div style="margin-top:12px;">';
+    html += renderSingleResponseTableV4(resp.payload, questions, subjects);
+    html += '</div>';
+    html += '</details>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
 // ---- Экспорт V4: panel + buffer + print ----
 
 function renderV4ExportToolbar() {
@@ -4404,6 +4466,7 @@ async function renderResultsV4ForOrganizer() {
   }
 
   const agg = aggregateResponsesV4(responses, questions, subjects);
+  const revealVoters = !!s.settings?.reveal_voters;
 
   // Организатор видит всё всегда: все строки, все тексты
   const rowFilterFn = () => true;
@@ -4414,12 +4477,22 @@ async function renderResultsV4ForOrganizer() {
   html += renderV4ExportToolbar();
   html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants} ${pluralize(totalParticipants, 'участника', 'участников', 'участников')}.</div>`;
-  html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все результаты — это право организатора.</p>';
+  if (revealVoters) {
+    html += '<p style="color:var(--muted); font-size:13px;">При создании опроса вы включили «Организатор видит авторов голосов». Ниже в отдельном блоке «Детализация по респондентам» можно увидеть, как именно голосовал каждый участник. Участники эту детализацию не видят — для них анонимность по автору сохраняется.</p>';
+  } else {
+    html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все агрегированные результаты — это право организатора.</p>';
+  }
   html += '</div>';
 
   if (showAggregate) html += renderV4AggregateTable(subjects, questions, agg);
   html += renderV4YesNoTable(subjects, questions, agg, rowFilterFn);
   html += renderV4TextSection(subjects, questions, agg, questionVisibleFn);
+
+  // Детализация по респондентам — только если reveal_voters включено
+  if (revealVoters) {
+    html += renderV4VoterDetailsSection(responses, questions, subjects);
+  }
+
   html += '</div>';
 
   body.innerHTML = html;
@@ -4508,6 +4581,7 @@ function describeV4Settings(settings) {
   const visLabels = { organizer_only: 'Да/Нет только организатору', self_only: 'каждый видит Да/Нет про себя', all_anonymous: 'все видят Да/Нет' };
   parts.push(visLabels[settings.yesno_visibility] || settings.yesno_visibility);
   if (settings.show_aggregate) parts.push('со сводным рейтингом');
+  if (settings.reveal_voters) parts.push('организатор видит авторов');
   const qCount = (settings.questions || []).length;
   parts.push(qCount + ' ' + pluralize(qCount, 'вопрос', 'вопроса', 'вопросов'));
   return parts.join(', ');
@@ -5081,6 +5155,7 @@ async function openNewSurveyModal() {
   document.getElementById('ns-v4-allow-self').checked = false;
   document.querySelector('input[name="ns-v4-yesno-visibility"][value="organizer_only"]').checked = true;
   document.getElementById('ns-v4-show-aggregate').checked = false;
+  document.getElementById('ns-v4-reveal-voters').checked = false;
   document.getElementById('ns-v4-questions-list').innerHTML = '';
   v4QuestionCounter = 0;
 
@@ -5475,6 +5550,7 @@ function collectFormData() {
     const allowSelf = document.getElementById('ns-v4-allow-self').checked;
     const yesnoVisibility = document.querySelector('input[name="ns-v4-yesno-visibility"]:checked').value;
     const showAggregate = document.getElementById('ns-v4-show-aggregate').checked;
+    const revealVoters = document.getElementById('ns-v4-reveal-voters').checked;
 
     const questionItems = document.querySelectorAll('#ns-v4-questions-list .question-item');
     if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос' };
@@ -5503,6 +5579,7 @@ function collectFormData() {
     settings.allow_self = allowSelf;
     settings.yesno_visibility = yesnoVisibility;
     settings.show_aggregate = showAggregate;
+    settings.reveal_voters = revealVoters;
     settings.questions = questions;
 
     // В Варианте 4 общее поле visibility не используется — своя модель видимости
