@@ -986,8 +986,8 @@
         <label class="checkbox-option" style="margin-bottom: 16px;">
           <input type="checkbox" id="ns-v4-show-aggregate">
           <div class="radio-option-content">
-            <div class="radio-option-label">Показывать сводный рейтинг «Сколько Да на каждого»</div>
-            <div class="radio-option-desc">В результатах появится таблица: для каждого участника — общее число «Да» по всем Да/Нет вопросам. Рейтинг видят все, кому видны Да/Нет результаты (по настройке выше). Если все вопросы свободно-текстовые — настройка не имеет эффекта.</div>
+            <div class="radio-option-label">Показывать сводный рейтинг</div>
+            <div class="radio-option-desc">В результатах появится раздел «Сводный рейтинг»: для каждого Да/Нет вопроса — отдельная таблица с рейтингом участников по количеству «Да», отсортированная по убыванию. Удобно сразу видеть, кого чаще всего выбирают по каждому критерию. Рейтинг видят все, кому видны Да/Нет результаты (по настройке выше). Если все вопросы свободно-текстовые — настройка не имеет эффекта.</div>
           </div>
         </label>
 
@@ -4075,41 +4075,51 @@ function aggregateResponsesV4(responses, questions, subjects) {
   return agg;
 }
 
-// Сводный рейтинг V4: для каждого subj — сумма «да» по всем yesno-вопросам.
-// Возвращает массив [{user_id, pseudonym, yes, no, total}], отсортированный по yes desc.
-function computeV4Aggregate(subjects, questions, agg) {
-  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+// Рейтинг участников по ОДНОМУ Да/Нет вопросу: массив [{user_id, pseudonym, yes, no}],
+// отсортированный по yes desc, потом по pseudonym. Используется для сводного рейтинга,
+// где для каждого вопроса строится своя таблица — это осмысленно даже когда вопросы про разные качества.
+function computeV4AggregateByQuestion(subjects, question, agg) {
   const rows = subjects.map(subj => {
-    let yes = 0, no = 0;
-    yesnoQuestions.forEach(q => {
-      const cell = agg[subj.user_id]?.[q.id];
-      if (cell) { yes += cell.yes; no += cell.no; }
-    });
-    return { user_id: subj.user_id, pseudonym: subj.pseudonym, yes, no, total: yes + no };
+    const cell = agg[subj.user_id]?.[question.id];
+    const yes = cell?.yes || 0;
+    const no = cell?.no || 0;
+    return { user_id: subj.user_id, pseudonym: subj.pseudonym, yes, no };
   });
   rows.sort((a, b) => b.yes - a.yes || a.pseudonym.localeCompare(b.pseudonym, 'ru'));
   return rows;
 }
 
-// Сводная таблица «Сколько Да на каждого»
+// Сводный рейтинг: отдельная таблица рейтинга под каждым Да/Нет вопросом.
+// Сумма «Да» по разным вопросам не имеет смысла, когда вопросы про разные качества —
+// поэтому показываем рейтинг по каждому вопросу отдельно.
 function renderV4AggregateTable(subjects, questions, agg) {
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   if (yesnoQuestions.length === 0) return '';
 
-  const rows = computeV4Aggregate(subjects, questions, agg);
-
   let html = '<div class="card"><h3 style="margin-top:0;">Сводный рейтинг</h3>';
-  html += '<p style="color:var(--muted); font-size:13px; margin-top:0;">Сумма всех ответов «Да» по всем Да/Нет вопросам, по убыванию.</p>';
-  html += '<div class="vote-table-wrapper"><table class="vote-table">';
-  html += '<thead><tr><th>Участник</th><th>Всего «Да»</th><th>Всего «Нет»</th></tr></thead><tbody>';
-  rows.forEach(r => {
-    html += '<tr>';
-    html += `<td class="subject-name">${escapeHtml(r.pseudonym)}</td>`;
-    html += `<td><strong>${r.yes}</strong></td>`;
-    html += `<td>${r.no}</td>`;
-    html += '</tr>';
+  html += '<p style="color:var(--muted); font-size:13px; margin-top:0;">Рейтинг участников по каждому Да/Нет вопросу, отсортированный по количеству «Да» по убыванию.</p>';
+
+  yesnoQuestions.forEach(q => {
+    const rows = computeV4AggregateByQuestion(subjects, q, agg);
+    html += `<h4 style="margin:16px 0 8px 0;">${escapeHtml(q.text)}</h4>`;
+    html += '<div class="vote-table-wrapper"><table class="vote-table">';
+    html += '<thead><tr><th>Участник</th><th>«Да»</th><th>«Нет»</th></tr></thead><tbody>';
+    rows.forEach(r => {
+      const isNoVotes = (r.yes + r.no) === 0;
+      html += '<tr>';
+      html += `<td class="subject-name">${escapeHtml(r.pseudonym)}</td>`;
+      if (isNoVotes) {
+        html += '<td colspan="2" style="color:var(--muted);">—</td>';
+      } else {
+        html += `<td><strong>${r.yes}</strong></td>`;
+        html += `<td>${r.no}</td>`;
+      }
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
   });
-  html += '</tbody></table></div></div>';
+
+  html += '</div>';
   return html;
 }
 
@@ -4264,11 +4274,19 @@ function buildV4ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
   const visibleSubjects = subjects.filter(rowFilterFn);
 
   if (showAggregate && yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
-    lines.push('Сводный рейтинг (всего «Да»)');
+    lines.push('Сводный рейтинг');
     lines.push('-'.repeat(30));
-    const rows = computeV4Aggregate(visibleSubjects, questions, agg);
-    rows.forEach(r => {
-      lines.push(`  ${r.pseudonym}: Да ${r.yes} / Нет ${r.no}`);
+    yesnoQuestions.forEach(q => {
+      lines.push('');
+      lines.push(q.text);
+      const rows = computeV4AggregateByQuestion(visibleSubjects, q, agg);
+      rows.forEach(r => {
+        if ((r.yes + r.no) === 0) {
+          lines.push(`  ${r.pseudonym}: —`);
+        } else {
+          lines.push(`  ${r.pseudonym}: Да ${r.yes} / Нет ${r.no}`);
+        }
+      });
     });
     lines.push('');
   }
@@ -4332,14 +4350,22 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
 
   if (showAggregate && yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
     html += '<h3 style="margin:16px 0 6px 0;">Сводный рейтинг</h3>';
-    const rows = computeV4Aggregate(visibleSubjects, questions, agg);
-    html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
-    html += `<th style="${thStyle}">Участник</th><th style="${thStyle}">Всего «Да»</th><th style="${thStyle}">Всего «Нет»</th>`;
-    html += '</tr></thead><tbody>';
-    rows.forEach(r => {
-      html += `<tr><td style="${tdStyle}"><strong>${escapeForHtml(r.pseudonym)}</strong></td><td style="${tdStyle}"><strong>${r.yes}</strong></td><td style="${tdStyle}">${r.no}</td></tr>`;
+    yesnoQuestions.forEach(q => {
+      html += `<h4 style="margin:12px 0 4px 0;">${escapeForHtml(q.text)}</h4>`;
+      const rows = computeV4AggregateByQuestion(visibleSubjects, q, agg);
+      html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
+      html += `<th style="${thStyle}">Участник</th><th style="${thStyle}">«Да»</th><th style="${thStyle}">«Нет»</th>`;
+      html += '</tr></thead><tbody>';
+      rows.forEach(r => {
+        const isNoVotes = (r.yes + r.no) === 0;
+        if (isNoVotes) {
+          html += `<tr><td style="${tdStyle}"><strong>${escapeForHtml(r.pseudonym)}</strong></td><td style="${tdStyle} color:#888;" colspan="2">—</td></tr>`;
+        } else {
+          html += `<tr><td style="${tdStyle}"><strong>${escapeForHtml(r.pseudonym)}</strong></td><td style="${tdStyle}"><strong>${r.yes}</strong></td><td style="${tdStyle}">${r.no}</td></tr>`;
+        }
+      });
+      html += '</tbody></table>';
     });
-    html += '</tbody></table>';
   }
 
   if (yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
