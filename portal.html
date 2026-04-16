@@ -633,14 +633,14 @@
         <div style="flex:1;">
           <button class="link-btn" id="btn-back-from-group">← Назад к списку</button>
           <h1 style="margin-top:8px;">Настройки группы</h1>
-          <p>Управление участниками и ролями</p>
+          <p id="group-screen-subtitle">Управление участниками и ролями</p>
         </div>
       </div>
     </div>
 
     <div class="card">
       <h2 style="margin-top:0;">Участники группы</h2>
-      <p style="color:var(--muted); font-size:13px;">Главный организатор всегда один. Назначать и снимать со-организаторов могут как главный, так и сами со-организаторы. Передать главную роль другому участнику может только главный организатор.</p>
+      <p id="group-members-hint" style="color:var(--muted); font-size:13px;">Главный организатор всегда один. Назначать и снимать со-организаторов могут как главный, так и сами со-организаторы. Передать главную роль другому участнику может только главный организатор.</p>
       <div id="group-members-list">
         <div class="empty-state">Загрузка…</div>
       </div>
@@ -1770,7 +1770,10 @@ function renderDashboard() {
 
   const isOrganizer = (role === 'main_organizer' || role === 'co_organizer');
   document.getElementById('btn-new-survey').classList.toggle('hidden', !isOrganizer);
-  document.getElementById('btn-group-settings').classList.toggle('hidden', !isOrganizer);
+  // Настройки группы теперь видны всем ролям:
+  // организатор управляет участниками и псевдонимами, participant видит состав
+  // группы в режиме «только чтение» + может покинуть группу через блок «Моё участие».
+  document.getElementById('btn-group-settings').classList.remove('hidden');
 
   showScreen('dashboard');
   loadSurveys();
@@ -4660,6 +4663,20 @@ async function openGroupSettings() {
   console.log('[group] open settings');
   stopPolling();
   showScreen('loading');
+
+  // Подменяем тексты заголовков в зависимости от роли
+  const myRole = currentProfile?.role;
+  const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
+  const subtitle = document.getElementById('group-screen-subtitle');
+  const membersHint = document.getElementById('group-members-hint');
+  if (isOrganizer) {
+    subtitle.textContent = 'Управление участниками и ролями';
+    membersHint.textContent = 'Главный организатор всегда один. Назначать и снимать со-организаторов могут как главный, так и сами со-организаторы. Передать главную роль другому участнику может только главный организатор.';
+  } else {
+    subtitle.textContent = 'Состав группы и управление своим участием';
+    membersHint.textContent = 'Состав группы: кто в ней состоит, в каких ролях. Управлять участниками может только организатор.';
+  }
+
   await loadGroupMembers();
   renderGroupMembers();
   await loadPseudonymsAndExcluded();
@@ -4856,6 +4873,13 @@ function renderExcludedBlock() {
   const container = document.getElementById('excluded-members-list');
   const myRole = currentProfile?.role;
   const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
+
+  // Карточка «Исключённые из группы» — только для организаторов.
+  // Participant не должен видеть, кого исключали (это внутренняя кухня группы).
+  if (!isOrganizer) {
+    card.classList.add('hidden');
+    return;
+  }
 
   if (!excludedMembers || excludedMembers.length === 0) {
     card.classList.add('hidden');
