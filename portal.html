@@ -672,6 +672,16 @@
         <div class="empty-state">Загрузка…</div>
       </div>
     </div>
+
+    <div id="my-membership-card" class="card">
+      <h2 style="margin-top:0;">Моё участие в группе</h2>
+      <p style="color:var(--muted); font-size:13px;">Вы можете покинуть эту группу самостоятельно. Ваш псевдоним останется закреплённым за вами — другой участник его не сможет занять. Ваши голоса в архивных опросах сохранятся. Если передумаете — организатор сможет восстановить ваше участие через блок «Исключённые из группы».</p>
+      <div id="my-membership-error" class="error hidden"></div>
+      <div id="my-membership-info" class="info hidden"></div>
+      <div id="my-membership-actions">
+        <div class="empty-state">Загрузка…</div>
+      </div>
+    </div>
   </div>
 
   <!-- ============ ЭКРАН ОПРОСА ============ -->
@@ -4655,6 +4665,7 @@ async function openGroupSettings() {
   await loadPseudonymsAndExcluded();
   renderPseudonymsBlock();
   renderExcludedBlock();
+  renderMyMembershipBlock();
   showScreen('group');
 }
 
@@ -4736,7 +4747,7 @@ async function loadPseudonymsAndExcluded() {
   //    и для отдельного списка исключённых
   const { data: allMembs, error: mErr } = await sb
     .from('memberships')
-    .select('user_id, pseudonym, active')
+    .select('user_id, pseudonym, active, excluded_at')
     .eq('group_id', currentGroupId);
   if (mErr) {
     console.error('[group-ps] memberships error:', mErr);
@@ -4774,8 +4785,15 @@ async function loadPseudonymsAndExcluded() {
   excludedMembers = excludedRaw.map(m => ({
     id: m.user_id,
     pseudonym: m.pseudonym,
-    email: emailById[m.user_id] || null
-  })).sort((a, b) => (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru'));
+    email: emailById[m.user_id] || null,
+    excluded_at: m.excluded_at || null
+  })).sort((a, b) => {
+    // Сначала с известной датой по убыванию (свежие вверху), потом без даты
+    if (a.excluded_at && b.excluded_at) return b.excluded_at.localeCompare(a.excluded_at);
+    if (a.excluded_at) return -1;
+    if (b.excluded_at) return 1;
+    return (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru');
+  });
 
   console.log('[group-ps] loaded: pseudonyms=' + groupPseudonyms.length + ', excluded=' + excludedMembers.length);
 }
@@ -4846,14 +4864,24 @@ function renderExcludedBlock() {
   card.classList.remove('hidden');
 
   let html = '<div class="members-table-wrapper"><table class="members-table">';
-  html += '<thead><tr><th>Псевдоним</th><th>Email</th>';
+  html += '<thead><tr><th>Псевдоним</th><th>Email</th><th>Исключён</th>';
   if (isOrganizer) html += '<th>Действия</th>';
   html += '</tr></thead><tbody>';
 
   excludedMembers.forEach(m => {
+    let excludedStr = '<span style="color:var(--muted);">—</span>';
+    if (m.excluded_at) {
+      const d = new Date(m.excluded_at);
+      // Формат: «16 апреля 2026, 14:23» — локаль ru-RU
+      excludedStr = d.toLocaleString('ru-RU', {
+        day: 'numeric', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
     html += '<tr>';
     html += `<td><strong>${escapeHtml(m.pseudonym || '—')}</strong></td>`;
     html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(m.email || '—')}</td>`;
+    html += `<td style="font-size:13px; color:var(--muted);">${excludedStr}</td>`;
     if (isOrganizer) {
       html += `<td><button class="secondary small" data-action="restore" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Восстановить</button></td>`;
     }
@@ -4869,6 +4897,97 @@ function renderExcludedBlock() {
       restoreMember(id, name);
     });
   });
+}
+
+// Блок «Моё участие в группе» — самостоятельный выход участника/со-организатора.
+function renderMyMembershipBlock() {
+  const container = document.getElementById('my-membership-actions');
+  if (!container) return;
+  const myRole = currentProfile?.role;
+  const myPseudonym = currentProfile?.pseudonym || '';
+
+  // Сбрасываем статусы сообщений при перерисовке
+  const errBox = document.getElementById('my-membership-error');
+  const infoBox = document.getElementById('my-membership-info');
+  if (errBox) errBox.classList.add('hidden');
+  if (infoBox) infoBox.classList.add('hidden');
+
+  if (myRole === 'main_organizer') {
+    // Главный не может выйти напрямую — сначала должен передать роль
+    container.innerHTML = '<div style="padding:12px; background:#fff8e1; border:1px solid #ffe082; border-radius:6px; font-size:13px;">' +
+      '<strong>Вы главный организатор этой группы.</strong> Покинуть группу напрямую нельзя — сначала передайте роль главного организатора другому участнику через блок «Участники группы» выше. После передачи роли вы станете обычным участником и сможете выйти из группы.' +
+      '</div>';
+    return;
+  }
+
+  // Participant или co_organizer — показываем кнопку
+  const roleLabel = myRole === 'co_organizer' ? 'со-организатор' : 'участник';
+  let html = '<p style="font-size:14px; margin-top:0;">Ваш псевдоним в этой группе: <strong>' + escapeHtml(myPseudonym) + '</strong> (' + roleLabel + ').</p>';
+  html += '<button class="danger small" id="btn-leave-group">Покинуть группу</button>';
+  container.innerHTML = html;
+
+  const btn = document.getElementById('btn-leave-group');
+  if (btn) btn.addEventListener('click', doLeaveGroup);
+}
+
+async function doLeaveGroup() {
+  const errBox = document.getElementById('my-membership-error');
+  const infoBox = document.getElementById('my-membership-info');
+  errBox.classList.add('hidden');
+  infoBox.classList.add('hidden');
+
+  const groupId = currentGroupId;
+  const groupLabel = groupId; // показывать идентификатор группы в подтверждении
+  const myPseudonym = currentProfile?.pseudonym || '';
+
+  const confirmMsg = 'Вы уверены, что хотите покинуть группу «' + groupLabel + '»?\n\n' +
+    'Ваш псевдоним «' + myPseudonym + '» останется закреплённым за вами — другой участник его не сможет занять. ' +
+    'Ваши голоса в архивных опросах сохранятся. ' +
+    'Если передумаете, организатор сможет восстановить ваше участие через блок «Исключённые из группы».';
+  if (!confirm(confirmMsg)) return;
+
+  console.log('[group] leaving group ' + groupId);
+  const { error } = await sb.rpc('leave_group', { gid: groupId });
+  if (error) {
+    console.error('[group] leave error:', error);
+    errBox.textContent = 'Ошибка: ' + error.message;
+    errBox.classList.remove('hidden');
+    errBox.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+  console.log('[group] left group ' + groupId);
+
+  // Находим другую активную группу для переключения. Проще всего —
+  // перезагрузить список групп и переключиться на первую из оставшихся.
+  const { data: otherGroups, error: listErr } = await sb
+    .from('memberships')
+    .select('group_id')
+    .eq('user_id', currentUser.id)
+    .eq('active', true);
+
+  if (listErr) {
+    console.error('[group] error loading other groups:', listErr);
+    alert('Вы покинули группу, но не удалось загрузить список оставшихся групп. Страница будет перезагружена.');
+    window.location.reload();
+    return;
+  }
+
+  if (!otherGroups || otherGroups.length === 0) {
+    // Других групп нет — разлогиниваем, пользователь вернётся к экрану входа
+    alert('Вы покинули группу «' + groupLabel + '». У вас не осталось активных групп в портале — будет выполнен выход из аккаунта.');
+    await hardLocalLogout();
+    showScreen('login');
+    return;
+  }
+
+  // Переключаемся на первую оставшуюся группу
+  const nextGroupId = otherGroups[0].group_id;
+  console.log('[group] switching to ' + nextGroupId);
+  localStorage.setItem(LS_CURRENT_GROUP_KEY, nextGroupId);
+  currentGroupId = nextGroupId;
+  currentProfile = await loadProfile(currentUser.id);
+  alert('Вы покинули группу «' + groupLabel + '». Переключились на группу «' + nextGroupId + '».');
+  backFromGroup();
 }
 
 async function deletePseudonym(name) {
@@ -5263,7 +5382,11 @@ function renderV4SubjectsGrid() {
 function updateV1ToneVisibility() {
   const useTone = document.getElementById('ns-v1-use-tone').checked;
   document.querySelectorAll('#ns-v1-questions-list [data-tone-block]').forEach(el => {
-    el.style.display = useTone ? 'flex' : 'none';
+    el.style.display = useTone ? 'block' : 'none';
+    // Когда тональность выключают — сбрасываем выбор, чтобы не «залипал» старый
+    if (!useTone) {
+      el.querySelectorAll('input[data-field="tone"]').forEach(r => { r.checked = false; });
+    }
   });
 }
 
@@ -5284,12 +5407,17 @@ function addV1Question() {
         <label>Количество имён:
           <input type="number" data-field="count" min="1" max="${maxCount}" value="1" style="width:60px;">
         </label>
-        <label data-tone-block style="display:none;">Тональность:
-          <select data-field="tone">
-            <option value="positive">Сближение</option>
-            <option value="negative">Отторжение</option>
-          </select>
-        </label>
+        <div data-tone-block style="display:none; margin-top:8px; padding:8px 10px; background:#fff8e1; border:1px solid #ffe082; border-radius:6px;">
+          <div style="font-size:13px; font-weight:500; margin-bottom:6px;">Тональность вопроса — обязательно выберите:</div>
+          <label style="display:inline-flex; align-items:center; margin-right:16px; cursor:pointer;">
+            <input type="radio" data-field="tone" value="positive" style="width:auto; margin:0 6px 0 0;">
+            <span>Сближение <span style="color:var(--muted); font-size:12px;">(положительный выбор)</span></span>
+          </label>
+          <label style="display:inline-flex; align-items:center; cursor:pointer;">
+            <input type="radio" data-field="tone" value="negative" style="width:auto; margin:0 6px 0 0;">
+            <span>Отторжение <span style="color:var(--muted); font-size:12px;">(отрицательный выбор)</span></span>
+          </label>
+        </div>
       </div>
       <div style="margin-top:8px; padding:8px; background:#fff; border:1px dashed var(--border); border-radius:6px;">
         <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">Под-вопросы (необязательно) — текстовые поля, на которые участник ответит про каждое выбранное имя:</div>
@@ -5311,7 +5439,7 @@ function addV1Question() {
   item.querySelector('[data-add-subq]').addEventListener('click', () => addV1SubQuestion(item));
   // Применить текущее состояние тональности
   const useTone = document.getElementById('ns-v1-use-tone').checked;
-  item.querySelector('[data-tone-block]').style.display = useTone ? 'flex' : 'none';
+  item.querySelector('[data-tone-block]').style.display = useTone ? 'block' : 'none';
 }
 
 function addV1SubQuestion(questionItem) {
@@ -5456,6 +5584,12 @@ function collectFormData() {
     const useTone = document.getElementById('ns-v1-use-tone').checked;
     const maxCount = allPseudonyms.length || 10;
 
+    // Сброс подсветки ошибок с прошлой попытки сохранения
+    document.querySelectorAll('#ns-v1-questions-list [data-tone-block]').forEach(el => {
+      el.style.borderColor = '#ffe082';
+      el.style.background = '#fff8e1';
+    });
+
     const questionItems = document.querySelectorAll('#ns-v1-questions-list .question-item');
     if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос' };
 
@@ -5498,7 +5632,18 @@ function collectFormData() {
       }
 
       if (useTone) {
-        q.tone = item.querySelector('[data-field="tone"]').value;
+        const toneInput = item.querySelector('input[data-field="tone"]:checked');
+        if (!toneInput) {
+          // Подсвечиваем проблемный вопрос, прокручиваем к нему
+          const toneBlock = item.querySelector('[data-tone-block]');
+          if (toneBlock) {
+            toneBlock.style.borderColor = '#d32f2f';
+            toneBlock.style.background = '#ffebee';
+            toneBlock.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+          return { error: 'В вопросе ' + qNum + ' выберите тональность (Сближение или Отторжение)' };
+        }
+        q.tone = toneInput.value;
       }
 
       questions.push(q);
