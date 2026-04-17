@@ -1669,6 +1669,12 @@ async function switchGroup(gid) {
     currentProfile.group_id = target.group_id;
   }
 
+  // Сбрасываем кеши, привязанные к старой группе — иначе при открытии опроса
+  // в новой группе мы бы показали состав прошлой группы.
+  allGroupParticipants = [];
+  allGroupParticipantsV3 = [];
+  allPseudonyms = [];
+
   console.log('[group-switch] switched to ' + currentGroupId + ' (' + currentGroupName + '), role=' + target.role);
 
   // Перерисовать дашборд целиком — это обновит шапку, флаги isOrganizer,
@@ -2045,12 +2051,11 @@ async function openSurvey(id) {
     .maybeSingle();
   currentOwnResponse = ownResp || null;
 
-  // Загружаем список участников группы
-  if (allGroupParticipants.length === 0) {
-    allGroupParticipants = await loadGroupParticipants();
-  }
+  // Загружаем список участников группы — всегда заново, не из кеша.
+  // Если кто-то только что добавлен/исключён, форма должна это учитывать.
+  allGroupParticipants = await loadGroupParticipants();
 
-  // Для Варианта 3 и 4 нужен отдельный список с user_id
+  // Для Варианта 3 и 4 нужен отдельный список с user_id — тоже свежий
   if (survey.type === 'variant_3' || survey.type === 'variant_4') {
     allGroupParticipantsV3 = await loadGroupParticipantsV3();
   }
