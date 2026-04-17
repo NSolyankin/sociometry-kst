@@ -747,7 +747,7 @@
             <summary style="cursor:pointer; font-weight:500;">7. Повторение опросов и черновики</summary>
             <div style="margin-top:10px; font-size:14px; line-height:1.6;">
               <p style="margin-top:0;"><strong>Повторить опрос с теми же настройками.</strong> Если раз в месяц/квартал проводится один и тот же опрос — не нужно каждый раз создавать его с нуля. У архивного опроса в секции «Архив» есть кнопка <strong>«📋 Копия»</strong>. По клику открывается форма создания с уже заполненным типом, всеми настройками и вопросами исходного опроса. Название ставится «Копия: <название>» — переименуйте его, сверьтесь с вопросами, при необходимости отредактируйте, и сохраняйте как новый опрос. Старый опрос не меняется, его архив остаётся как есть.</p>
-              <p style="margin-bottom:0;"><strong>Черновик ответа у участника.</strong> В опросах Варианта 2 (универсальная анкета) может быть много текстовых полей. Если участник случайно закроет вкладку во время заполнения — ничего не пропадёт: его черновик автоматически сохраняется локально (в браузере, на его устройстве). При повторном открытии того же опроса он увидит баннер «У вас есть незавершённый черновик» с кнопками «Продолжить» или «Начать заново». После успешной отправки ответа черновик автоматически удаляется. Важно: черновик хранится в браузере конкретного устройства — если участник переключится на другой браузер или другое устройство, черновика там не будет. Поэтому лучше заканчивать заполнение там же, где начал.</p>
+              <p style="margin-bottom:0;"><strong>Черновик ответа у участника.</strong> Во время заполнения опроса (любого — и Варианта 1, и Варианта 2) ответы автоматически сохраняются локально в браузере участника. Если вкладка случайно закроется или пропадёт интернет — ничего не пропадёт. При повторном открытии того же опроса человек увидит баннер «У вас есть незавершённый черновик» с кнопками «Продолжить» или «Начать заново». После успешной отправки ответа черновик автоматически удаляется. Важно: черновик хранится в браузере конкретного устройства — если участник переключится на другой браузер или другое устройство, черновика там не будет. Поэтому лучше заканчивать заполнение там же, где начал.</p>
             </div>
           </details>
         </div>
@@ -2719,7 +2719,19 @@ function renderVoteFormV1() {
     return;
   }
 
+  // Проверяем, есть ли незавершённый черновик по этому опросу у этого юзера
+  const existingDraft = loadDraftV1(s.id, currentUser.id);
+
   let html = '<div class="card">';
+  if (existingDraft) {
+    html += `<div id="draft-banner" class="info" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between;">
+      <div><strong>У вас есть незавершённый черновик</strong> от ${formatDraftTime(existingDraft.savedAt)}. Продолжить заполнение или начать с нуля?</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="secondary small" id="btn-draft-continue">Продолжить</button>
+        <button class="secondary small" id="btn-draft-discard">Начать заново</button>
+      </div>
+    </div>`;
+  }
   html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя.</div>';
   html += '<div id="vote-error" class="error hidden"></div>';
 
@@ -2769,6 +2781,26 @@ function renderVoteFormV1() {
 
   document.getElementById('btn-vote-cancel').addEventListener('click', backToList);
   document.getElementById('btn-vote-submit').addEventListener('click', submitVoteV1);
+
+  // Автосохранение черновика на изменение любого поля (с debounce)
+  body.querySelectorAll('.v1-slot select, .v1-slot textarea').forEach(inp => {
+    inp.addEventListener('input', scheduleDraftSaveV1);
+    inp.addEventListener('change', scheduleDraftSaveV1);
+  });
+
+  // Обработчики баннера черновика
+  if (existingDraft) {
+    document.getElementById('btn-draft-continue').addEventListener('click', () => {
+      applyDraftV1(existingDraft);
+      const banner = document.getElementById('draft-banner');
+      if (banner) banner.remove();
+    });
+    document.getElementById('btn-draft-discard').addEventListener('click', () => {
+      deleteDraftV1(s.id, currentUser.id);
+      const banner = document.getElementById('draft-banner');
+      if (banner) banner.remove();
+    });
+  }
 }
 
 function pluralNames(n) {
@@ -2882,6 +2914,8 @@ async function submitVoteV1() {
     return;
   }
   console.log('[vote-v1] saved');
+  // Успешная отправка — удаляем локальный черновик (если был)
+  deleteDraftV1(currentSurvey.id, currentUser.id);
   // Перезагружаем свой ответ
   const { data: ownResp } = await sb
     .from('responses')
@@ -4274,6 +4308,108 @@ function getV4Subjects() {
   }
 
   return subjects;
+}
+
+// ============================================================
+// ЧЕРНОВИКИ V1 — автосохранение имён и ответов на под-вопросы
+// ============================================================
+// Логика идентична V4, но структура данных другая: в V1 у каждого вопроса
+// есть слоты, в каждом слоте имя + ответы на под-вопросы.
+// Ключ формата 'draft-v1-<surveyId>-<userId>' — отдельно от V4, чтобы
+// случайно не пересечься.
+
+function draftKeyV1(surveyId, userId) {
+  return 'draft-v1-' + surveyId + '-' + userId;
+}
+
+function saveDraftV1() {
+  if (!currentSurvey || !currentUser) return;
+  const questions = currentSurvey.settings?.questions || [];
+  const answers = {};
+  questions.forEach(q => {
+    const qBlock = document.querySelector(`.v1-question-block[data-qid="${q.id}"]`);
+    if (!qBlock) return;
+    const slots = qBlock.querySelectorAll('.v1-slot');
+    const slotArr = [];
+    slots.forEach(slot => {
+      const nameSel = slot.querySelector('select[data-field="name"]');
+      const name = nameSel ? nameSel.value : '';
+      const subs = {};
+      slot.querySelectorAll('textarea[data-field="sub"]').forEach(ta => {
+        const sqid = ta.dataset.sqid;
+        const val = ta.value;
+        if (val !== '') subs[sqid] = val;
+      });
+      slotArr.push({ name, subs });
+    });
+    answers[q.id] = slotArr;
+  });
+  const draft = { answers, savedAt: Date.now() };
+  try {
+    localStorage.setItem(draftKeyV1(currentSurvey.id, currentUser.id), JSON.stringify(draft));
+    console.log('[draft] v1 saved for survey ' + currentSurvey.id);
+  } catch (e) {
+    console.warn('[draft] v1 save failed:', e);
+  }
+}
+
+function loadDraftV1(surveyId, userId) {
+  try {
+    const raw = localStorage.getItem(draftKeyV1(surveyId, userId));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d !== 'object' || !d.answers) return null;
+    return d;
+  } catch (e) {
+    console.warn('[draft] v1 load failed:', e);
+    return null;
+  }
+}
+
+function deleteDraftV1(surveyId, userId) {
+  try {
+    localStorage.removeItem(draftKeyV1(surveyId, userId));
+    console.log('[draft] v1 deleted for survey ' + surveyId);
+  } catch (e) {
+    console.warn('[draft] v1 delete failed:', e);
+  }
+}
+
+function applyDraftV1(draft) {
+  if (!draft || !draft.answers) return;
+  const questions = currentSurvey.settings?.questions || [];
+  const candidates = getV1Candidates();
+  const candSet = new Set(candidates);
+  questions.forEach(q => {
+    const slotArr = draft.answers[q.id] || [];
+    const qBlock = document.querySelector(`.v1-question-block[data-qid="${q.id}"]`);
+    if (!qBlock) return;
+    const slots = qBlock.querySelectorAll('.v1-slot');
+    slots.forEach((slot, idx) => {
+      const saved = slotArr[idx];
+      if (!saved) return;
+      const nameSel = slot.querySelector('select[data-field="name"]');
+      // Проверяем, что сохранённое имя всё ещё в списке допустимых (вдруг кого-то исключили)
+      if (nameSel && saved.name && candSet.has(saved.name)) {
+        nameSel.value = saved.name;
+      }
+      const subs = saved.subs || {};
+      slot.querySelectorAll('textarea[data-field="sub"]').forEach(ta => {
+        const sqid = ta.dataset.sqid;
+        if (subs[sqid] !== undefined) ta.value = subs[sqid];
+      });
+    });
+  });
+  console.log('[draft] v1 applied');
+}
+
+let draftSaveTimerV1 = null;
+function scheduleDraftSaveV1() {
+  if (draftSaveTimerV1) clearTimeout(draftSaveTimerV1);
+  draftSaveTimerV1 = setTimeout(() => {
+    draftSaveTimerV1 = null;
+    saveDraftV1();
+  }, 500);
 }
 
 // ============================================================
