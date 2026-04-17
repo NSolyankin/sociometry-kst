@@ -1344,14 +1344,24 @@ async function loadSurveys() {
   }
   console.log('[surveys] loaded ' + data.length);
 
-  // Общее число участников-participant'ов в группе (для прогресс-бара явки организатору)
-  const { count: totalParticipants } = await sb
-    .from('memberships')
-    .select('id', { count: 'exact', head: true })
-    .eq('group_id', currentGroupId)
-    .eq('active', true)
-    .eq('role', 'participant');
-  const totalP = totalParticipants || 0;
+  // Общее число участников-participant'ов в группе (для прогресс-бара явки организатору).
+  // Обёрнуто в try/catch — если эта вспомогательная фича падает, дашборд всё равно рендерится.
+  let totalP = 0;
+  try {
+    const { count, error: tErr } = await sb
+      .from('memberships')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', currentGroupId)
+      .eq('active', true)
+      .eq('role', 'participant');
+    if (tErr) {
+      console.warn('[surveys] totalParticipants error:', tErr);
+    } else {
+      totalP = count || 0;
+    }
+  } catch (e) {
+    console.warn('[surveys] totalParticipants exception:', e);
+  }
 
   // Идентификатор текущего пользователя — для флага «я проголосовал»
   const myId = currentUser?.id;
@@ -1360,19 +1370,28 @@ async function loadSurveys() {
   const voted = {};
   for (const s of data) {
     if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3' && s.type !== 'variant_4') continue;
-    const { count } = await sb
-      .from('responses')
-      .select('id', { count: 'exact', head: true })
-      .eq('survey_id', s.id);
-    counts[s.id] = count || 0;
-
-    if (myId) {
-      const { count: myCount } = await sb
+    try {
+      const { count } = await sb
         .from('responses')
         .select('id', { count: 'exact', head: true })
-        .eq('survey_id', s.id)
-        .eq('user_id', myId);
-      voted[s.id] = (myCount || 0) > 0;
+        .eq('survey_id', s.id);
+      counts[s.id] = count || 0;
+    } catch (e) {
+      console.warn('[surveys] count exception for ' + s.id + ':', e);
+      counts[s.id] = 0;
+    }
+
+    if (myId) {
+      try {
+        const { count: myCount, error: mErr } = await sb
+          .from('responses')
+          .select('id', { count: 'exact', head: true })
+          .eq('survey_id', s.id)
+          .eq('user_id', myId);
+        if (!mErr) voted[s.id] = (myCount || 0) > 0;
+      } catch (e) {
+        console.warn('[surveys] myVoted exception for ' + s.id + ':', e);
+      }
     }
   }
   renderSurveys(data, counts, voted, totalP);
