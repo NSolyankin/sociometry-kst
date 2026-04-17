@@ -677,12 +677,13 @@
             <summary style="cursor:pointer; font-weight:500;">1. Как провести опрос</summary>
             <div style="margin-top:10px; font-size:14px; line-height:1.6;">
               <ol style="padding-left:20px; margin:0;">
-                <li><strong>Создать опрос.</strong> Кнопка «+ Новый опрос» на дашборде. Выбрать тип (Вариант 1 — социометрический выбор, Вариант 2 — универсальная анкета), сформулировать вопросы, настроить видимость результатов.</li>
-                <li><strong>Сообщить участникам.</strong> Скажите им в общем чате или лично, что появился новый опрос в портале. Они зайдут, залогинятся и увидят активный опрос на дашборде.</li>
-                <li><strong>Отслеживать явку.</strong> Откройте опрос — на экране активного опроса вверху блок «Явка»: проголосовали / ещё не проголосовали. По мере голосования список обновляется (обновите страницу F5).</li>
-                <li><strong>Архивировать.</strong> Когда все проголосовали (или истёк срок) — кнопка «Архивировать» на экране опроса. После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам.</li>
+                <li><strong>Создать опрос.</strong> Кнопка «+ Новый опрос» на дашборде. Выбрать тип (Вариант 1 — социометрический выбор, Вариант 2 — универсальная анкета), сформулировать вопросы, настроить видимость результатов. Можно указать <strong>дедлайн</strong> — дату, после которой у опроса появится пометка «Просрочен» (голосование при этом не блокируется, только визуальный сигнал).</li>
+                <li><strong>Сообщить участникам.</strong> Кнопка <strong>«📋 Ссылка»</strong> на карточке активного опроса копирует ссылку на портал в буфер — удобно сразу вставить в общий чат или личные сообщения.</li>
+                <li><strong>Отслеживать явку.</strong> На карточке активного опроса прямо на дашборде виден прогресс-бар <strong>«Явка: X/Y»</strong> — сколько participant'ов уже проголосовало. Обновляется каждые 10 секунд автоматически (polling). Если нужно подробнее — откройте опрос, там список «Проголосовали / Ещё не проголосовали» с псевдонимами.</li>
+                <li><strong>Архивировать.</strong> Когда все проголосовали (или истёк срок) — кнопка «Архивировать» на карточке или на экране опроса. После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам.</li>
                 <li><strong>Посмотреть результаты.</strong> После архивации экран опроса покажет сводные таблицы. Можно экспортировать: «🖨️ Печать / Сохранить в PDF» или «📋 Скопировать как текст» (при вставке в Word получится таблица с границами).</li>
               </ol>
+              <p style="margin-top:10px; margin-bottom:0; color:var(--muted); font-size:13px;">Сам participant у себя на дашборде видит зелёный индикатор <strong>«✓ Вы проголосовали»</strong> рядом с названием — чтобы не зайти случайно голосовать дважды.</p>
             </div>
           </details>
 
@@ -739,6 +740,14 @@
               <p><strong>Нужно удалить опрос полностью.</strong> Откройте опрос, внизу кнопка «Удалить опрос» (красная). Опрос и все ответы удалятся безвозвратно. Используйте только если опрос был создан по ошибке — архивные опросы лучше сохранять.</p>
               <p><strong>Нужно создать ещё одну группу.</strong> В переключателе групп (в шапке, там где сейчас стоит название вашей группы) пункт «+ Создать новую группу». Видите этот пункт только если вы главный организатор хотя бы одной группы. При создании вы автоматически становитесь главным новой группы — потом можете передать роль.</p>
               <p style="margin-bottom:0;"><strong>Хочу выйти из группы сам.</strong> Главный организатор не может выйти напрямую — сначала передайте роль другому. Со-организатор и participant могут выйти: внизу этого экрана блок «Моё участие в группе», кнопка «Покинуть группу».</p>
+            </div>
+          </details>
+
+          <details style="margin-top:8px; border-left:3px solid var(--accent); padding:8px 12px; background:#fafbfc; border-radius:4px;">
+            <summary style="cursor:pointer; font-weight:500;">7. Повторение опросов и черновики</summary>
+            <div style="margin-top:10px; font-size:14px; line-height:1.6;">
+              <p style="margin-top:0;"><strong>Повторить опрос с теми же настройками.</strong> Если раз в месяц/квартал проводится один и тот же опрос — не нужно каждый раз создавать его с нуля. У архивного опроса в секции «Архив» есть кнопка <strong>«📋 Копия»</strong>. По клику открывается форма создания с уже заполненным типом, всеми настройками и вопросами исходного опроса. Название ставится «Копия: <название>» — переименуйте его, сверьтесь с вопросами, при необходимости отредактируйте, и сохраняйте как новый опрос. Старый опрос не меняется, его архив остаётся как есть.</p>
+              <p style="margin-bottom:0;"><strong>Черновик ответа у участника.</strong> В опросах Варианта 2 (универсальная анкета) может быть много текстовых полей. Если участник случайно закроет вкладку во время заполнения — ничего не пропадёт: его черновик автоматически сохраняется локально (в браузере, на его устройстве). При повторном открытии того же опроса он увидит баннер «У вас есть незавершённый черновик» с кнопками «Продолжить» или «Начать заново». После успешной отправки ответа черновик автоматически удаляется. Важно: черновик хранится в браузере конкретного устройства — если участник переключится на другой браузер или другое устройство, черновика там не будет. Поэтому лучше заканчивать заполнение там же, где начал.</p>
             </div>
           </details>
         </div>
@@ -1433,6 +1442,7 @@ function renderSurveys(surveys, counts, voted, totalParticipants) {
       const id = btn.dataset.id;
       if (action === 'archive') archiveSurvey(id);
       else if (action === 'delete') deleteSurvey(id);
+      else if (action === 'duplicate') duplicateSurvey(id);
       else if (action === 'copy-link') copySurveyLink(btn);
     });
   });
@@ -1495,6 +1505,10 @@ function renderSurveyItem(s, count, isOrganizer, iVoted, totalParticipants) {
   if (isOrganizer) {
     if (isActive) {
       actions += `<button class="secondary small" data-action="archive" data-id="${s.id}">Архивировать</button>`;
+    } else {
+      // Кнопка «Копия» — только для архивных опросов. Копировать имеет смысл
+      // именно отработанные — для повторного запуска того же опроса в следующий раз.
+      actions += `<button class="secondary small" data-action="duplicate" data-id="${s.id}" title="Создать новый опрос с теми же настройками">📋 Копия</button>`;
     }
     actions += `<button class="danger small" data-action="delete" data-id="${s.id}">Удалить</button>`;
   }
@@ -1573,6 +1587,127 @@ async function deleteSurvey(id) {
     return;
   }
   loadSurveys();
+}
+
+// Создать новый опрос как копию существующего — загружаем настройки и вопросы
+// исходного опроса, открываем модалку создания и подставляем значения в поля.
+// Дедлайн намеренно НЕ копируем: каждый запуск опроса — своя дата.
+async function duplicateSurvey(id) {
+  console.log('[duplicate] load source ' + id);
+  const { data: src, error } = await sb
+    .from('surveys')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error || !src) {
+    alert('Не удалось загрузить исходный опрос: ' + (error?.message || 'опрос не найден'));
+    return;
+  }
+  // Открываем модалку в дефолтном виде (сбросит все поля), потом заполняем
+  await openNewSurveyModal();
+  fillNewSurveyFormFromSource(src);
+  console.log('[duplicate] filled form from ' + id);
+}
+
+// Заполнение формы создания опроса данными из существующего опроса.
+// Используется в duplicateSurvey. Дедлайн не восстанавливаем (поле остаётся пустым).
+function fillNewSurveyFormFromSource(src) {
+  const settings = src.settings || {};
+
+  // Название — добавляем префикс «Копия: », чтобы видно было, что это новая запись
+  document.getElementById('ns-title').value = 'Копия: ' + (src.title || '');
+
+  // Тип опроса
+  const typeRadio = document.querySelector(`input[name="ns-type"][value="${src.type}"]`);
+  if (typeRadio) {
+    typeRadio.checked = true;
+    updateTypeVisibility();
+  }
+
+  // Общая видимость — только для V1/V2 (в V3/V4 не применяется)
+  if (src.visibility) {
+    const vRadio = document.querySelector(`input[name="ns-visibility"][value="${src.visibility}"]`);
+    if (vRadio) vRadio.checked = true;
+  }
+
+  if (src.type === 'variant_1') {
+    document.getElementById('ns-v1-allow-self').checked = !!settings.allow_self;
+    document.getElementById('ns-v1-use-tone').checked = !!settings.use_tone;
+    updateV1ToneVisibility();
+
+    // Очистим дефолтный пустой вопрос и заполним из источника
+    document.getElementById('ns-v1-questions-list').innerHTML = '';
+    v1QuestionCounter = 0;
+    (settings.questions || []).forEach(q => {
+      addV1Question();
+      const items = document.querySelectorAll('#ns-v1-questions-list .question-item');
+      const item = items[items.length - 1];
+      item.querySelector('[data-field="text"]').value = q.text || '';
+      const cntInput = item.querySelector('[data-field="count"]');
+      if (cntInput && q.count) cntInput.value = q.count;
+      if (settings.use_tone && q.tone) {
+        const toneInput = item.querySelector(`input[data-field="tone"][value="${q.tone}"]`);
+        if (toneInput) toneInput.checked = true;
+      }
+      // Под-вопросы
+      (q.sub_questions || []).forEach(sq => {
+        addV1SubQuestion(item);
+        const rows = item.querySelectorAll('[data-subq-list] [data-field="subq-text"]');
+        const row = rows[rows.length - 1];
+        if (row) row.value = sq.text || '';
+      });
+      if (q.sub_questions && q.sub_questions.length > 0) {
+        const showSub = item.querySelector('[data-field="show-sub"]');
+        if (showSub) showSub.checked = !!q.show_sub_to_participants;
+      }
+    });
+  }
+
+  if (src.type === 'variant_4') {
+    // Про кого задаются вопросы
+    const sMode = settings.subjects_mode || 'all';
+    const modeRadio = document.querySelector(`input[name="ns-v4-subjects-mode"][value="${sMode}"]`);
+    if (modeRadio) modeRadio.checked = true;
+    updateV4SubjectsListVisibility();
+
+    // Если mode=selected — отметим галочки выбранных user_id
+    if (sMode === 'selected' && Array.isArray(settings.subjects)) {
+      const subjSet = new Set(settings.subjects);
+      document.querySelectorAll('#ns-v4-subjects-grid input[type="checkbox"]').forEach(ch => {
+        ch.checked = subjSet.has(ch.value);
+      });
+    }
+
+    document.getElementById('ns-v4-allow-self').checked = !!settings.allow_self;
+    const ynVis = settings.yesno_visibility || 'organizer_only';
+    const ynRadio = document.querySelector(`input[name="ns-v4-yesno-visibility"][value="${ynVis}"]`);
+    if (ynRadio) ynRadio.checked = true;
+    document.getElementById('ns-v4-show-aggregate').checked = !!settings.show_aggregate;
+    document.getElementById('ns-v4-reveal-voters').checked = !!settings.reveal_voters;
+
+    // Вопросы V4 — очищаем и заполняем из источника
+    document.getElementById('ns-v4-questions-list').innerHTML = '';
+    v4QuestionCounter = 0;
+    (settings.questions || []).forEach(q => {
+      addV4Question();
+      const items = document.querySelectorAll('#ns-v4-questions-list .question-item');
+      const item = items[items.length - 1];
+      item.querySelector('[data-field="text"]').value = q.text || '';
+      const kindSel = item.querySelector('[data-field="kind"]');
+      if (kindSel && q.kind) {
+        kindSel.value = q.kind;
+        // Трогаем событие change, чтобы обновилась видимость связанных опций
+        kindSel.dispatchEvent(new Event('change'));
+      }
+      const optCheck = item.querySelector('[data-field="optional"]');
+      if (optCheck) optCheck.checked = !!q.optional;
+      const showCheck = item.querySelector('[data-field="show_to_participants"]');
+      if (showCheck) showCheck.checked = !!q.show_to_participants;
+    });
+  }
+
+  // V2 и V3 — legacy-ветки. Новые опросы этих типов не создаются (см. LEGACY-V23),
+  // но если когда-то вернёмся — добавить аналогичную ветку здесь.
 }
 
 // ============================================================
@@ -4141,6 +4276,102 @@ function getV4Subjects() {
   return subjects;
 }
 
+// ============================================================
+// ЧЕРНОВИКИ V4 — автосохранение ответов в localStorage
+// ============================================================
+// Зачем: V4-опрос может содержать много текстовых полей (4 человека × 5 вопросов
+// = 20 полей). Если вкладка случайно закроется, пропадёт всё. Поэтому храним
+// черновик локально, пока человек не нажмёт «Подтвердить и отправить».
+// После отправки — удаляем черновик.
+// Ключ специфичен и для опроса, и для юзера: если на одном устройстве
+// заходят разные аккаунты, их черновики не смешаются.
+
+function draftKeyV4(surveyId, userId) {
+  return 'draft-v4-' + surveyId + '-' + userId;
+}
+
+function saveDraftV4() {
+  if (!currentSurvey || !currentUser) return;
+  const table = document.getElementById('vote-table-v4');
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  const answers = {};
+  rows.forEach(row => {
+    const subjId = row.dataset.subjectId;
+    answers[subjId] = {};
+    row.querySelectorAll('select, textarea').forEach(inp => {
+      const qid = inp.dataset.question;
+      const val = inp.value;
+      if (val !== '' && val !== undefined) {
+        answers[subjId][qid] = val;
+      }
+    });
+  });
+  const draft = { answers, savedAt: Date.now() };
+  try {
+    localStorage.setItem(draftKeyV4(currentSurvey.id, currentUser.id), JSON.stringify(draft));
+    console.log('[draft] saved for survey ' + currentSurvey.id);
+  } catch (e) {
+    console.warn('[draft] save failed:', e);
+  }
+}
+
+function loadDraftV4(surveyId, userId) {
+  try {
+    const raw = localStorage.getItem(draftKeyV4(surveyId, userId));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d !== 'object' || !d.answers) return null;
+    return d;
+  } catch (e) {
+    console.warn('[draft] load failed:', e);
+    return null;
+  }
+}
+
+function deleteDraftV4(surveyId, userId) {
+  try {
+    localStorage.removeItem(draftKeyV4(surveyId, userId));
+    console.log('[draft] deleted for survey ' + surveyId);
+  } catch (e) {
+    console.warn('[draft] delete failed:', e);
+  }
+}
+
+function applyDraftV4(draft) {
+  if (!draft || !draft.answers) return;
+  const table = document.getElementById('vote-table-v4');
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  rows.forEach(row => {
+    const subjId = row.dataset.subjectId;
+    const subjAnswers = draft.answers[subjId] || {};
+    row.querySelectorAll('select, textarea').forEach(inp => {
+      const qid = inp.dataset.question;
+      if (subjAnswers[qid] !== undefined) {
+        inp.value = subjAnswers[qid];
+      }
+    });
+  });
+  console.log('[draft] applied');
+}
+
+// Debounce-обёртка: сохраняем не чаще раза в 500мс при активном вводе
+let draftSaveTimer = null;
+function scheduleDraftSave() {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null;
+    saveDraftV4();
+  }, 500);
+}
+
+function formatDraftTime(ts) {
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function renderVoteFormV4() {
   const body = document.getElementById('survey-body');
   const s = currentSurvey;
@@ -4156,7 +4387,19 @@ function renderVoteFormV4() {
     return;
   }
 
+  // Проверяем, есть ли незавершённый черновик по этому опросу у этого юзера
+  const existingDraft = loadDraftV4(s.id, currentUser.id);
+
   let html = '<div class="card">';
+  if (existingDraft) {
+    html += `<div id="draft-banner" class="info" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between;">
+      <div><strong>У вас есть незавершённый черновик</strong> от ${formatDraftTime(existingDraft.savedAt)}. Продолжить заполнение или начать с нуля?</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="secondary small" id="btn-draft-continue">Продолжить</button>
+        <button class="secondary small" id="btn-draft-discard">Начать заново</button>
+      </div>
+    </div>`;
+  }
   html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя.</div>';
   html += '<div id="vote-error" class="error hidden"></div>';
   html += '<div class="vote-table-wrapper"><table class="vote-table" id="vote-table-v4">';
@@ -4193,6 +4436,27 @@ function renderVoteFormV4() {
 
   document.getElementById('btn-vote-cancel-v4').addEventListener('click', backToList);
   document.getElementById('btn-vote-submit-v4').addEventListener('click', submitVoteV4);
+
+  // Автосохранение черновика на изменение любого поля (с debounce)
+  const table = document.getElementById('vote-table-v4');
+  table.querySelectorAll('select, textarea').forEach(inp => {
+    inp.addEventListener('input', scheduleDraftSave);
+    inp.addEventListener('change', scheduleDraftSave);
+  });
+
+  // Обработчики баннера черновика
+  if (existingDraft) {
+    document.getElementById('btn-draft-continue').addEventListener('click', () => {
+      applyDraftV4(existingDraft);
+      const banner = document.getElementById('draft-banner');
+      if (banner) banner.remove();
+    });
+    document.getElementById('btn-draft-discard').addEventListener('click', () => {
+      deleteDraftV4(s.id, currentUser.id);
+      const banner = document.getElementById('draft-banner');
+      if (banner) banner.remove();
+    });
+  }
 }
 
 async function submitVoteV4() {
@@ -4258,6 +4522,8 @@ async function submitVoteV4() {
     return;
   }
   console.log('[vote-v4] saved');
+  // Успешная отправка — удаляем локальный черновик (если был)
+  deleteDraftV4(currentSurvey.id, currentUser.id);
   const { data: ownResp } = await sb
     .from('responses')
     .select('*')
