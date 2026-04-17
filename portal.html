@@ -103,6 +103,35 @@
   .badge.active { background: #d4edda; color: #155724; }
   .badge.archived { background: #e2e3e5; color: #383d41; }
   .badge.type { background: #e8e0ff; color: #4a3e8c; }
+  .badge.overdue { background: #ffe0e0; color: #b3261e; }
+
+  /* Индикатор «я уже проголосовал» рядом с названием опроса */
+  .voted-mark {
+    display: inline-block;
+    background: #d4edda;
+    color: #155724;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* Мини-прогресс-бар явки на карточке опроса (видят только организаторы) */
+  .turnout-mini { margin-top: 8px; max-width: 320px; }
+  .turnout-mini-label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .turnout-mini-bar {
+    height: 6px;
+    background: #eee;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .turnout-mini-fill {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.3s ease;
+  }
   .error { background: #ffe6e6; color: var(--danger); padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
   .info { background: #e8f4ff; color: #004085; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
   .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
@@ -883,6 +912,10 @@
       <label>Название опроса</label>
       <input type="text" id="ns-title" placeholder="Например: Опрос группы 161, апрель 2026">
 
+      <label style="margin-top:12px;">Дедлайн <span style="color:var(--muted); font-weight:normal;">(необязательно)</span></label>
+      <input type="date" id="ns-deadline" style="max-width:200px;">
+      <p style="margin-top:4px; color:var(--muted); font-size:13px;">После этой даты в карточке опроса появится пометка «Просрочен», но голосование останется открытым. Можно не указывать — тогда без ограничения по времени.</p>
+
       <h3>Тип опроса</h3>
       <p style="margin-top:0; color:var(--muted); font-size:14px;">Во всех вариантах голосуют только обычные участники. Организаторы и со-организаторы не голосуют и не оцениваются — если организатор хочет получить обратную связь и про себя, ему нужно заранее передать главную роль другому и стать обычным участником.</p>
       <div class="radio-group" id="ns-type-group">
@@ -1311,7 +1344,20 @@ async function loadSurveys() {
   }
   console.log('[surveys] loaded ' + data.length);
 
+  // Общее число участников-participant'ов в группе (для прогресс-бара явки организатору)
+  const { count: totalParticipants } = await sb
+    .from('memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('group_id', currentGroupId)
+    .eq('active', true)
+    .eq('role', 'participant');
+  const totalP = totalParticipants || 0;
+
+  // Идентификатор текущего пользователя — для флага «я проголосовал»
+  const myId = currentUser?.id;
+
   const counts = {};
+  const voted = {};
   for (const s of data) {
     if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3' && s.type !== 'variant_4') continue;
     const { count } = await sb
@@ -1319,13 +1365,24 @@ async function loadSurveys() {
       .select('id', { count: 'exact', head: true })
       .eq('survey_id', s.id);
     counts[s.id] = count || 0;
+
+    if (myId) {
+      const { count: myCount } = await sb
+        .from('responses')
+        .select('id', { count: 'exact', head: true })
+        .eq('survey_id', s.id)
+        .eq('user_id', myId);
+      voted[s.id] = (myCount || 0) > 0;
+    }
   }
-  renderSurveys(data, counts);
+  renderSurveys(data, counts, voted, totalP);
 }
 
-function renderSurveys(surveys, counts) {
+function renderSurveys(surveys, counts, voted, totalParticipants) {
   const list = document.getElementById('surveys-list');
   const isOrganizer = currentProfile?.role === 'main_organizer' || currentProfile?.role === 'co_organizer';
+  voted = voted || {};
+  totalParticipants = totalParticipants || 0;
 
   const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2' || s.type === 'variant_3' || s.type === 'variant_4');
   if (newSurveys.length === 0) {
@@ -1341,12 +1398,12 @@ function renderSurveys(surveys, counts) {
   let html = '';
   if (active.length > 0) {
     html += '<h3 style="margin-top:0;">Активные</h3>';
-    active.forEach(s => { html += renderSurveyItem(s, counts[s.id], isOrganizer); });
+    active.forEach(s => { html += renderSurveyItem(s, counts[s.id], isOrganizer, voted[s.id], totalParticipants); });
   }
   if (archived.length > 0) {
     if (active.length > 0) html += '<hr class="section-divider">';
     html += '<h3>Архив</h3>';
-    archived.forEach(s => { html += renderSurveyItem(s, counts[s.id], isOrganizer); });
+    archived.forEach(s => { html += renderSurveyItem(s, counts[s.id], isOrganizer, voted[s.id], totalParticipants); });
   }
   list.innerHTML = html;
 
@@ -1357,6 +1414,7 @@ function renderSurveys(surveys, counts) {
       const id = btn.dataset.id;
       if (action === 'archive') archiveSurvey(id);
       else if (action === 'delete') deleteSurvey(id);
+      else if (action === 'copy-link') copySurveyLink(btn);
     });
   });
 
@@ -1368,15 +1426,55 @@ function renderSurveys(surveys, counts) {
   });
 }
 
-function renderSurveyItem(s, count, isOrganizer) {
+function renderSurveyItem(s, count, isOrganizer, iVoted, totalParticipants) {
   const typeLabel = SURVEY_TYPES[s.type]?.label || s.type;
   const statusLabel = s.status === 'active' ? 'активен' : 'архив';
   const statusClass = s.status === 'active' ? 'active' : 'archived';
   const date = new Date(s.created_at).toLocaleDateString('ru-RU');
+  const isActive = s.status === 'active';
+
+  // Дедлайн — если задан и прошёл, показываем «Просрочен» у активного опроса.
+  // Голосование не блокируется (решение Николая).
+  let overdueBadge = '';
+  let deadlineInfo = '';
+  const deadline = s.settings?.deadline;
+  if (deadline) {
+    const dlDate = new Date(deadline);
+    const dlLabel = dlDate.toLocaleDateString('ru-RU');
+    // Сравниваем по концу дня дедлайна — чтобы «до 17 апреля» означало «включая весь 17-й»
+    const endOfDl = new Date(dlDate.getFullYear(), dlDate.getMonth(), dlDate.getDate(), 23, 59, 59);
+    const isOverdue = Date.now() > endOfDl.getTime();
+    if (isActive && isOverdue) {
+      overdueBadge = ' <span class="badge overdue" title="Срок прошёл, голосовать можно">Просрочен</span>';
+    }
+    deadlineInfo = ' · до ' + dlLabel;
+  }
+
+  // Индикатор «я уже проголосовал» — только для participant и только для активных опросов
+  let votedIndicator = '';
+  if (!isOrganizer && isActive && iVoted) {
+    votedIndicator = '<span class="voted-mark" title="Вы уже проголосовали">✓ Вы проголосовали</span>';
+  }
+
+  // Прогресс-бар явки — только для организатора и только для активного опроса
+  let turnoutBar = '';
+  if (isOrganizer && isActive && totalParticipants > 0) {
+    const voted = Math.min(count || 0, totalParticipants);
+    const pct = Math.round((voted / totalParticipants) * 100);
+    turnoutBar = `
+      <div class="turnout-mini" title="Проголосовали ${voted} из ${totalParticipants}">
+        <div class="turnout-mini-label">Явка: <strong>${voted}/${totalParticipants}</strong></div>
+        <div class="turnout-mini-bar"><div class="turnout-mini-fill" style="width:${pct}%;"></div></div>
+      </div>
+    `;
+  }
 
   let actions = '';
+  if (isActive) {
+    actions += `<button class="secondary small" data-action="copy-link" data-id="${s.id}" title="Скопировать ссылку на портал">📋 Ссылка</button>`;
+  }
   if (isOrganizer) {
-    if (s.status === 'active') {
+    if (isActive) {
       actions += `<button class="secondary small" data-action="archive" data-id="${s.id}">Архивировать</button>`;
     }
     actions += `<button class="danger small" data-action="delete" data-id="${s.id}">Удалить</button>`;
@@ -1386,18 +1484,35 @@ function renderSurveyItem(s, count, isOrganizer) {
     <div class="survey-item" data-open-id="${s.id}">
       <div class="survey-item-header">
         <div style="flex:1; min-width:200px;">
-          <div class="survey-item-title">${escapeHtml(s.title)}</div>
+          <div class="survey-item-title">${escapeHtml(s.title)} ${votedIndicator}</div>
           <div class="survey-item-meta">
             <span class="badge type">${escapeHtml(typeLabel)}</span>
-            <span class="badge ${statusClass}">${statusLabel}</span>
+            <span class="badge ${statusClass}">${statusLabel}</span>${overdueBadge}
             · ${count} ${pluralResponses(count)}
-            · создан ${date}
+            · создан ${date}${deadlineInfo}
           </div>
+          ${turnoutBar}
         </div>
         <div class="survey-item-actions">${actions}</div>
       </div>
     </div>
   `;
+}
+
+// Копирование ссылки на портал — при переходе пользователь попадёт на дашборд и
+// сам кликнет нужный опрос. Это проще и безопаснее, чем глубокая ссылка.
+async function copySurveyLink(btn) {
+  const link = window.location.origin + window.location.pathname;
+  const originalText = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(link);
+    btn.textContent = '✓ Скопировано';
+    setTimeout(() => { btn.textContent = originalText; }, 1500);
+  } catch (err) {
+    // Fallback: показать ссылку в prompt, чтобы пользователь скопировал руками
+    console.warn('[copy-link] clipboard error:', err);
+    prompt('Скопируйте ссылку вручную (Ctrl+C):', link);
+  }
 }
 
 function pluralResponses(n) {
@@ -5424,6 +5539,8 @@ async function confirmTransfer() {
 async function openNewSurveyModal() {
   console.log('[new-survey] open modal');
   document.getElementById('ns-title').value = '';
+  const deadlineEl = document.getElementById('ns-deadline');
+  if (deadlineEl) deadlineEl.value = '';
   document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
 
   // Сброс V1
@@ -5728,6 +5845,14 @@ function collectFormData() {
   if (!title) return { error: 'Введите название опроса' };
 
   const settings = {};
+
+  // Дедлайн — необязательное поле, общее для всех типов опросов.
+  // Формат хранения: 'YYYY-MM-DD' (как отдаёт <input type="date">).
+  // Пустая строка означает «без дедлайна» — не пишем в settings.
+  const deadlineRaw = (document.getElementById('ns-deadline')?.value || '').trim();
+  if (deadlineRaw) {
+    settings.deadline = deadlineRaw;
+  }
 
   if (type === 'variant_1') {
     const allowSelf = document.getElementById('ns-v1-allow-self').checked;
