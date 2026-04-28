@@ -3042,77 +3042,6 @@ function computeToneIndex(responses, questions) {
   return idx;
 }
 
-// Строит данные сводной таблицы V1: для каждого имени — голоса по каждому вопросу
-// и суммы по тональности (если use_tone). Возвращает массив строк, отсортированный
-// по алфавиту имени (как в типовых социометрических сводках).
-// row = { name, perQuestion: { qid: count }, allPositive, allNegative }
-function buildV1SummaryRows(responses, questions, useTone) {
-  const namesSet = new Set();
-  // { name: { qid: count } }
-  const perName = {};
-
-  responses.forEach(resp => {
-    const payload = resp.payload || {};
-    const answers = payload.answers || {};
-    questions.forEach(q => {
-      const slots = answers[q.id] || [];
-      slots.forEach(entry => {
-        if (!entry || !entry.name) return;
-        const name = entry.name;
-        namesSet.add(name);
-        if (!perName[name]) perName[name] = {};
-        perName[name][q.id] = (perName[name][q.id] || 0) + 1;
-      });
-    });
-  });
-
-  const rows = Array.from(namesSet).map(name => {
-    const perQuestion = {};
-    let allPositive = 0;
-    let allNegative = 0;
-    questions.forEach(q => {
-      const c = (perName[name] && perName[name][q.id]) || 0;
-      perQuestion[q.id] = c;
-      if (useTone && q.tone === 'positive') allPositive += c;
-      else if (useTone && q.tone === 'negative') allNegative += c;
-    });
-    return { name, perQuestion, allPositive, allNegative };
-  });
-
-  rows.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  return rows;
-}
-
-// Рендер сводной таблицы V1 (стиль печатной социометрической сводки):
-// строки — имена, столбцы — каждый вопрос; при use_tone в конце два столбца «все +» и «все −».
-function renderV1SummaryTable(rows, questions, useTone) {
-  if (!rows || rows.length === 0) return '';
-  let html = '<div class="vote-table-wrapper"><table class="vote-table results-table">';
-  html += '<thead><tr><th>Имя</th>';
-  questions.forEach(q => {
-    const toneMark = useTone && q.tone === 'positive' ? ' +' : (useTone && q.tone === 'negative' ? ' −' : '');
-    html += `<th>${escapeHtml(q.text)}${toneMark}</th>`;
-  });
-  if (useTone) {
-    html += '<th>все +</th><th>все −</th>';
-  }
-  html += '</tr></thead><tbody>';
-  rows.forEach(r => {
-    html += `<tr><td class="subject-name">${escapeHtml(r.name)}</td>`;
-    questions.forEach(q => {
-      const c = r.perQuestion[q.id] || 0;
-      html += `<td>${c}</td>`;
-    });
-    if (useTone) {
-      html += `<td><strong style="color:var(--success);">${r.allPositive}</strong></td>`;
-      html += `<td><strong style="color:var(--danger);">${r.allNegative}</strong></td>`;
-    }
-    html += '</tr>';
-  });
-  html += '</tbody></table></div>';
-  return html;
-}
-
 // Рендер рейтинга для одного вопроса: сортированный по убыванию количества выборов
 function renderV1Rating(aggForQuestion) {
   const entries = Object.entries(aggForQuestion)
@@ -3196,16 +3125,6 @@ async function renderResultsV1ForOrganizer() {
   }
 
   const agg = aggregateResponsesV1(responses, questions);
-
-  // Сводная таблица: имена по строкам, вопросы по столбцам, итоги «все +» / «все −»
-  const summaryRows = buildV1SummaryRows(responses, questions, useTone);
-  if (summaryRows.length > 0) {
-    html += '<h3 style="margin-top:24px;">Сводная таблица</h3>';
-    html += '<p style="color:var(--muted); font-size:13px;">Сколько голосов получил каждый участник по каждому вопросу';
-    html += useTone ? ', и суммарно по сближающим и отталкивающим вопросам.' : '.';
-    html += '</p>';
-    html += renderV1SummaryTable(summaryRows, questions, useTone);
-  }
 
   // Блок по каждому вопросу
   html += '<h3 style="margin-top:24px;">Результаты по вопросам</h3>';
@@ -3386,14 +3305,6 @@ async function renderResultsV1ForParticipant() {
   if (visibility === 'full') {
     html += '<h3 style="margin-top:24px;">Сводные результаты</h3>';
     html += '<p style="color:var(--muted); font-size:13px;">Авторы голосов не показаны.</p>';
-
-    // Сводная таблица: имена по строкам, вопросы по столбцам, итоги «все +» / «все −»
-    const summaryRows = buildV1SummaryRows(responses, questions, useTone);
-    if (summaryRows.length > 0) {
-      html += renderV1SummaryTable(summaryRows, questions, useTone);
-      html += '<div style="margin-top:16px;"></div>';
-    }
-
     questions.forEach(q => {
       const toneLabel = useTone && q.tone
         ? ` <span class="badge ${q.tone === 'positive' ? 'active' : 'archived'}" style="font-size:11px;">${q.tone === 'positive' ? 'сближение' : 'отторжение'}</span>`
