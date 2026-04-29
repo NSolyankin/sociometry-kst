@@ -677,7 +677,7 @@
             <summary style="cursor:pointer; font-weight:500;">1. Как провести опрос</summary>
             <div style="margin-top:10px; font-size:14px; line-height:1.6;">
               <ol style="padding-left:20px; margin:0;">
-                <li><strong>Создать опрос.</strong> Кнопка «+ Новый опрос» на дашборде. Выбрать тип (Вариант 1 — социометрический выбор, Вариант 2 — универсальная анкета), сформулировать вопросы, настроить видимость результатов. Можно указать <strong>дедлайн</strong> — дату, после которой у опроса появится пометка «Просрочен» (голосование при этом не блокируется, только визуальный сигнал).</li>
+                <li><strong>Создать опрос.</strong> Кнопка «+ Новый опрос» на дашборде. Выбрать тип (Вариант 1 — социометрический выбор, Вариант 2 — универсальная анкета, Вариант 3 — номинации), сформулировать вопросы, настроить видимость результатов. Можно указать <strong>дедлайн</strong> — дату, после которой у опроса появится пометка «Просрочен» (голосование при этом не блокируется, только визуальный сигнал).</li>
                 <li><strong>Сообщить участникам.</strong> Кнопка <strong>«📋 Ссылка»</strong> на карточке активного опроса копирует ссылку на портал в буфер — удобно сразу вставить в общий чат или личные сообщения.</li>
                 <li><strong>Отслеживать явку.</strong> На карточке активного опроса прямо на дашборде виден прогресс-бар <strong>«Явка: X/Y»</strong> — сколько participant'ов уже проголосовало. Обновляется каждые 10 секунд автоматически (polling). Если нужно подробнее — откройте опрос, там список «Проголосовали / Ещё не проголосовали» с псевдонимами.</li>
                 <li><strong>Архивировать.</strong> Когда все проголосовали (или истёк срок) — кнопка «Архивировать» на карточке или на экране опроса. После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам.</li>
@@ -688,11 +688,12 @@
           </details>
 
           <details style="margin-top:8px; border-left:3px solid var(--accent); padding:8px 12px; background:#fafbfc; border-radius:4px;">
-            <summary style="cursor:pointer; font-weight:500;">2. Как выбрать тип опроса — Вариант 1 или Вариант 2</summary>
+            <summary style="cursor:pointer; font-weight:500;">2. Как выбрать тип опроса — Вариант 1, 2 или 3</summary>
             <div style="margin-top:10px; font-size:14px; line-height:1.6;">
               <p style="margin-top:0;"><strong>Вариант 1 — Социометрический выбор.</strong> Классика Морено: каждый участник выбирает N имён по заданному критерию («С кем бы я пошёл в команду?»). В результате — рейтинг популярности. Если включить «тональность», можно комбинировать сближающие и отталкивающие вопросы и получить сводный индекс симпатий-антипатий. Подходит для выбора лидера, диагностики ядра группы, классической социометрии.</p>
               <p><strong>Вариант 2 — Универсальная анкета.</strong> Каждый участник отвечает на одни и те же вопросы про каждого оцениваемого человека. Тип ответа у каждого вопроса отдельный (Да/Нет или свободный текст). Гибкая видимость результатов — от «только организатор видит» до «все видят всё». Подходит для «360 градусов внутри группы», аттестации, структурированной обратной связи.</p>
-              <p style="margin-bottom:0;"><strong>Правило выбора:</strong> если нужен рейтинг («кого чаще всего выбирают на роль лидера») — Вариант 1. Если нужна развёрнутая обратная связь по критериям («как оценивают каждого из нас по разным качествам») — Вариант 2.</p>
+              <p><strong>Вариант 3 — Номинации.</strong> Список именных «титулов»: каждая номинация со своим списком кандидатов и (опционально) текстовыми вопросами «За что именно?». Голосующий сам решает, в какой номинации участвовать, а какую пропустить. В результатах: рейтинг по каждой номинации и личный отчёт каждому участнику «кто и в чём меня выбрал». Подходит для церемоний награждения, итоговых встреч, ретроспективы со сбором обратной связи в свободной форме.</p>
+              <p style="margin-bottom:0;"><strong>Правило выбора:</strong> рейтинг по одному критерию — Вариант 1. Сетка «участник × вопрос» — Вариант 2. Несколько разных «титулов» с разным числом победителей — Вариант 3.</p>
             </div>
           </details>
 
@@ -967,6 +968,13 @@
             <div class="radio-option-desc"><strong>Когда выбирать:</strong> почти всегда, кроме классической социометрии (Вариант 1). Универсальный опрос «участник × вопрос»: организатор сам решает, про кого задавать вопросы (про всех или про выбранных), разрешать ли отвечать про самого себя, какие вопросы — Да/Нет, какие — свободным текстом, и кто что увидит в результатах. Покрывает сценарии аттестации, структурированной обратной связи, «360 градусов внутри группы» и любые их комбинации.</div>
           </div>
         </label>
+        <label class="radio-option">
+          <input type="radio" name="ns-type" value="variant_5">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Вариант 3 — Номинации</div>
+            <div class="radio-option-desc"><strong>Когда выбирать:</strong> нужно вручить именные «титулы» по нескольким разным критериям, причём по каждому критерию выбирается свой набор имён, а не оценивается вся группа разом. Организатор задаёт список номинаций («Самый ценный игрок», «Главный дипломат», «Лучшая идея месяца» и т.п.), для каждой указывает, сколько кандидатов выбирает каждый голосующий, и при необходимости добавляет к номинации текстовые вопросы («За что именно?»). Каждый участник сам выбирает, в какой номинации голосовать, а какую пропустить. В результатах: личный отчёт «кто и в чём меня номинировал» каждому участнику, рейтинг номинантов и собранные тексты — организатору.</div>
+          </div>
+        </label>
       </div>
 
       <div id="ns-v1-settings">
@@ -1146,6 +1154,31 @@
         <button class="secondary small" id="btn-add-v4-question" type="button">+ Добавить вопрос</button>
       </div>
 
+      <div id="ns-v5-settings" class="hidden">
+        <h3>Самооценка</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v5-allow-self">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Разрешить голосовать за самого себя</div>
+            <div class="radio-option-desc">Если выключено — голосующий не сможет выбрать сам себя в кандидаты ни в одной номинации. В выпадающих списках кандидатов своё имя голосующего просто не появится.</div>
+          </div>
+        </label>
+
+        <h3>Личные отчёты</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v5-show-personal" checked>
+          <div class="radio-option-content">
+            <div class="radio-option-label">Показывать каждому участнику личный отчёт «кто меня номинировал»</div>
+            <div class="radio-option-desc">После архивации опроса каждый participant увидит сводку: в каких номинациях его выбрали и сколько раз, плюс собранные про него тексты (анонимно, без имён авторов). Если выключено — участники не видят результатов вообще, всё доступно только организатору.</div>
+          </div>
+        </label>
+
+        <h3>Номинации</h3>
+        <p style="margin-top:0;">Каждая номинация — это отдельный «титул» с своим списком кандидатов. Голосующий выбирает заданное число имён из общего списка participant'ов группы и (если в номинации есть текстовые вопросы) отвечает на них. Любую номинацию можно сделать необязательной — её можно будет пропустить целиком.</p>
+        <div id="ns-v5-nominations-list"></div>
+        <button class="secondary small" id="btn-add-v5-nomination" type="button">+ Добавить номинацию</button>
+      </div>
+
       <div id="ns-visibility-block">
         <h3>Видимость общего результата для участников</h3>
         <p style="margin-top: 0;">После того как организатор архивирует опрос, участники увидят:</p>
@@ -1191,7 +1224,8 @@ const SURVEY_TYPES = {
   variant_1: { label: 'Вариант 1', description: 'Каждый участник выбирает несколько коллег по заданному критерию.' },
   variant_2: { label: 'Вариант 2', description: 'Каждый участник отвечает на список вопросов про коллег.' },
   variant_3: { label: 'Вариант 3', description: 'Анкета по участникам: каждый отвечает на одинаковые вопросы про каждого.' },
-  variant_4: { label: 'Вариант 2', description: 'Универсальный опрос «участник × вопрос» с гибкими настройками видимости.' }
+  variant_4: { label: 'Вариант 2', description: 'Универсальный опрос «участник × вопрос» с гибкими настройками видимости.' },
+  variant_5: { label: 'Вариант 3', description: 'Номинации: каждая со своим списком кандидатов и (опционально) текстовыми вопросами.' }
 };
 
 let sb = null;
@@ -1206,6 +1240,7 @@ let questionCounter = 0;
 let v1QuestionCounter = 0;
 let v3QuestionCounter = 0;
 let v4QuestionCounter = 0;
+let v5NominationCounter = 0;
 
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
@@ -1388,7 +1423,7 @@ async function loadSurveys() {
   const counts = {};
   const voted = {};
   for (const s of data) {
-    if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3' && s.type !== 'variant_4') continue;
+    if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3' && s.type !== 'variant_4' && s.type !== 'variant_5') continue;
     try {
       const { count } = await sb
         .from('responses')
@@ -1422,7 +1457,7 @@ function renderSurveys(surveys, counts, voted, totalParticipants) {
   voted = voted || {};
   totalParticipants = totalParticipants || 0;
 
-  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2' || s.type === 'variant_3' || s.type === 'variant_4');
+  const newSurveys = (surveys || []).filter(s => s.type === 'variant_1' || s.type === 'variant_2' || s.type === 'variant_3' || s.type === 'variant_4' || s.type === 'variant_5');
   if (newSurveys.length === 0) {
     list.innerHTML = '<div class="empty-state">Опросов пока нет.<br><small>' +
       (isOrganizer ? 'Создайте новый опрос кнопкой «+ Новый опрос».' : 'Дождитесь, пока организатор создаст опрос.') +
@@ -1726,6 +1761,41 @@ function fillNewSurveyFormFromSource(src) {
       }
       const showCheck = item.querySelector('[data-field="show_to_participants"]');
       if (showCheck) showCheck.checked = !!q.show_to_participants;
+    });
+  }
+
+  if (src.type === 'variant_5') {
+    document.getElementById('ns-v5-allow-self').checked = !!settings.allow_self;
+    // Для старых опросов без поля — по умолчанию true
+    document.getElementById('ns-v5-show-personal').checked =
+      (settings.show_personal_reports === undefined) ? true : !!settings.show_personal_reports;
+
+    // Очистим список номинаций и заполним из источника
+    document.getElementById('ns-v5-nominations-list').innerHTML = '';
+    v5NominationCounter = 0;
+    (settings.nominations || []).forEach(n => {
+      addV5Nomination();
+      const items = document.querySelectorAll('#ns-v5-nominations-list .question-item');
+      const item = items[items.length - 1];
+      item.querySelector('[data-field="title"]').value = n.title || '';
+      const descTa = item.querySelector('[data-field="description"]');
+      if (descTa) descTa.value = n.description || '';
+      const cntInput = item.querySelector('[data-field="candidates_count"]');
+      if (cntInput && n.candidates_count) cntInput.value = n.candidates_count;
+      const optCheck = item.querySelector('[data-field="nomination_optional"]');
+      if (optCheck) optCheck.checked = !!n.optional;
+
+      // Текстовые вопросы
+      (n.questions || []).forEach(q => {
+        addV5Question(item);
+        const rows = item.querySelectorAll('[data-v5q-list] [data-v5qrow]');
+        const row = rows[rows.length - 1];
+        if (row) {
+          row.querySelector('[data-field="question_text"]').value = q.text || '';
+          const qOpt = row.querySelector('[data-field="question_optional"]');
+          if (qOpt) qOpt.checked = !!q.optional;
+        }
+      });
     });
   }
 
@@ -2232,8 +2302,8 @@ async function openSurvey(id) {
   // Если кто-то только что добавлен/исключён, форма должна это учитывать.
   allGroupParticipants = await loadGroupParticipants();
 
-  // Для Варианта 3 и 4 нужен отдельный список с user_id — тоже свежий
-  if (survey.type === 'variant_3' || survey.type === 'variant_4') {
+  // Для Варианта 3, 4 и 5 нужен отдельный список с user_id — тоже свежий
+  if (survey.type === 'variant_3' || survey.type === 'variant_4' || survey.type === 'variant_5') {
     allGroupParticipantsV3 = await loadGroupParticipantsV3();
   }
 
@@ -2282,6 +2352,11 @@ function renderSurveyScreen() {
       // V4: организатор не голосует — аналогично V3.
       // Голосование и результаты будут реализованы в шагах 14.3–14.4.
       renderOrganizerViewV4();
+      return;
+    }
+    if (s.type === 'variant_5') {
+      // V5 «Номинации»: организатор не голосует — аналогично V3/V4.
+      renderOrganizerViewV5();
       return;
     }
     body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
@@ -2347,6 +2422,21 @@ function renderSurveyScreen() {
     }
     // Голосование V4 — будет реализовано в шаге 14.3
     renderVoteFormV4();
+    return;
+  }
+
+  // Участник + Вариант 3 (V5, «Номинации» в коде)
+  if (s.type === 'variant_5') {
+    if (s.status === 'archived') {
+      renderParticipantViewV5();
+      return;
+    }
+    // Активный
+    if (currentOwnResponse) {
+      renderAlreadyVotedV5();
+      return;
+    }
+    renderVoteFormV5();
     return;
   }
 
@@ -5672,6 +5762,876 @@ function describeV4Settings(settings) {
   return parts.join(', ');
 }
 
+// ============================================================
+// НОМИНАЦИИ (V5, в UI — «Вариант 3»)
+// ============================================================
+// Структура опроса:
+//   settings.allow_self            — можно ли голосовать за себя
+//   settings.show_personal_reports — показывать ли participant'у личный отчёт
+//   settings.nominations[]         — массив номинаций
+//      { id, title, description?, candidates_count, optional, questions: [{id,text,optional}] }
+//
+// Структура payload (одна запись на голосующего):
+//   { nominations: { <nom_id>: {
+//       skipped: bool,                    // true если номинация пропущена целиком
+//       candidates: [user_id, ...],       // выбранные кандидаты в порядке слотов
+//       answers: { <q_id>: 'текст', ... } // тексты ответов на вопросы внутри номинации
+//   } } }
+
+function describeV5Settings(settings) {
+  if (!settings) return '—';
+  const parts = [];
+  const noms = settings.nominations || [];
+  parts.push(noms.length + ' ' + pluralize(noms.length, 'номинация', 'номинации', 'номинаций'));
+  if (settings.allow_self) parts.push('с самооценкой');
+  parts.push(settings.show_personal_reports ? 'с личными отчётами' : 'без личных отчётов');
+  return parts.join(', ');
+}
+
+// Список participant'ов, которых видит конкретный голосующий в качестве кандидатов.
+// allow_self=false — убираем самого голосующего.
+function getV5CandidatesFor(userId) {
+  const settings = currentSurvey?.settings || {};
+  const all = allGroupParticipantsV3 || [];
+  if (settings.allow_self) return [...all];
+  return all.filter(p => p.user_id !== userId);
+}
+
+// ---------- ОРГАНИЗАТОР: ВИД АКТИВНОГО / АРХИВНОГО ОПРОСА ----------
+
+async function renderOrganizerViewV5() {
+  const s = currentSurvey;
+  const body = document.getElementById('survey-body');
+  const isMain = currentProfile?.role === 'main_organizer';
+  const isOrganizer = isMain || currentProfile?.role === 'co_organizer';
+  const nominations = s.settings?.nominations || [];
+
+  if (s.status === 'archived') {
+    renderResultsV5ForOrganizer();
+    return;
+  }
+
+  body.innerHTML = '<div class="card"><p>Загрузка…</p></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses;
+
+  let html = '<div class="card">';
+  html += '<div class="warning-box"><strong>Активный опрос: Вариант 3 — Номинации.</strong><br>В этом опросе голосуют только обычные участники (participant). Организаторы и со-организаторы не голосуют и не оцениваются. Чтобы увидеть результаты, архивируйте опрос после того, как все проголосуют.</div>';
+
+  html += buildTurnoutHtml(responses, allGroupParticipantsV3 || []);
+
+  html += '<h3>Настройки</h3>';
+  html += '<p style="color:var(--muted);">' + describeV5Settings(s.settings) + '</p>';
+
+  html += '<h3>Номинации</h3>';
+  if (nominations.length === 0) {
+    html += '<p>(нет номинаций)</p>';
+  } else {
+    html += '<ol class="v3-questions-preview">';
+    nominations.forEach(n => {
+      const optMark = n.optional ? ' <span style="color:var(--muted); font-size:12px;">(можно пропустить)</span>' : '';
+      html += `<li><strong>${escapeHtml(n.title)}</strong>${optMark}`;
+      if (n.description) {
+        html += `<div style="color:var(--muted); font-size:13px; margin-top:2px;">${escapeHtml(n.description)}</div>`;
+      }
+      html += `<div style="color:var(--muted); font-size:13px;">Выбирается имён: ${n.candidates_count}`;
+      if ((n.questions || []).length > 0) {
+        html += '; вопросов: ' + n.questions.length;
+      }
+      html += '</div></li>';
+    });
+    html += '</ol>';
+  }
+
+  html += '<div class="actions" style="margin-top:16px;">';
+  if (isOrganizer) html += '<button id="btn-archive-v5" class="secondary">Архивировать</button>';
+  if (isMain) html += '<button id="btn-delete-v5" class="danger small" style="margin-left:8px;">Удалить опрос</button>';
+  html += '</div>';
+  html += '</div>';
+
+  body.innerHTML = html;
+
+  const archBtn = document.getElementById('btn-archive-v5');
+  if (archBtn) archBtn.addEventListener('click', archiveSurveyFromScreen);
+  const delBtn = document.getElementById('btn-delete-v5');
+  if (delBtn) delBtn.addEventListener('click', () => deleteSurvey(currentSurvey.id));
+}
+
+// ---------- ЧЕРНОВИКИ V5 ----------
+// Логика идентична V4. Ключ: 'draft-v5-<surveyId>-<userId>'.
+// По решению Николая: при успешной отправке черновик НЕ удаляем, чтобы
+// participant мог вернуться и посмотреть свой ответ повторно.
+
+function draftKeyV5(surveyId, userId) {
+  return 'draft-v5-' + surveyId + '-' + userId;
+}
+
+function saveDraftV5() {
+  if (!currentSurvey || !currentUser) return;
+  const form = document.getElementById('vote-form-v5');
+  if (!form) return;
+  const draft = collectV5Answers(false);
+  if (!draft) return;
+  draft.savedAt = Date.now();
+  try {
+    localStorage.setItem(draftKeyV5(currentSurvey.id, currentUser.id), JSON.stringify(draft));
+    console.log('[draft-v5] saved for survey ' + currentSurvey.id);
+  } catch (e) {
+    console.warn('[draft-v5] save failed:', e);
+  }
+}
+
+function loadDraftV5(surveyId, userId) {
+  try {
+    const raw = localStorage.getItem(draftKeyV5(surveyId, userId));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d !== 'object' || !d.nominations) return null;
+    return d;
+  } catch (e) {
+    console.warn('[draft-v5] load failed:', e);
+    return null;
+  }
+}
+
+function applyDraftV5(draft) {
+  if (!draft || !draft.nominations) return;
+  const form = document.getElementById('vote-form-v5');
+  if (!form) return;
+  const nominations = currentSurvey?.settings?.nominations || [];
+  nominations.forEach(n => {
+    const card = form.querySelector(`[data-v5-card="${n.id}"]`);
+    if (!card) return;
+    const draftN = draft.nominations[n.id];
+    if (!draftN) return;
+
+    const skipCheck = card.querySelector('[data-v5-skip]');
+    if (skipCheck) {
+      skipCheck.checked = !!draftN.skipped;
+      // Триггерим событие, чтобы UI обновил состояние
+      skipCheck.dispatchEvent(new Event('change'));
+    }
+    if (!draftN.skipped) {
+      // Восстановить выбранных кандидатов
+      const cands = Array.isArray(draftN.candidates) ? draftN.candidates : [];
+      const slots = card.querySelectorAll('select[data-v5-slot]');
+      slots.forEach((slot, idx) => {
+        if (cands[idx] !== undefined) slot.value = cands[idx];
+      });
+      // Восстановить тексты
+      const answers = draftN.answers || {};
+      Object.keys(answers).forEach(qid => {
+        const ta = card.querySelector(`textarea[data-v5-q="${qid}"]`);
+        if (ta) ta.value = answers[qid];
+      });
+    }
+  });
+  console.log('[draft-v5] applied');
+}
+
+let draftV5SaveTimer = null;
+function scheduleDraftV5Save() {
+  if (draftV5SaveTimer) clearTimeout(draftV5SaveTimer);
+  draftV5SaveTimer = setTimeout(() => {
+    draftV5SaveTimer = null;
+    saveDraftV5();
+  }, 500);
+}
+
+// ---------- УЧАСТНИК: ФОРМА ГОЛОСОВАНИЯ ----------
+
+function renderVoteFormV5() {
+  const body = document.getElementById('survey-body');
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const nominations = settings.nominations || [];
+
+  if (nominations.length === 0) {
+    body.innerHTML = '<div class="card"><div class="error">В этом опросе нет номинаций.</div></div>';
+    return;
+  }
+
+  const candidates = getV5CandidatesFor(currentUser.id);
+  if (candidates.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">Нет участников для номинирования. Возможно, вы единственный participant в группе.</div></div>';
+    return;
+  }
+
+  // Проверка достаточности кандидатов хотя бы для одной номинации
+  const insufficientNoms = nominations.filter(n => n.candidates_count > candidates.length);
+  let insufficientWarning = '';
+  if (insufficientNoms.length > 0) {
+    insufficientWarning = '<div class="warning-box" style="margin-bottom:12px;"><strong>Внимание:</strong> в группе слишком мало participant\'ов для некоторых номинаций. Эти номинации можно только пропустить (если они помечены как необязательные) или ответить недостаточным числом имён. Сообщите организатору, если это ошибка настройки.</div>';
+  }
+
+  const existingDraft = loadDraftV5(s.id, currentUser.id);
+
+  let html = '<div class="card">';
+  if (existingDraft) {
+    html += `<div id="draft-banner" class="info" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between;">
+      <div><strong>У вас есть незавершённый черновик</strong> от ${formatDraftTime(existingDraft.savedAt)}. Продолжить заполнение или начать с нуля?</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="secondary small" id="btn-draft-continue-v5">Продолжить</button>
+        <button class="secondary small" id="btn-draft-discard-v5">Начать заново</button>
+      </div>
+    </div>`;
+  }
+  html += '<div class="warning-box"><strong>Внимание:</strong> ответ финальный. После нажатия «Подтвердить и отправить» изменить ответы будет нельзя.</div>';
+  html += insufficientWarning;
+  html += '<div id="vote-error" class="error hidden"></div>';
+  html += '<div id="vote-form-v5">';
+
+  nominations.forEach(n => {
+    html += renderV5NominationCard(n, candidates);
+  });
+
+  html += '</div>';
+  html += '<div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">';
+  html += '<button class="secondary" id="btn-vote-cancel-v5">Отмена</button>';
+  html += '<button id="btn-vote-submit-v5">Подтвердить и отправить</button>';
+  html += '</div>';
+  html += '</div>';
+  body.innerHTML = html;
+
+  document.getElementById('btn-vote-cancel-v5').addEventListener('click', backToList);
+  document.getElementById('btn-vote-submit-v5').addEventListener('click', submitVoteV5);
+
+  // Биндинг переключателей «пропустить»
+  document.querySelectorAll('[data-v5-skip]').forEach(check => {
+    check.addEventListener('change', (e) => {
+      const card = e.target.closest('[data-v5-card]');
+      const inner = card.querySelector('[data-v5-inner]');
+      if (e.target.checked) {
+        inner.style.opacity = '0.4';
+        inner.style.pointerEvents = 'none';
+      } else {
+        inner.style.opacity = '';
+        inner.style.pointerEvents = '';
+      }
+      scheduleDraftV5Save();
+    });
+  });
+
+  // Биндинг автосохранения
+  const form = document.getElementById('vote-form-v5');
+  form.querySelectorAll('select, textarea').forEach(inp => {
+    inp.addEventListener('input', scheduleDraftV5Save);
+    inp.addEventListener('change', scheduleDraftV5Save);
+  });
+
+  // Уникальность кандидатов внутри номинации (нельзя выбрать одного и того же дважды)
+  form.querySelectorAll('[data-v5-card]').forEach(card => {
+    card.querySelectorAll('select[data-v5-slot]').forEach(sel => {
+      sel.addEventListener('change', () => updateV5SlotAvailability(card));
+    });
+    updateV5SlotAvailability(card);
+  });
+
+  if (existingDraft) {
+    document.getElementById('btn-draft-continue-v5').addEventListener('click', () => {
+      applyDraftV5(existingDraft);
+      // После apply — обновить доступность слотов
+      form.querySelectorAll('[data-v5-card]').forEach(card => updateV5SlotAvailability(card));
+      const banner = document.getElementById('draft-banner');
+      if (banner) banner.remove();
+    });
+    document.getElementById('btn-draft-discard-v5').addEventListener('click', () => {
+      try { localStorage.removeItem(draftKeyV5(s.id, currentUser.id)); } catch (e) {}
+      const banner = document.getElementById('draft-banner');
+      if (banner) banner.remove();
+    });
+  }
+}
+
+function renderV5NominationCard(n, candidates) {
+  const optMark = n.optional ? ' <span style="color:var(--muted); font-size:13px;">(можно пропустить)</span>' : '';
+  const desc = n.description ? `<div style="color:var(--muted); font-size:14px; margin-bottom:8px;">${escapeHtml(n.description)}</div>` : '';
+
+  let skipBlock = '';
+  if (n.optional) {
+    skipBlock = `<label style="display:flex; align-items:center; gap:6px; margin-bottom:10px; font-size:14px;"><input type="checkbox" data-v5-skip style="width:auto; margin:0;"> Пропустить эту номинацию целиком</label>`;
+  }
+
+  // Слоты для имён
+  let slots = '<div style="margin-bottom:10px;"><strong style="font-size:14px;">Кандидаты:</strong>';
+  for (let i = 0; i < n.candidates_count; i++) {
+    slots += `<div style="margin-top:6px;"><select data-v5-slot data-slot-idx="${i}" style="width:100%; max-width:340px;">`;
+    slots += '<option value="">— выберите имя —</option>';
+    candidates.forEach(c => {
+      slots += `<option value="${escapeHtml(c.user_id)}">${escapeHtml(c.pseudonym)}</option>`;
+    });
+    slots += '</select></div>';
+  }
+  slots += '</div>';
+
+  // Текстовые вопросы
+  let questionsBlock = '';
+  if ((n.questions || []).length > 0) {
+    questionsBlock += '<div style="margin-top:8px;"><strong style="font-size:14px;">Вопросы:</strong>';
+    n.questions.forEach(q => {
+      const opt = q.optional ? ' <span style="color:var(--muted); font-size:11px;">(необяз.)</span>' : '';
+      questionsBlock += `<div style="margin-top:6px;">
+        <label style="font-size:13px; margin:0 0 4px 0; color:var(--text);">${escapeHtml(q.text)}${opt}</label>
+        <textarea data-v5-q="${escapeHtml(q.id)}" data-q-optional="${q.optional ? '1' : '0'}" placeholder="Ваш ответ" style="min-height:50px;"></textarea>
+      </div>`;
+    });
+    questionsBlock += '</div>';
+  }
+
+  return `
+    <div class="card" data-v5-card="${escapeHtml(n.id)}" style="background:#f9f9fb;">
+      <h3 style="margin-top:0;">${escapeHtml(n.title)}${optMark}</h3>
+      ${desc}
+      ${skipBlock}
+      <div data-v5-inner>
+        ${slots}
+        ${questionsBlock}
+      </div>
+    </div>
+  `;
+}
+
+// Обновляет в каждом select'е номинации список доступных имён,
+// исключая уже выбранных в других слотах этой же номинации.
+function updateV5SlotAvailability(card) {
+  const selects = Array.from(card.querySelectorAll('select[data-v5-slot]'));
+  const taken = new Set();
+  selects.forEach(s => { if (s.value) taken.add(s.value); });
+  selects.forEach(s => {
+    const myVal = s.value;
+    Array.from(s.options).forEach(opt => {
+      if (!opt.value) return; // плейсхолдер
+      // Прячем (disabled) тех, кого выбрал кто-то другой, кроме самого этого слота
+      opt.disabled = taken.has(opt.value) && opt.value !== myVal;
+    });
+  });
+}
+
+// Собирает ответы из формы.
+// strict=true → возвращает {error,...} при невалидных данных
+// strict=false → молча собирает то, что есть (для черновика)
+function collectV5Answers(strict) {
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const nominations = settings.nominations || [];
+  const result = { nominations: {} };
+  const errors = [];
+
+  nominations.forEach((n, nIdx) => {
+    const card = document.querySelector(`[data-v5-card="${n.id}"]`);
+    if (!card) return;
+
+    const skipCheck = card.querySelector('[data-v5-skip]');
+    const skipped = !!(skipCheck && skipCheck.checked);
+
+    if (skipped) {
+      result.nominations[n.id] = { skipped: true, candidates: [], answers: {} };
+      return;
+    }
+
+    // Собираем кандидатов
+    const slots = card.querySelectorAll('select[data-v5-slot]');
+    const candidates = [];
+    slots.forEach(slot => {
+      slot.classList.remove('invalid');
+      const v = (slot.value || '').trim();
+      if (v) candidates.push(v);
+    });
+
+    // Собираем тексты
+    const answers = {};
+    card.querySelectorAll('textarea[data-v5-q]').forEach(ta => {
+      ta.classList.remove('invalid');
+      const qid = ta.dataset.v5Q;
+      const v = (ta.value || '').trim();
+      if (v) answers[qid] = v;
+    });
+
+    if (strict) {
+      // Если номинация необязательная и ничего не заполнено — считаем skipped
+      const noCandidates = candidates.length === 0;
+      const noAnswers = Object.keys(answers).length === 0;
+      if (n.optional && noCandidates && noAnswers) {
+        result.nominations[n.id] = { skipped: true, candidates: [], answers: {} };
+        return;
+      }
+
+      // Проверка количества кандидатов: ровно n.candidates_count
+      if (candidates.length !== n.candidates_count) {
+        // Подсветить все слоты
+        slots.forEach(slot => {
+          if (!slot.value) slot.classList.add('invalid');
+        });
+        errors.push('В номинации «' + n.title + '» нужно выбрать ' + n.candidates_count + ' ' + pluralize(n.candidates_count, 'имя', 'имени', 'имён') + ', выбрано: ' + candidates.length + (n.optional ? '. Если хотите пропустить — поставьте галочку «Пропустить эту номинацию целиком».' : '.'));
+      }
+
+      // Проверка обязательных текстовых вопросов
+      (n.questions || []).forEach(q => {
+        if (!q.optional && !answers[q.id]) {
+          const ta = card.querySelector(`textarea[data-v5-q="${q.id}"]`);
+          if (ta) ta.classList.add('invalid');
+          errors.push('В номинации «' + n.title + '»: заполните обязательный вопрос «' + q.text + '».');
+        }
+      });
+    }
+
+    result.nominations[n.id] = { skipped: false, candidates, answers };
+  });
+
+  if (strict && errors.length > 0) {
+    return { error: errors.join(' ') };
+  }
+  return result;
+}
+
+async function submitVoteV5() {
+  console.log('[vote-v5] submit start');
+  const errorBox = document.getElementById('vote-error');
+  errorBox.classList.add('hidden');
+
+  const data = collectV5Answers(true);
+  if (data.error) {
+    errorBox.textContent = data.error;
+    errorBox.classList.remove('hidden');
+    const first = document.querySelector('#vote-form-v5 .invalid');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  if (!confirm('Ответ будет сохранён окончательно. Изменить его потом нельзя. Продолжить?')) {
+    return;
+  }
+
+  console.log('[vote-v5] saving');
+  const payload = { nominations: data.nominations };
+  const { error } = await sb.from('responses').insert({
+    survey_id: currentSurvey.id,
+    user_id: currentUser.id,
+    respondent_name: currentProfile.pseudonym,
+    payload
+  });
+  if (error) {
+    console.error('[vote-v5] error:', error);
+    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+  console.log('[vote-v5] saved');
+  // Черновик НЕ удаляем по решению Николая — пусть остаётся для повторного просмотра
+  // (в архиве участник всё равно видит свой ответ из БД, а в активном — через renderAlreadyVotedV5).
+  const { data: ownResp } = await sb
+    .from('responses')
+    .select('*')
+    .eq('survey_id', currentSurvey.id)
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+  currentOwnResponse = ownResp;
+  renderSurveyScreen();
+}
+
+function renderAlreadyVotedV5() {
+  const body = document.getElementById('survey-body');
+  let html = '<div class="card">';
+  html += '<div class="success-box"><strong>Ваш ответ сохранён.</strong><br>Общий результат появится после того, как организатор закроет опрос.</div>';
+  html += '<h3>Ваш ответ</h3>';
+  html += renderOwnResponseV5(currentOwnResponse.payload);
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+function renderOwnResponseV5(payload) {
+  if (!payload || !payload.nominations) return '<p>(ответ пустой)</p>';
+  const s = currentSurvey;
+  const nominations = s.settings?.nominations || [];
+  const all = allGroupParticipantsV3 || [];
+  const nameById = new Map(all.map(p => [p.user_id, p.pseudonym]));
+
+  let html = '';
+  nominations.forEach(n => {
+    const resp = payload.nominations[n.id];
+    html += '<div style="margin-bottom:14px; padding:10px 12px; background:#f9f9fb; border:1px solid var(--border); border-radius:6px;">';
+    html += '<div style="font-weight:600;">' + escapeHtml(n.title) + '</div>';
+    if (n.description) {
+      html += '<div style="color:var(--muted); font-size:13px; margin-top:2px;">' + escapeHtml(n.description) + '</div>';
+    }
+    if (!resp || resp.skipped) {
+      html += '<div style="margin-top:6px; color:var(--muted); font-style:italic;">— номинация пропущена —</div>';
+    } else {
+      const cands = (resp.candidates || []).map(uid => escapeHtml(nameById.get(uid) || '(участник удалён)'));
+      html += '<div style="margin-top:6px;"><strong>Ваш выбор:</strong> ' + (cands.length > 0 ? cands.join(', ') : '<span style="color:var(--muted);">—</span>') + '</div>';
+      const answers = resp.answers || {};
+      (n.questions || []).forEach(q => {
+        const ans = answers[q.id];
+        if (ans) {
+          html += '<div style="margin-top:4px; font-size:14px;"><span style="color:var(--muted);">' + escapeHtml(q.text) + ':</span> ' + escapeHtml(ans) + '</div>';
+        }
+      });
+    }
+    html += '</div>';
+  });
+  return html || '<p>(ответ пустой)</p>';
+}
+
+// ---------- АГРЕГАЦИЯ V5 ----------
+// Возвращает структуру для отчётов:
+//   per_nomination[nom_id] = {
+//      counts: Map<user_id, число_упоминаний>,
+//      texts:  { <q_id>: [{voter_id, text}], ... },
+//      skipped_count, voted_count
+//   }
+//   per_user[user_id] = { mentions: [{nom_id, count}], texts: { <nom_id>: { <q_id>: [text,...] } } }
+//   total_responses
+
+function aggregateResponsesV5(responses, settings) {
+  const nominations = settings?.nominations || [];
+  const per_nomination = {};
+  const per_user = {};
+  nominations.forEach(n => {
+    per_nomination[n.id] = {
+      counts: new Map(),
+      texts: {},
+      skipped_count: 0,
+      voted_count: 0
+    };
+    (n.questions || []).forEach(q => {
+      per_nomination[n.id].texts[q.id] = [];
+    });
+  });
+
+  responses.forEach(r => {
+    const payload = r.payload || {};
+    const noms = payload.nominations || {};
+    nominations.forEach(n => {
+      const respN = noms[n.id];
+      if (!respN || respN.skipped) {
+        per_nomination[n.id].skipped_count++;
+        return;
+      }
+      per_nomination[n.id].voted_count++;
+      const cands = respN.candidates || [];
+      cands.forEach(uid => {
+        const m = per_nomination[n.id].counts;
+        m.set(uid, (m.get(uid) || 0) + 1);
+
+        if (!per_user[uid]) per_user[uid] = { mentions: {}, texts: {} };
+        per_user[uid].mentions[n.id] = (per_user[uid].mentions[n.id] || 0) + 1;
+      });
+      const ans = respN.answers || {};
+      (n.questions || []).forEach(q => {
+        const t = ans[q.id];
+        if (t) {
+          per_nomination[n.id].texts[q.id].push({ voter_id: r.user_id, text: t });
+          // В per_user тексты складываем по принципу «про этого участника» —
+          // т.е. под каждым кандидатом, которого назвал данный voter в этой номинации.
+          cands.forEach(uid => {
+            if (!per_user[uid]) per_user[uid] = { mentions: {}, texts: {} };
+            if (!per_user[uid].texts[n.id]) per_user[uid].texts[n.id] = {};
+            if (!per_user[uid].texts[n.id][q.id]) per_user[uid].texts[n.id][q.id] = [];
+            per_user[uid].texts[n.id][q.id].push(t);
+          });
+        }
+      });
+    });
+  });
+
+  return { per_nomination, per_user, total_responses: responses.length };
+}
+
+// ---------- ОТЧЁТ ОРГАНИЗАТОРА ----------
+
+async function renderResultsV5ForOrganizer() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses || [];
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const nominations = settings.nominations || [];
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+
+  if (nominations.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">В этом опросе нет номинаций.</div></div>';
+    return;
+  }
+
+  const agg = aggregateResponsesV5(responses, settings);
+  const all = allGroupParticipantsV3 || [];
+  const nameById = new Map(all.map(p => [p.user_id, p.pseudonym]));
+
+  let html = '<div class="print-root">';
+  html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  html += renderV5ExportToolbar();
+  html += '<div class="card">';
+  html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants} ${pluralize(totalParticipants, 'участника', 'участников', 'участников')}.</div>`;
+  html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все агрегированные результаты — это право организатора.</p>';
+  html += '</div>';
+
+  // По каждой номинации — рейтинг + тексты
+  nominations.forEach(n => {
+    html += renderV5NominationReport(n, agg.per_nomination[n.id], nameById, true);
+  });
+
+  html += '</div>';
+  body.innerHTML = html;
+  bindV5ExportToolbar(true);
+}
+
+// ---------- ОТЧЁТ УЧАСТНИКА ----------
+
+async function renderResultsV5ForParticipant() {
+  const body = document.getElementById('survey-body');
+  body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
+
+  cachedAllResponses = await loadAllResponses();
+  const responses = cachedAllResponses || [];
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const nominations = settings.nominations || [];
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+  const myId = currentUser?.id;
+  const showPersonal = !!settings.show_personal_reports;
+
+  if (nominations.length === 0) {
+    body.innerHTML = '<div class="card"><div class="empty-state">В этом опросе нет номинаций.</div></div>';
+    return;
+  }
+
+  const agg = aggregateResponsesV5(responses, settings);
+
+  let html = '<div class="print-root">';
+  html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  if (showPersonal) html += renderV5ExportToolbar();
+  html += '<div class="card">';
+  html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants}.</div>`;
+  if (!showPersonal) {
+    html += '<p style="color:var(--muted); font-size:13px;">По настройке этого опроса личные отчёты участникам не показываются. Все результаты доступны только организатору.</p>';
+    html += '</div>';
+    // Свой ответ всё равно показываем
+    if (currentOwnResponse) {
+      html += '<div class="card"><h3 style="margin-top:0;">Ваш ответ</h3>';
+      html += renderOwnResponseV5(currentOwnResponse.payload);
+      html += '</div>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+    return;
+  }
+
+  html += '<p style="color:var(--muted); font-size:13px;">Ниже — ваш личный отчёт: в каких номинациях вас выбрали и какие тексты про вас написали. Имена авторов скрыты.</p>';
+  html += '</div>';
+
+  // Свой ответ
+  if (currentOwnResponse) {
+    html += '<div class="card"><h3 style="margin-top:0;">Ваш ответ</h3>';
+    html += renderOwnResponseV5(currentOwnResponse.payload);
+    html += '</div>';
+  }
+
+  // Личный отчёт «про меня»
+  html += renderV5PersonalReport(myId, nominations, agg);
+
+  html += '</div>';
+  body.innerHTML = html;
+  bindV5ExportToolbar(false);
+}
+
+function renderParticipantViewV5() {
+  renderResultsV5ForParticipant();
+}
+
+function renderV5PersonalReport(userId, nominations, agg) {
+  const myAgg = agg.per_user[userId];
+  let html = '<div class="card"><h3 style="margin-top:0;">Что про вас сказали</h3>';
+
+  if (!myAgg || (Object.keys(myAgg.mentions || {}).length === 0 && Object.keys(myAgg.texts || {}).length === 0)) {
+    html += '<p style="color:var(--muted);">В этом опросе вас не выбрали ни в одной номинации.</p>';
+    html += '</div>';
+    return html;
+  }
+
+  nominations.forEach(n => {
+    const count = (myAgg.mentions || {})[n.id] || 0;
+    const texts = (myAgg.texts || {})[n.id] || {};
+    const hasTexts = Object.keys(texts).length > 0;
+    if (count === 0 && !hasTexts) return; // в этой номинации не упоминали — пропускаем
+
+    html += '<div style="margin-bottom:14px; padding:10px 12px; background:#f9f9fb; border:1px solid var(--border); border-radius:6px;">';
+    html += '<div style="font-weight:600;">' + escapeHtml(n.title) + '</div>';
+    if (n.description) {
+      html += '<div style="color:var(--muted); font-size:13px; margin-top:2px;">' + escapeHtml(n.description) + '</div>';
+    }
+    html += '<div style="margin-top:6px;"><strong>Вас выбрали:</strong> ' + count + ' ' + pluralize(count, 'раз', 'раза', 'раз') + '</div>';
+
+    (n.questions || []).forEach(q => {
+      const arr = texts[q.id] || [];
+      if (arr.length === 0) return;
+      html += '<div style="margin-top:8px;"><div style="font-size:13px; color:var(--muted); margin-bottom:4px;">' + escapeHtml(q.text) + ':</div><ul style="margin:0; padding-left:20px;">';
+      arr.forEach(t => { html += '<li>' + escapeHtml(t) + '</li>'; });
+      html += '</ul></div>';
+    });
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function renderV5NominationReport(n, nAgg, nameById, isOrganizer) {
+  let html = '<div class="card">';
+  html += '<h3 style="margin-top:0;">' + escapeHtml(n.title) + '</h3>';
+  if (n.description) {
+    html += '<p style="color:var(--muted); margin-top:0;">' + escapeHtml(n.description) + '</p>';
+  }
+  html += `<p style="color:var(--muted); font-size:13px;">Голосовали: ${nAgg.voted_count}; пропустили: ${nAgg.skipped_count}.</p>`;
+
+  // Рейтинг: сортируем по убыванию
+  const ranking = Array.from(nAgg.counts.entries())
+    .map(([uid, c]) => ({ uid, count: c, name: nameById.get(uid) || '(удалён)' }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+
+  if (ranking.length === 0) {
+    html += '<p>В этой номинации никого не выбрали.</p>';
+  } else {
+    html += '<table class="vote-table"><thead><tr><th style="width:40px;">№</th><th>Кандидат</th><th style="width:120px;">Голосов</th></tr></thead><tbody>';
+    let prevCount = null;
+    let rank = 0;
+    ranking.forEach((row, idx) => {
+      if (row.count !== prevCount) {
+        rank = idx + 1;
+        prevCount = row.count;
+      }
+      html += `<tr><td>${rank}</td><td class="subject-name">${escapeHtml(row.name)}</td><td>${row.count}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  // Тексты — только для организатора (для участника тексты выводятся в личном отчёте)
+  if (isOrganizer) {
+    (n.questions || []).forEach(q => {
+      const arr = nAgg.texts[q.id] || [];
+      if (arr.length === 0) return;
+      html += '<div style="margin-top:14px;"><h4 style="margin:0 0 6px 0;">' + escapeHtml(q.text) + '</h4>';
+      html += '<ul style="margin:0; padding-left:20px;">';
+      arr.forEach(item => {
+        html += '<li>' + escapeHtml(item.text) + '</li>';
+      });
+      html += '</ul></div>';
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ---------- ЭКСПОРТ V5 ----------
+
+function renderV5ExportToolbar() {
+  return `
+    <div class="export-toolbar no-print" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+      <button class="secondary small" id="btn-v5-copy">📋 Копировать в буфер</button>
+      <button class="secondary small" id="btn-v5-print">🖨 Печать / PDF</button>
+    </div>
+  `;
+}
+
+function bindV5ExportToolbar(isOrganizer) {
+  const copyBtn = document.getElementById('btn-v5-copy');
+  if (copyBtn) copyBtn.addEventListener('click', () => copyV5ResultsToClipboard(isOrganizer));
+  const printBtn = document.getElementById('btn-v5-print');
+  if (printBtn) printBtn.addEventListener('click', () => window.print());
+}
+
+function buildV5ResultsText(isOrganizer) {
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const nominations = settings.nominations || [];
+  const all = allGroupParticipantsV3 || [];
+  const nameById = new Map(all.map(p => [p.user_id, p.pseudonym]));
+  const responses = cachedAllResponses || [];
+  const totalParticipants = all.length;
+  const agg = aggregateResponsesV5(responses, settings);
+
+  const lines = [];
+  lines.push(s.title);
+  lines.push('Вариант 3 — Номинации');
+  lines.push('Проголосовало: ' + responses.length + ' из ' + totalParticipants);
+  lines.push('');
+
+  if (isOrganizer) {
+    nominations.forEach(n => {
+      const nAgg = agg.per_nomination[n.id];
+      lines.push('=== ' + n.title + ' ===');
+      if (n.description) lines.push(n.description);
+      lines.push('Голосовали: ' + nAgg.voted_count + '; пропустили: ' + nAgg.skipped_count);
+
+      const ranking = Array.from(nAgg.counts.entries())
+        .map(([uid, c]) => ({ name: nameById.get(uid) || '(удалён)', count: c }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+
+      if (ranking.length === 0) {
+        lines.push('(никого не выбрали)');
+      } else {
+        let prevCount = null;
+        let rank = 0;
+        ranking.forEach((row, idx) => {
+          if (row.count !== prevCount) {
+            rank = idx + 1;
+            prevCount = row.count;
+          }
+          lines.push(rank + '. ' + row.name + ' — ' + row.count);
+        });
+      }
+
+      (n.questions || []).forEach(q => {
+        const arr = nAgg.texts[q.id] || [];
+        if (arr.length === 0) return;
+        lines.push('');
+        lines.push('— ' + q.text + ':');
+        arr.forEach(item => lines.push('  • ' + item.text));
+      });
+      lines.push('');
+    });
+  } else {
+    // Личный отчёт participant'а
+    const myId = currentUser?.id;
+    const myAgg = agg.per_user[myId];
+    lines.push('=== Что про вас сказали ===');
+    if (!myAgg || (Object.keys(myAgg.mentions || {}).length === 0 && Object.keys(myAgg.texts || {}).length === 0)) {
+      lines.push('В этом опросе вас не выбрали ни в одной номинации.');
+    } else {
+      nominations.forEach(n => {
+        const count = (myAgg.mentions || {})[n.id] || 0;
+        const texts = (myAgg.texts || {})[n.id] || {};
+        const hasTexts = Object.keys(texts).length > 0;
+        if (count === 0 && !hasTexts) return;
+        lines.push('');
+        lines.push('• ' + n.title);
+        lines.push('  Вас выбрали: ' + count + ' ' + pluralize(count, 'раз', 'раза', 'раз'));
+        (n.questions || []).forEach(q => {
+          const arr = texts[q.id] || [];
+          if (arr.length === 0) return;
+          lines.push('  — ' + q.text + ':');
+          arr.forEach(t => lines.push('    • ' + t));
+        });
+      });
+    }
+  }
+  return lines.join('\n');
+}
+
+async function copyV5ResultsToClipboard(isOrganizer) {
+  const text = buildV5ResultsText(isOrganizer);
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('Результаты скопированы в буфер обмена.');
+  } catch (e) {
+    console.warn('[v5-copy] failed:', e);
+    alert('Не удалось скопировать. Попробуйте выделить и скопировать вручную.');
+  }
+}
+
 function pluralize(n, one, few, many) {
   const abs = Math.abs(n) % 100;
   const lastDigit = abs % 10;
@@ -6380,6 +7340,12 @@ async function openNewSurveyModal() {
   document.getElementById('ns-v4-questions-list').innerHTML = '';
   v4QuestionCounter = 0;
 
+  // Сброс V5
+  document.getElementById('ns-v5-allow-self').checked = false;
+  document.getElementById('ns-v5-show-personal').checked = true;
+  document.getElementById('ns-v5-nominations-list').innerHTML = '';
+  v5NominationCounter = 0;
+
   if (allPseudonyms.length === 0) {
     allPseudonyms = await loadPseudonyms();
   }
@@ -6402,6 +7368,9 @@ async function openNewSurveyModal() {
   // По умолчанию — один пустой V4-вопрос
   addV4Question();
 
+  // По умолчанию — одна пустая V5-номинация
+  addV5Nomination();
+
   updateTypeVisibility();
   updateSubjectsListVisibility();
   updateV4SubjectsListVisibility();
@@ -6420,10 +7389,13 @@ function updateTypeVisibility() {
   document.getElementById('ns-v2-settings').classList.toggle('hidden', type !== 'variant_2');
   document.getElementById('ns-v3-settings').classList.toggle('hidden', type !== 'variant_3');
   document.getElementById('ns-v4-settings').classList.toggle('hidden', type !== 'variant_4');
-  // В Вариантах 3 и 4 блок общей visibility не используется: там своя логика
+  document.getElementById('ns-v5-settings').classList.toggle('hidden', type !== 'variant_5');
+  // В Вариантах 3, 4 и 5 блок общей visibility не используется: там своя логика
   // (V3: да/нет всегда виден, тексты управляются ns-v3-text-visibility;
-  //  V4: yesno_visibility + флажки на каждом текстовом вопросе).
-  document.getElementById('ns-visibility-block').classList.toggle('hidden', type === 'variant_3' || type === 'variant_4');
+  //  V4: yesno_visibility + флажки на каждом текстовом вопросе;
+  //  V5: только show_personal_reports — личный отчёт для participant'а либо нет).
+  document.getElementById('ns-visibility-block').classList.toggle('hidden',
+    type === 'variant_3' || type === 'variant_4' || type === 'variant_5');
 }
 
 function updateSubjectsListVisibility() {
@@ -6664,6 +7636,80 @@ function renumberV4Questions() {
   });
 }
 
+// ============================================================
+// UI ФОРМЫ V5 — НОМИНАЦИИ
+// ============================================================
+// Структура: каждая «номинация» — это карточка .question-item с
+//   - название (title), описание (description, опц.)
+//   - candidates_count: сколько имён выбирает голосующий
+//   - optional: можно ли пропустить номинацию целиком
+//   - questions[]: текстовые вопросы внутри номинации (каждый со своим optional)
+// Список вопросов внутри номинации хранится в подэлементе [data-v5q-list].
+
+function addV5Nomination() {
+  v5NominationCounter++;
+  const id = 'v5n-' + v5NominationCounter;
+  const html = `
+    <div class="question-item" data-v5nid="${id}">
+      <div class="question-item-header">
+        <span class="question-item-num" data-v5n-num>Номинация —</span>
+        <button class="link-btn" data-remove-v5n="${id}">✕ удалить</button>
+      </div>
+      <input type="text" data-field="title" placeholder="Название номинации (например: «Самый ценный игрок»)" style="width:100%; margin-bottom:8px;">
+      <textarea data-field="description" placeholder="Описание / критерий (необязательно — поможет голосующим понять, по какому признаку выбирать)" style="min-height:50px;"></textarea>
+      <div class="question-item-options" style="margin-top:8px;">
+        <label>Сколько имён выбирает каждый голосующий:
+          <input type="number" data-field="candidates_count" min="1" value="1" style="width:70px;">
+        </label>
+        <label><input type="checkbox" data-field="nomination_optional"> Номинацию можно пропустить целиком</label>
+      </div>
+      <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:13px; color:var(--muted); font-weight:600;">Текстовые вопросы внутри номинации (необязательно)</span>
+          <button class="link-btn" type="button" data-add-v5q="${id}">+ Добавить вопрос</button>
+        </div>
+        <div data-v5q-list></div>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById('ns-v5-nominations-list');
+  list.insertAdjacentHTML('beforeend', html);
+  const item = list.querySelector(`[data-v5nid="${id}"]`);
+  item.querySelector('[data-remove-v5n]').addEventListener('click', () => {
+    item.remove();
+    renumberV5Nominations();
+  });
+  item.querySelector('[data-add-v5q]').addEventListener('click', () => addV5Question(item));
+  renumberV5Nominations();
+}
+
+function renumberV5Nominations() {
+  const items = document.querySelectorAll('#ns-v5-nominations-list .question-item');
+  items.forEach((item, idx) => {
+    const numEl = item.querySelector('[data-v5n-num]');
+    if (numEl) numEl.textContent = 'Номинация ' + (idx + 1);
+  });
+}
+
+// Добавить текстовый вопрос внутрь конкретной номинации.
+function addV5Question(nominationItem) {
+  const list = nominationItem.querySelector('[data-v5q-list]');
+  const html = `
+    <div data-v5qrow style="display:flex; gap:6px; align-items:flex-start; margin-bottom:6px;">
+      <div style="flex:1;">
+        <input type="text" data-field="question_text" placeholder="Текст вопроса (например: «За что именно?»)" style="width:100%; margin:0;">
+        <label style="font-size:12px; color:var(--muted); display:flex; align-items:center; margin-top:4px;">
+          <input type="checkbox" data-field="question_optional" style="width:auto; margin:0 4px 0 0;"> Необязательный
+        </label>
+      </div>
+      <button class="link-btn" type="button" data-remove-v5q style="margin-top:6px;">✕</button>
+    </div>
+  `;
+  list.insertAdjacentHTML('beforeend', html);
+  const row = list.lastElementChild;
+  row.querySelector('[data-remove-v5q]').addEventListener('click', () => row.remove());
+}
+
 function collectFormData() {
   const title = document.getElementById('ns-title').value.trim();
   const type = document.querySelector('input[name="ns-type"]:checked').value;
@@ -6870,6 +7916,68 @@ function collectFormData() {
 
     // В Варианте 4 общее поле visibility не используется — своя модель видимости
     // (yesno_visibility + флажки на текстовых вопросах). Форсируем 'full' для совместимости.
+    return { title, type, visibility: 'full', settings };
+  }
+
+  if (type === 'variant_5') {
+    const allowSelf = document.getElementById('ns-v5-allow-self').checked;
+    const showPersonalReports = document.getElementById('ns-v5-show-personal').checked;
+
+    // Доступное число кандидатов: число participant'ов в группе с поправкой на allow_self
+    const totalParticipants = (allGroupParticipantsV3 || []).length;
+    const maxCandidates = allowSelf ? totalParticipants : Math.max(0, totalParticipants - 1);
+
+    const nominationItems = document.querySelectorAll('#ns-v5-nominations-list .question-item');
+    if (nominationItems.length === 0) return { error: 'Добавьте хотя бы одну номинацию' };
+
+    const nominations = [];
+    let nNum = 0;
+    for (const item of nominationItems) {
+      nNum++;
+      const titleVal = item.querySelector('[data-field="title"]').value.trim();
+      if (!titleVal) return { error: 'Заполните название номинации ' + nNum };
+
+      const descVal = (item.querySelector('[data-field="description"]')?.value || '').trim();
+
+      const countVal = parseInt(item.querySelector('[data-field="candidates_count"]').value, 10);
+      if (isNaN(countVal) || countVal < 1) {
+        return { error: 'Укажите количество кандидатов в номинации ' + nNum + ' (минимум 1)' };
+      }
+      if (maxCandidates > 0 && countVal > maxCandidates) {
+        return { error: 'В номинации ' + nNum + ' количество кандидатов (' + countVal + ') превышает доступное число имён (' + maxCandidates + ')' };
+      }
+
+      const nomOptional = item.querySelector('[data-field="nomination_optional"]').checked;
+
+      // Текстовые вопросы внутри номинации — необязательный массив
+      const questionRows = item.querySelectorAll('[data-v5q-list] [data-v5qrow]');
+      const questions = [];
+      let qNum = 0;
+      for (const row of questionRows) {
+        qNum++;
+        const qText = (row.querySelector('[data-field="question_text"]')?.value || '').trim();
+        if (!qText) return { error: 'В номинации ' + nNum + ' заполните текст вопроса ' + qNum + ' или удалите его' };
+        const qOpt = row.querySelector('[data-field="question_optional"]')?.checked;
+        questions.push({ id: 'q' + qNum, text: qText, optional: !!qOpt });
+      }
+
+      const nom = {
+        id: 'n' + nNum,
+        title: titleVal,
+        candidates_count: countVal,
+        optional: nomOptional,
+        questions
+      };
+      if (descVal) nom.description = descVal;
+      nominations.push(nom);
+    }
+
+    settings.allow_self = allowSelf;
+    settings.show_personal_reports = showPersonalReports;
+    settings.nominations = nominations;
+
+    // В Варианте 5 общее поле visibility не используется — своя модель видимости
+    // (show_personal_reports). Форсируем 'full' для совместимости.
     return { title, type, visibility: 'full', settings };
   }
 
@@ -7390,6 +8498,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-add-v1-question', 'click', addV1Question);
   bind('btn-add-v3-question', 'click', addV3Question);
   bind('btn-add-v4-question', 'click', addV4Question);
+  bind('btn-add-v5-nomination', 'click', addV5Nomination);
 
   // Общая галочка «Показывать столбцы все Да / все Нет» управляет видимостью индивидуальных
   // галочек include_in_intersection у каждого Да/Нет вопроса. Сама галочка не очищает данные,
