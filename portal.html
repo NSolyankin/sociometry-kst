@@ -1780,8 +1780,10 @@ function fillNewSurveyFormFromSource(src) {
       item.querySelector('[data-field="title"]').value = n.title || '';
       const descTa = item.querySelector('[data-field="description"]');
       if (descTa) descTa.value = n.description || '';
-      const cntInput = item.querySelector('[data-field="candidates_count"]');
-      if (cntInput && n.candidates_count) cntInput.value = n.candidates_count;
+      const cntInput = item.querySelector('[data-field="candidates_min"]');
+      // Поддержка старых опросов с полем candidates_count — копируем как min
+      const minVal = (n.candidates_min !== undefined) ? n.candidates_min : n.candidates_count;
+      if (cntInput && minVal) cntInput.value = minVal;
       const optCheck = item.querySelector('[data-field="nomination_optional"]');
       if (optCheck) optCheck.checked = !!n.optional;
 
@@ -5769,14 +5771,30 @@ function describeV4Settings(settings) {
 //   settings.allow_self            — можно ли голосовать за себя
 //   settings.show_personal_reports — показывать ли participant'у личный отчёт
 //   settings.nominations[]         — массив номинаций
-//      { id, title, description?, candidates_count, optional, questions: [{id,text,optional}] }
+//      { id, title, description?, candidates_min, optional, questions: [{id,text,optional}] }
+//   Поле candidates_min задаёт МИНИМАЛЬНОЕ число имён, которое должен выбрать
+//   голосующий. Максимум — все доступные participant'ы. Голосующий может выбрать
+//   больше имён, чем минимум.
 //
 // Структура payload (одна запись на голосующего):
 //   { nominations: { <nom_id>: {
-//       skipped: bool,                    // true если номинация пропущена целиком
-//       candidates: [user_id, ...],       // выбранные кандидаты в порядке слотов
-//       answers: { <q_id>: 'текст', ... } // тексты ответов на вопросы внутри номинации
+//       skipped: bool,                          // true если номинация пропущена целиком
+//       candidates: [user_id, ...],             // выбранные кандидаты в порядке слотов
+//       answers: { <q_id>: { <user_id>: 'текст', ... }, ... } // тексты — отдельно на каждого выбранного кандидата
 //   } } }
+//
+// Поддерживается и старый формат payload (до правки):
+//   answers: { <q_id>: 'текст' } — один текст на номинацию.
+// Старый формат опросов settings с полем candidates_count трактуется как
+// candidates_min = candidates_count (миграционная совместимость).
+
+// Возвращает «минимум кандидатов» из номинации с поддержкой старого формата settings.
+function getNominationMin(n) {
+  if (!n) return 1;
+  if (typeof n.candidates_min === 'number' && n.candidates_min >= 1) return n.candidates_min;
+  if (typeof n.candidates_count === 'number' && n.candidates_count >= 1) return n.candidates_count;
+  return 1;
+}
 
 function describeV5Settings(settings) {
   if (!settings) return '—';
@@ -5835,7 +5853,7 @@ async function renderOrganizerViewV5() {
       if (n.description) {
         html += `<div style="color:var(--muted); font-size:13px; margin-top:2px;">${escapeHtml(n.description)}</div>`;
       }
-      html += `<div style="color:var(--muted); font-size:13px;">Выбирается имён: ${n.candidates_count}`;
+      html += `<div style="color:var(--muted); font-size:13px;">Минимум имён: ${getNominationMin(n)}`;
       if ((n.questions || []).length > 0) {
         html += '; вопросов: ' + n.questions.length;
       }
@@ -5909,21 +5927,50 @@ function applyDraftV5(draft) {
     const skipCheck = card.querySelector('[data-v5-skip]');
     if (skipCheck) {
       skipCheck.checked = !!draftN.skipped;
-      // Триггерим событие, чтобы UI обновил состояние
       skipCheck.dispatchEvent(new Event('change'));
     }
     if (!draftN.skipped) {
-      // Восстановить выбранных кандидатов
       const cands = Array.isArray(draftN.candidates) ? draftN.candidates : [];
+      const cont = card.querySelector('[data-v5-slots]');
+      const minVal = parseInt(cont?.dataset.min || '1', 10);
+      const maxVal = parseInt(cont?.dataset.max || '0', 10);
+      const candArr = JSON.parse(cont?.dataset.cands || '[]');
+
+      // Сколько слотов нужно: max(minVal, draft.length), но не больше maxVal
+      const needed = Math.min(maxVal, Math.max(minVal, cands.length));
+      cont.innerHTML = '';
+      for (let i = 0; i < needed; i++) {
+        cont.insertAdjacentHTML('beforeend', v5SlotHtml(i, candArr));
+      }
+      bindV5SlotEvents(card);
+
+      // Расставить выбор
       const slots = card.querySelectorAll('select[data-v5-slot]');
       slots.forEach((slot, idx) => {
         if (cands[idx] !== undefined) slot.value = cands[idx];
       });
-      // Восстановить тексты
+
+      updateV5SlotAvailability(card);
+      updateV5AddSlotButton(card);
+      // Перерисовать вопросы под текущий выбор
+      rebuildV5QuestionsBlock(card);
+
+      // Восстановить тексты — поддержка обоих форматов:
+      // новый { qid: { uid: text } } и старый { qid: text }
       const answers = draftN.answers || {};
       Object.keys(answers).forEach(qid => {
-        const ta = card.querySelector(`textarea[data-v5-q="${qid}"]`);
-        if (ta) ta.value = answers[qid];
+        const v = answers[qid];
+        if (v && typeof v === 'object') {
+          // новый формат
+          Object.keys(v).forEach(uid => {
+            const ta = card.querySelector(`textarea[data-v5-q="${qid}"][data-v5-subject="${uid}"]`);
+            if (ta) ta.value = v[uid];
+          });
+        } else if (typeof v === 'string') {
+          // старый формат — записываем в первый textarea этого вопроса (если есть)
+          const ta = card.querySelector(`textarea[data-v5-q="${qid}"]`);
+          if (ta) ta.value = v;
+        }
       });
     }
   });
@@ -5959,7 +6006,7 @@ function renderVoteFormV5() {
   }
 
   // Проверка достаточности кандидатов хотя бы для одной номинации
-  const insufficientNoms = nominations.filter(n => n.candidates_count > candidates.length);
+  const insufficientNoms = nominations.filter(n => getNominationMin(n) > candidates.length);
   let insufficientWarning = '';
   if (insufficientNoms.length > 0) {
     insufficientWarning = '<div class="warning-box" style="margin-bottom:12px;"><strong>Внимание:</strong> в группе слишком мало participant\'ов для некоторых номинаций. Эти номинации можно только пропустить (если они помечены как необязательные) или ответить недостаточным числом имён. Сообщите организатору, если это ошибка настройки.</div>';
@@ -6013,26 +6060,17 @@ function renderVoteFormV5() {
     });
   });
 
-  // Биндинг автосохранения
+  // Биндинг автосохранения на статичных элементах (skip-чекбоксы и т.п.)
   const form = document.getElementById('vote-form-v5');
-  form.querySelectorAll('select, textarea').forEach(inp => {
-    inp.addEventListener('input', scheduleDraftV5Save);
-    inp.addEventListener('change', scheduleDraftV5Save);
-  });
 
-  // Уникальность кандидатов внутри номинации (нельзя выбрать одного и того же дважды)
+  // Инициализация слотов и вопросов в каждой номинации
   form.querySelectorAll('[data-v5-card]').forEach(card => {
-    card.querySelectorAll('select[data-v5-slot]').forEach(sel => {
-      sel.addEventListener('change', () => updateV5SlotAvailability(card));
-    });
-    updateV5SlotAvailability(card);
+    initV5Slots(card);
   });
 
   if (existingDraft) {
     document.getElementById('btn-draft-continue-v5').addEventListener('click', () => {
       applyDraftV5(existingDraft);
-      // После apply — обновить доступность слотов
-      form.querySelectorAll('[data-v5-card]').forEach(card => updateV5SlotAvailability(card));
       const banner = document.getElementById('draft-banner');
       if (banner) banner.remove();
     });
@@ -6047,36 +6085,32 @@ function renderVoteFormV5() {
 function renderV5NominationCard(n, candidates) {
   const optMark = n.optional ? ' <span style="color:var(--muted); font-size:13px;">(можно пропустить)</span>' : '';
   const desc = n.description ? `<div style="color:var(--muted); font-size:14px; margin-bottom:8px;">${escapeHtml(n.description)}</div>` : '';
+  const minVal = getNominationMin(n);
+  const maxVal = candidates.length;
 
   let skipBlock = '';
   if (n.optional) {
     skipBlock = `<label style="display:flex; align-items:center; gap:6px; margin-bottom:10px; font-size:14px;"><input type="checkbox" data-v5-skip style="width:auto; margin:0;"> Пропустить эту номинацию целиком</label>`;
   }
 
-  // Слоты для имён
-  let slots = '<div style="margin-bottom:10px;"><strong style="font-size:14px;">Кандидаты:</strong>';
-  for (let i = 0; i < n.candidates_count; i++) {
-    slots += `<div style="margin-top:6px;"><select data-v5-slot data-slot-idx="${i}" style="width:100%; max-width:340px;">`;
-    slots += '<option value="">— выберите имя —</option>';
-    candidates.forEach(c => {
-      slots += `<option value="${escapeHtml(c.user_id)}">${escapeHtml(c.pseudonym)}</option>`;
-    });
-    slots += '</select></div>';
-  }
-  slots += '</div>';
+  // Слоты для имён — стартуем с minVal, можно добавлять до maxVal.
+  // Сами слоты рендерятся динамически контейнером [data-v5-slots].
+  // Под слотами — кнопка «+ Ещё имя» (если ещё есть куда добавить) и подсказка.
+  const candPayload = JSON.stringify(candidates.map(c => ({ id: c.user_id, name: c.pseudonym })));
+  const slotsBlock = `
+    <div style="margin-bottom:10px;">
+      <strong style="font-size:14px;">Кандидаты:</strong>
+      <div style="font-size:12px; color:var(--muted); margin-top:2px;">Минимум — ${minVal}, можно выбрать больше${maxVal > minVal ? ' (до ' + maxVal + ')' : ''}.</div>
+      <div data-v5-slots data-min="${minVal}" data-max="${maxVal}" data-cands='${escapeHtml(candPayload)}'></div>
+      <button class="link-btn" type="button" data-v5-add-slot style="margin-top:6px;">+ Ещё имя</button>
+    </div>
+  `;
 
-  // Текстовые вопросы
-  let questionsBlock = '';
+  // Контейнер для вопросов — заполняется динамически через rebuildV5QuestionsBlock
+  // на основе текущего набора выбранных кандидатов.
+  let questionsContainer = '';
   if ((n.questions || []).length > 0) {
-    questionsBlock += '<div style="margin-top:8px;"><strong style="font-size:14px;">Вопросы:</strong>';
-    n.questions.forEach(q => {
-      const opt = q.optional ? ' <span style="color:var(--muted); font-size:11px;">(необяз.)</span>' : '';
-      questionsBlock += `<div style="margin-top:6px;">
-        <label style="font-size:13px; margin:0 0 4px 0; color:var(--text);">${escapeHtml(q.text)}${opt}</label>
-        <textarea data-v5-q="${escapeHtml(q.id)}" data-q-optional="${q.optional ? '1' : '0'}" placeholder="Ваш ответ" style="min-height:50px;"></textarea>
-      </div>`;
-    });
-    questionsBlock += '</div>';
+    questionsContainer = '<div data-v5-questions style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--border);"></div>';
   }
 
   return `
@@ -6085,11 +6119,170 @@ function renderV5NominationCard(n, candidates) {
       ${desc}
       ${skipBlock}
       <div data-v5-inner>
-        ${slots}
-        ${questionsBlock}
+        ${slotsBlock}
+        ${questionsContainer}
       </div>
     </div>
   `;
+}
+
+// Создаёт один <select>-слот и возвращает HTML.
+function v5SlotHtml(slotIdx, candidates) {
+  let html = `<div data-v5-slot-row style="margin-top:6px; display:flex; gap:6px; align-items:center;">
+    <select data-v5-slot data-slot-idx="${slotIdx}" style="flex:1; max-width:340px;">
+      <option value="">— выберите имя —</option>`;
+  candidates.forEach(c => {
+    html += `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`;
+  });
+  html += `</select>
+    <button class="link-btn" type="button" data-v5-remove-slot title="Убрать этот слот">✕</button>
+  </div>`;
+  return html;
+}
+
+// Инициализирует слоты в карточке: добавляет minVal слотов.
+function initV5Slots(card) {
+  const cont = card.querySelector('[data-v5-slots]');
+  if (!cont) return;
+  const minVal = parseInt(cont.dataset.min || '1', 10);
+  const cands = JSON.parse(cont.dataset.cands || '[]');
+  cont.innerHTML = '';
+  for (let i = 0; i < minVal; i++) {
+    cont.insertAdjacentHTML('beforeend', v5SlotHtml(i, cands));
+  }
+  bindV5SlotEvents(card);
+  updateV5SlotAvailability(card);
+  rebuildV5QuestionsBlock(card);
+}
+
+// Перепривязывает события на актуальных элементах слотов в карточке.
+function bindV5SlotEvents(card) {
+  card.querySelectorAll('select[data-v5-slot]').forEach(sel => {
+    if (sel.dataset.bound === '1') return;
+    sel.dataset.bound = '1';
+    sel.addEventListener('change', () => {
+      updateV5SlotAvailability(card);
+      rebuildV5QuestionsBlock(card);
+      scheduleDraftV5Save();
+    });
+  });
+  card.querySelectorAll('[data-v5-remove-slot]').forEach(btn => {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const cont = card.querySelector('[data-v5-slots]');
+      const minVal = parseInt(cont?.dataset.min || '1', 10);
+      const rows = card.querySelectorAll('[data-v5-slot-row]');
+      // Не даём удалить ниже minVal — пусть просто очистит выбор.
+      if (rows.length <= minVal) {
+        const sel = btn.closest('[data-v5-slot-row]').querySelector('select');
+        if (sel) sel.value = '';
+        updateV5SlotAvailability(card);
+        rebuildV5QuestionsBlock(card);
+        scheduleDraftV5Save();
+        return;
+      }
+      btn.closest('[data-v5-slot-row]').remove();
+      // Перенумеровываем slot-idx, чтобы они были последовательны
+      card.querySelectorAll('select[data-v5-slot]').forEach((s, idx) => { s.dataset.slotIdx = String(idx); });
+      // Обновим состояние кнопки «+ Ещё имя»
+      updateV5AddSlotButton(card);
+      updateV5SlotAvailability(card);
+      rebuildV5QuestionsBlock(card);
+      scheduleDraftV5Save();
+    });
+  });
+  const addBtn = card.querySelector('[data-v5-add-slot]');
+  if (addBtn && addBtn.dataset.bound !== '1') {
+    addBtn.dataset.bound = '1';
+    addBtn.addEventListener('click', () => {
+      const cont = card.querySelector('[data-v5-slots]');
+      const maxVal = parseInt(cont?.dataset.max || '0', 10);
+      const cands = JSON.parse(cont?.dataset.cands || '[]');
+      const cur = card.querySelectorAll('[data-v5-slot-row]').length;
+      if (cur >= maxVal) return;
+      cont.insertAdjacentHTML('beforeend', v5SlotHtml(cur, cands));
+      bindV5SlotEvents(card);
+      updateV5AddSlotButton(card);
+      updateV5SlotAvailability(card);
+      rebuildV5QuestionsBlock(card);
+      scheduleDraftV5Save();
+    });
+  }
+  updateV5AddSlotButton(card);
+}
+
+function updateV5AddSlotButton(card) {
+  const cont = card.querySelector('[data-v5-slots]');
+  const addBtn = card.querySelector('[data-v5-add-slot]');
+  if (!cont || !addBtn) return;
+  const maxVal = parseInt(cont.dataset.max || '0', 10);
+  const cur = card.querySelectorAll('[data-v5-slot-row]').length;
+  addBtn.style.display = (cur >= maxVal) ? 'none' : 'inline';
+}
+
+// Перестраивает блок вопросов на основе текущих выбранных кандидатов.
+// Сохраняет уже введённые тексты по ключу <q_id>::<user_id>.
+function rebuildV5QuestionsBlock(card) {
+  const surveyNoms = currentSurvey?.settings?.nominations || [];
+  const nomId = card.dataset.v5Card;
+  const n = surveyNoms.find(x => x.id === nomId);
+  if (!n) return;
+  const questions = n.questions || [];
+  const cont = card.querySelector('[data-v5-questions]');
+  if (!cont) return; // у этой номинации нет вопросов
+
+  // Снимок уже введённых текстов
+  const existing = {};
+  cont.querySelectorAll('textarea[data-v5-q]').forEach(ta => {
+    const k = ta.dataset.v5Q + '::' + ta.dataset.v5Subject;
+    existing[k] = ta.value;
+  });
+
+  // Текущие выбранные кандидаты в порядке слотов (без повторов и пустых)
+  const slots = card.querySelectorAll('select[data-v5-slot]');
+  const selected = [];
+  const seen = new Set();
+  slots.forEach(s => {
+    const v = s.value;
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      selected.push(v);
+    }
+  });
+
+  if (questions.length === 0 || selected.length === 0) {
+    cont.innerHTML = '';
+    return;
+  }
+
+  // Имена для надписей
+  const candArr = JSON.parse(card.querySelector('[data-v5-slots]')?.dataset.cands || '[]');
+  const nameById = new Map(candArr.map(c => [c.id, c.name]));
+
+  let html = '<strong style="font-size:14px;">Вопросы про каждого выбранного:</strong>';
+  selected.forEach(uid => {
+    const pname = nameById.get(uid) || '(?)';
+    html += `<div data-v5-q-block data-subject="${escapeHtml(uid)}" style="margin-top:10px; padding:8px 10px; background:#fff; border:1px solid var(--border); border-radius:6px;">
+      <div style="font-weight:600; font-size:13px; margin-bottom:6px;">${escapeHtml(pname)}</div>`;
+    questions.forEach(q => {
+      const opt = q.optional ? ' <span style="color:var(--muted); font-size:11px;">(необяз.)</span>' : '';
+      const k = q.id + '::' + uid;
+      const prev = existing[k] || '';
+      html += `<div style="margin-top:6px;">
+        <label style="font-size:13px; margin:0 0 4px 0; color:var(--text);">${escapeHtml(q.text)}${opt}</label>
+        <textarea data-v5-q="${escapeHtml(q.id)}" data-v5-subject="${escapeHtml(uid)}" data-q-optional="${q.optional ? '1' : '0'}" placeholder="Ваш ответ" style="min-height:50px;">${escapeHtml(prev)}</textarea>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  cont.innerHTML = html;
+
+  // Перепривязываем автосохранение на новые textarea
+  cont.querySelectorAll('textarea[data-v5-q]').forEach(ta => {
+    ta.addEventListener('input', scheduleDraftV5Save);
+    ta.addEventListener('change', scheduleDraftV5Save);
+  });
 }
 
 // Обновляет в каждом select'е номинации список доступных имён,
@@ -6130,48 +6323,72 @@ function collectV5Answers(strict) {
       return;
     }
 
-    // Собираем кандидатов
+    // Собираем кандидатов в порядке слотов (без пустых, дубли отсекаем — UI и так
+    // не позволяет, но на всякий случай)
     const slots = card.querySelectorAll('select[data-v5-slot]');
     const candidates = [];
+    const seen = new Set();
     slots.forEach(slot => {
       slot.classList.remove('invalid');
       const v = (slot.value || '').trim();
-      if (v) candidates.push(v);
+      if (v && !seen.has(v)) {
+        seen.add(v);
+        candidates.push(v);
+      }
     });
 
-    // Собираем тексты
+    // Собираем тексты по структуре { qid: { uid: 'текст' } }.
+    // Поле dataset.v5Subject заполняется в rebuildV5QuestionsBlock.
     const answers = {};
     card.querySelectorAll('textarea[data-v5-q]').forEach(ta => {
       ta.classList.remove('invalid');
       const qid = ta.dataset.v5Q;
+      const subj = ta.dataset.v5Subject;
       const v = (ta.value || '').trim();
-      if (v) answers[qid] = v;
+      if (!subj || !qid) return;
+      // Сохраняем ответ только для всё ещё выбранных кандидатов
+      if (!seen.has(subj)) return;
+      if (v) {
+        if (!answers[qid]) answers[qid] = {};
+        answers[qid][subj] = v;
+      }
     });
 
     if (strict) {
-      // Если номинация необязательная и ничего не заполнено — считаем skipped
+      const minVal = getNominationMin(n);
       const noCandidates = candidates.length === 0;
-      const noAnswers = Object.keys(answers).length === 0;
-      if (n.optional && noCandidates && noAnswers) {
+      // Есть ли вообще тексты в ответах
+      const hasAnyText = Object.values(answers).some(obj => Object.keys(obj).length > 0);
+
+      // Если номинация необязательная и ничего не заполнено — считаем skipped
+      if (n.optional && noCandidates && !hasAnyText) {
         result.nominations[n.id] = { skipped: true, candidates: [], answers: {} };
         return;
       }
 
-      // Проверка количества кандидатов: ровно n.candidates_count
-      if (candidates.length !== n.candidates_count) {
-        // Подсветить все слоты
+      // Проверка минимума кандидатов
+      if (candidates.length < minVal) {
         slots.forEach(slot => {
           if (!slot.value) slot.classList.add('invalid');
         });
-        errors.push('В номинации «' + n.title + '» нужно выбрать ' + n.candidates_count + ' ' + pluralize(n.candidates_count, 'имя', 'имени', 'имён') + ', выбрано: ' + candidates.length + (n.optional ? '. Если хотите пропустить — поставьте галочку «Пропустить эту номинацию целиком».' : '.'));
+        errors.push('В номинации «' + n.title + '» нужно выбрать минимум ' + minVal + ' ' + pluralize(minVal, 'имя', 'имени', 'имён') + ', выбрано: ' + candidates.length + (n.optional ? '. Если хотите пропустить — поставьте галочку «Пропустить эту номинацию целиком».' : '.'));
       }
 
-      // Проверка обязательных текстовых вопросов
+      // Проверка обязательных текстовых вопросов:
+      // на каждого выбранного кандидата каждый обязательный вопрос должен быть заполнен.
       (n.questions || []).forEach(q => {
-        if (!q.optional && !answers[q.id]) {
-          const ta = card.querySelector(`textarea[data-v5-q="${q.id}"]`);
-          if (ta) ta.classList.add('invalid');
-          errors.push('В номинации «' + n.title + '»: заполните обязательный вопрос «' + q.text + '».');
+        if (q.optional) return;
+        candidates.forEach(uid => {
+          const has = answers[q.id] && answers[q.id][uid];
+          if (!has) {
+            const ta = card.querySelector(`textarea[data-v5-q="${q.id}"][data-v5-subject="${uid}"]`);
+            if (ta) ta.classList.add('invalid');
+          }
+        });
+        // Сообщение об ошибке — одно на вопрос (не плодим N сообщений по числу кандидатов)
+        const missing = candidates.filter(uid => !(answers[q.id] && answers[q.id][uid]));
+        if (missing.length > 0) {
+          errors.push('В номинации «' + n.title + '»: заполните обязательный вопрос «' + q.text + '» по каждому выбранному кандидату.');
         }
       });
     }
@@ -6258,15 +6475,44 @@ function renderOwnResponseV5(payload) {
     if (!resp || resp.skipped) {
       html += '<div style="margin-top:6px; color:var(--muted); font-style:italic;">— номинация пропущена —</div>';
     } else {
-      const cands = (resp.candidates || []).map(uid => escapeHtml(nameById.get(uid) || '(участник удалён)'));
+      const candIds = resp.candidates || [];
+      const cands = candIds.map(uid => escapeHtml(nameById.get(uid) || '(участник удалён)'));
       html += '<div style="margin-top:6px;"><strong>Ваш выбор:</strong> ' + (cands.length > 0 ? cands.join(', ') : '<span style="color:var(--muted);">—</span>') + '</div>';
+
       const answers = resp.answers || {};
-      (n.questions || []).forEach(q => {
-        const ans = answers[q.id];
-        if (ans) {
-          html += '<div style="margin-top:4px; font-size:14px;"><span style="color:var(--muted);">' + escapeHtml(q.text) + ':</span> ' + escapeHtml(ans) + '</div>';
-        }
-      });
+      const questions = n.questions || [];
+
+      // Определяем формат: новый { qid: { uid: text } } или старый { qid: text }
+      const isNewFormat = questions.some(q => answers[q.id] && typeof answers[q.id] === 'object');
+
+      if (isNewFormat && candIds.length > 0) {
+        // Новый формат: группируем по кандидату
+        candIds.forEach(uid => {
+          const pname = escapeHtml(nameById.get(uid) || '(участник удалён)');
+          let block = '';
+          questions.forEach(q => {
+            const ansObj = answers[q.id];
+            const text = (ansObj && typeof ansObj === 'object') ? ansObj[uid] : null;
+            if (text) {
+              block += '<div style="margin-top:2px; font-size:14px;"><span style="color:var(--muted);">' + escapeHtml(q.text) + ':</span> ' + escapeHtml(text) + '</div>';
+            }
+          });
+          if (block) {
+            html += '<div style="margin-top:8px; padding:6px 8px; background:#fff; border:1px solid var(--border); border-radius:4px;">';
+            html += '<div style="font-weight:500; font-size:13px;">' + pname + '</div>';
+            html += block;
+            html += '</div>';
+          }
+        });
+      } else {
+        // Старый формат — выводим как раньше
+        questions.forEach(q => {
+          const ans = answers[q.id];
+          if (ans && typeof ans === 'string') {
+            html += '<div style="margin-top:4px; font-size:14px;"><span style="color:var(--muted);">' + escapeHtml(q.text) + ':</span> ' + escapeHtml(ans) + '</div>';
+          }
+        });
+      }
     }
     html += '</div>';
   });
@@ -6274,13 +6520,19 @@ function renderOwnResponseV5(payload) {
 }
 
 // ---------- АГРЕГАЦИЯ V5 ----------
-// Возвращает структуру для отчётов:
+// Поддерживает два формата хранения ответов на текстовые вопросы:
+//   старый: payload.nominations[nid].answers = { qid: 'текст' }
+//           — один текст на номинацию, без привязки к кандидату.
+//   новый:  payload.nominations[nid].answers = { qid: { uid: 'текст', ... } }
+//           — отдельный текст на каждого выбранного кандидата.
+//
+// Возвращает структуру:
 //   per_nomination[nom_id] = {
 //      counts: Map<user_id, число_упоминаний>,
-//      texts:  { <q_id>: [{voter_id, text}], ... },
+//      texts:  { <q_id>: [{voter_id, candidate_id|null, text}], ... },
 //      skipped_count, voted_count
 //   }
-//   per_user[user_id] = { mentions: [{nom_id, count}], texts: { <nom_id>: { <q_id>: [text,...] } } }
+//   per_user[user_id] = { mentions: { <nom_id>: count }, texts: { <nom_id>: { <q_id>: [text,...] } } }
 //   total_responses
 
 function aggregateResponsesV5(responses, settings) {
@@ -6317,18 +6569,42 @@ function aggregateResponsesV5(responses, settings) {
         if (!per_user[uid]) per_user[uid] = { mentions: {}, texts: {} };
         per_user[uid].mentions[n.id] = (per_user[uid].mentions[n.id] || 0) + 1;
       });
+
       const ans = respN.answers || {};
       (n.questions || []).forEach(q => {
-        const t = ans[q.id];
-        if (t) {
-          per_nomination[n.id].texts[q.id].push({ voter_id: r.user_id, text: t });
-          // В per_user тексты складываем по принципу «про этого участника» —
-          // т.е. под каждым кандидатом, которого назвал данный voter в этой номинации.
-          cands.forEach(uid => {
+        const a = ans[q.id];
+        if (!a) return;
+
+        if (typeof a === 'object') {
+          // Новый формат — текст на каждого кандидата
+          Object.keys(a).forEach(uid => {
+            const t = a[uid];
+            if (!t) return;
+            per_nomination[n.id].texts[q.id].push({
+              voter_id: r.user_id,
+              candidate_id: uid,
+              text: t
+            });
+            // В per_user тексты адресуем именно тому, к кому они относятся
             if (!per_user[uid]) per_user[uid] = { mentions: {}, texts: {} };
             if (!per_user[uid].texts[n.id]) per_user[uid].texts[n.id] = {};
             if (!per_user[uid].texts[n.id][q.id]) per_user[uid].texts[n.id][q.id] = [];
             per_user[uid].texts[n.id][q.id].push(t);
+          });
+        } else if (typeof a === 'string') {
+          // Старый формат — один текст на номинацию.
+          // candidate_id неизвестен (null). В per_user добавляем под каждого
+          // выбранного кандидата, как раньше — обратной совместимости ради.
+          per_nomination[n.id].texts[q.id].push({
+            voter_id: r.user_id,
+            candidate_id: null,
+            text: a
+          });
+          cands.forEach(uid => {
+            if (!per_user[uid]) per_user[uid] = { mentions: {}, texts: {} };
+            if (!per_user[uid].texts[n.id]) per_user[uid].texts[n.id] = {};
+            if (!per_user[uid].texts[n.id][q.id]) per_user[uid].texts[n.id][q.id] = [];
+            per_user[uid].texts[n.id][q.id].push(a);
           });
         }
       });
@@ -6507,17 +6783,46 @@ function renderV5NominationReport(n, nAgg, nameById, isOrganizer) {
     html += '</tbody></table>';
   }
 
-  // Тексты — только для организатора (для участника тексты выводятся в личном отчёте)
+  // Тексты — только для организатора (для участника тексты выводятся в личном отчёте).
+  // Группируем по кандидату (с именем). Если текст из старого формата
+  // (candidate_id == null) — кладём в отдельную группу «(без указания кандидата)».
   if (isOrganizer) {
     (n.questions || []).forEach(q => {
       const arr = nAgg.texts[q.id] || [];
       if (arr.length === 0) return;
-      html += '<div style="margin-top:14px;"><h4 style="margin:0 0 6px 0;">' + escapeHtml(q.text) + '</h4>';
-      html += '<ul style="margin:0; padding-left:20px;">';
+
+      // Группируем по candidate_id
+      const grouped = new Map(); // uid|null -> [texts]
       arr.forEach(item => {
-        html += '<li>' + escapeHtml(item.text) + '</li>';
+        const key = item.candidate_id || '__legacy__';
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(item.text);
       });
-      html += '</ul></div>';
+
+      html += '<div style="margin-top:14px;"><h4 style="margin:0 0 6px 0;">' + escapeHtml(q.text) + '</h4>';
+
+      // Сначала — по тем кандидатам, кто реально упоминался (в порядке рейтинга),
+      // потом — legacy-группа в конце.
+      const rankedUids = ranking.map(r => r.uid);
+      const orderedKeys = [];
+      rankedUids.forEach(uid => { if (grouped.has(uid)) orderedKeys.push(uid); });
+      // Кандидаты, которых нет в рейтинге, но почему-то есть в текстах (теоретически)
+      Array.from(grouped.keys()).forEach(k => {
+        if (k !== '__legacy__' && !orderedKeys.includes(k)) orderedKeys.push(k);
+      });
+      if (grouped.has('__legacy__')) orderedKeys.push('__legacy__');
+
+      orderedKeys.forEach(key => {
+        const texts = grouped.get(key) || [];
+        const headName = (key === '__legacy__')
+          ? '<em style="color:var(--muted);">(без указания кандидата — старый формат)</em>'
+          : '<strong>' + escapeHtml(nameById.get(key) || '(удалён)') + '</strong>';
+        html += '<div style="margin-top:8px;">' + headName + '<ul style="margin:4px 0 0 0; padding-left:20px;">';
+        texts.forEach(t => { html += '<li>' + escapeHtml(t) + '</li>'; });
+        html += '</ul></div>';
+      });
+
+      html += '</div>';
     });
   }
 
@@ -6567,7 +6872,7 @@ function buildV5ResultsText(isOrganizer) {
       lines.push('Голосовали: ' + nAgg.voted_count + '; пропустили: ' + nAgg.skipped_count);
 
       const ranking = Array.from(nAgg.counts.entries())
-        .map(([uid, c]) => ({ name: nameById.get(uid) || '(удалён)', count: c }))
+        .map(([uid, c]) => ({ uid, name: nameById.get(uid) || '(удалён)', count: c }))
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
 
       if (ranking.length === 0) {
@@ -6589,7 +6894,29 @@ function buildV5ResultsText(isOrganizer) {
         if (arr.length === 0) return;
         lines.push('');
         lines.push('— ' + q.text + ':');
-        arr.forEach(item => lines.push('  • ' + item.text));
+
+        // Группируем по кандидату
+        const grouped = new Map();
+        arr.forEach(item => {
+          const key = item.candidate_id || '__legacy__';
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key).push(item.text);
+        });
+        const rankedUids = ranking.map(r => r.uid);
+        const orderedKeys = [];
+        rankedUids.forEach(uid => { if (grouped.has(uid)) orderedKeys.push(uid); });
+        Array.from(grouped.keys()).forEach(k => {
+          if (k !== '__legacy__' && !orderedKeys.includes(k)) orderedKeys.push(k);
+        });
+        if (grouped.has('__legacy__')) orderedKeys.push('__legacy__');
+
+        orderedKeys.forEach(key => {
+          const head = (key === '__legacy__')
+            ? '(без указания кандидата — старый формат)'
+            : (nameById.get(key) || '(удалён)');
+          lines.push('  ' + head + ':');
+          (grouped.get(key) || []).forEach(t => lines.push('    • ' + t));
+        });
       });
       lines.push('');
     });
@@ -7658,11 +7985,12 @@ function addV5Nomination() {
       <input type="text" data-field="title" placeholder="Название номинации (например: «Самый ценный игрок»)" style="width:100%; margin-bottom:8px;">
       <textarea data-field="description" placeholder="Описание / критерий (необязательно — поможет голосующим понять, по какому признаку выбирать)" style="min-height:50px;"></textarea>
       <div class="question-item-options" style="margin-top:8px;">
-        <label>Сколько имён выбирает каждый голосующий:
-          <input type="number" data-field="candidates_count" min="1" value="1" style="width:70px;">
+        <label>Минимум имён, которое нужно выбрать:
+          <input type="number" data-field="candidates_min" min="1" value="1" style="width:70px;">
         </label>
         <label><input type="checkbox" data-field="nomination_optional"> Номинацию можно пропустить целиком</label>
       </div>
+      <div style="font-size:12px; color:var(--muted); margin-top:-2px; margin-bottom:8px;">Голосующий выбирает не меньше указанного числа имён, но может выбрать и больше — вплоть до всех participant'ов группы.</div>
       <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--border);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <span style="font-size:13px; color:var(--muted); font-weight:600;">Текстовые вопросы внутри номинации (необязательно)</span>
@@ -7939,12 +8267,12 @@ function collectFormData() {
 
       const descVal = (item.querySelector('[data-field="description"]')?.value || '').trim();
 
-      const countVal = parseInt(item.querySelector('[data-field="candidates_count"]').value, 10);
-      if (isNaN(countVal) || countVal < 1) {
-        return { error: 'Укажите количество кандидатов в номинации ' + nNum + ' (минимум 1)' };
+      const minVal = parseInt(item.querySelector('[data-field="candidates_min"]').value, 10);
+      if (isNaN(minVal) || minVal < 1) {
+        return { error: 'Укажите минимальное число кандидатов в номинации ' + nNum + ' (минимум 1)' };
       }
-      if (maxCandidates > 0 && countVal > maxCandidates) {
-        return { error: 'В номинации ' + nNum + ' количество кандидатов (' + countVal + ') превышает доступное число имён (' + maxCandidates + ')' };
+      if (maxCandidates > 0 && minVal > maxCandidates) {
+        return { error: 'В номинации ' + nNum + ' минимум кандидатов (' + minVal + ') превышает доступное число имён (' + maxCandidates + ')' };
       }
 
       const nomOptional = item.querySelector('[data-field="nomination_optional"]').checked;
@@ -7964,7 +8292,7 @@ function collectFormData() {
       const nom = {
         id: 'n' + nNum,
         title: titleVal,
-        candidates_count: countVal,
+        candidates_min: minVal,
         optional: nomOptional,
         questions
       };
