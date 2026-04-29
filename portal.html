@@ -707,6 +707,7 @@
                 • <em>Все видят всё анонимно</em> — сводка Да/Нет по всем участникам, имена голосующих скрыты.</p>
               <p><strong>Сводный рейтинг.</strong> Если включить — в результатах по каждому Да/Нет-вопросу появится таблица с рейтингом участников по числу «Да», отсортированная по убыванию. Полезно когда нужно сразу видеть, кого чаще всего выбирают по каждому критерию.</p>
               <p><strong>Организатор видит авторов голосов.</strong> По умолчанию выключено — анонимность сохраняется для всех. Если включить, вы как организатор увидите блок «Детализация по респондентам»: развёртка каждого голосовавшего с его ответами. Подходит для аттестации и разборов. Участники детализацию не видят никогда — для них анонимность не нарушается.</p>
+              <p><strong>Расширенный отчёт со столбцами «все Да» / «все Нет».</strong> Если включить — в сводной таблице Да/Нет появятся два дополнительных столбца. «Все Да» показывает, скольким голосующим участник единодушно понравился по всем критериям сразу. «Все Нет» — обратное. Под каждым Да/Нет вопросом в форме создания появится индивидуальная галочка — можно исключить из подсчёта вопросы, не относящиеся к основной теме (например, контрольный или опциональный). Полезно для классической социометрии «трёх вопросов» (нанимать / отправить на переговоры / доверить собственность), где итоговые столбцы помогают сразу выделить «универсальных лидеров» и «универсально отвергаемых». Короткая подпись каждого вопроса (поле под текстом вопроса) используется в шапке таблицы — чтобы заголовки не были слишком длинными.</p>
               <p style="margin-bottom:0;"><strong>Видимость свободных текстов</strong> — на каждом текстовом вопросе отдельный флажок «Показывать ответы участникам анонимно». Если снят — текст видит только организатор; если стоит — все видят анонимно.</p>
             </div>
           </details>
@@ -1127,6 +1128,15 @@
           <div class="radio-option-content">
             <div class="radio-option-label">Организатор видит авторов голосов</div>
             <div class="radio-option-desc">В результатах для организатора появится блок «Детализация по респондентам» — можно развернуть каждого участника и увидеть, как именно он голосовал. Участники эту детализацию не видят никогда — для них анонимность по автору сохраняется. Подходит для аттестации и разборов, где организатору нужна полная прозрачность.</div>
+          </div>
+        </label>
+
+        <h3>Расширенный отчёт (пересечения)</h3>
+        <label class="checkbox-option" style="margin-bottom: 16px;">
+          <input type="checkbox" id="ns-v4-show-intersections">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Показывать в отчёте столбцы «все Да» и «все Нет»</div>
+            <div class="radio-option-desc">В сводной таблице Да/Нет появятся два дополнительных столбца. «Все Да» — сколько голосующих ответили «Да» сразу на все помеченные ниже Да/Нет вопросы про этого участника. «Все Нет» — то же самое для «Нет». Полезно когда нужно увидеть, кого группа единодушно выбирает или единодушно отвергает по нескольким критериям сразу. Под каждым Да/Нет вопросом появится индивидуальная галочка — можно исключить вопрос из подсчёта пересечений (например, если он не относится к основной теме опроса). Если помечено меньше двух вопросов — столбцы не показываются.</div>
           </div>
         </label>
 
@@ -1684,6 +1694,11 @@ function fillNewSurveyFormFromSource(src) {
     if (ynRadio) ynRadio.checked = true;
     document.getElementById('ns-v4-show-aggregate').checked = !!settings.show_aggregate;
     document.getElementById('ns-v4-reveal-voters').checked = !!settings.reveal_voters;
+    // Расширенный отчёт — общая галочка
+    const showIntersToggle = document.getElementById('ns-v4-show-intersections');
+    if (showIntersToggle) {
+      showIntersToggle.checked = !!settings.show_intersections;
+    }
 
     // Вопросы V4 — очищаем и заполняем из источника
     document.getElementById('ns-v4-questions-list').innerHTML = '';
@@ -1693,6 +1708,9 @@ function fillNewSurveyFormFromSource(src) {
       const items = document.querySelectorAll('#ns-v4-questions-list .question-item');
       const item = items[items.length - 1];
       item.querySelector('[data-field="text"]').value = q.text || '';
+      // Короткая подпись
+      const shortLabelInput = item.querySelector('[data-field="short_label"]');
+      if (shortLabelInput) shortLabelInput.value = q.short_label || '';
       const kindSel = item.querySelector('[data-field="kind"]');
       if (kindSel && q.kind) {
         kindSel.value = q.kind;
@@ -1701,6 +1719,11 @@ function fillNewSurveyFormFromSource(src) {
       }
       const optCheck = item.querySelector('[data-field="optional"]');
       if (optCheck) optCheck.checked = !!q.optional;
+      // Учитывать в пересечениях. Для старых опросов без поля — по умолчанию true.
+      const incCheck = item.querySelector('[data-field="include_in_intersection"]');
+      if (incCheck) {
+        incCheck.checked = (q.include_in_intersection === undefined) ? true : !!q.include_in_intersection;
+      }
       const showCheck = item.querySelector('[data-field="show_to_participants"]');
       if (showCheck) showCheck.checked = !!q.show_to_participants;
     });
@@ -4726,7 +4749,17 @@ function aggregateResponsesV4(responses, questions, subjects) {
         agg[subj.user_id][q.id] = { texts: [] };
       }
     });
+    // Дополнительные счётчики пересечений (по умолчанию 0; используются только если в опросе
+    // включена опция show_intersections и помечено достаточно подсчётных вопросов).
+    agg[subj.user_id]._allYes = 0;
+    agg[subj.user_id]._allNo = 0;
   });
+
+  // Список Да/Нет вопросов, помеченных как «учитывать в пересечении».
+  // Старые опросы без поля include_in_intersection трактуются как true (для обратной совместимости).
+  const intersectionQuestions = questions.filter(q =>
+    q.kind === 'yesno' && (q.include_in_intersection === undefined || q.include_in_intersection === true)
+  );
 
   (responses || []).forEach(resp => {
     const answers = resp.payload?.answers || {};
@@ -4746,10 +4779,35 @@ function aggregateResponsesV4(responses, questions, subjects) {
           }
         }
       });
+
+      // Пересечения: проверяем, что респондент ответил «Да» на ВСЕ подсчётные вопросы
+      // про этого субъекта (или «Нет» на все). Пропуски и смешанные ответы не засчитываются.
+      if (intersectionQuestions.length >= 2) {
+        let allYes = true, allNo = true;
+        for (const q of intersectionQuestions) {
+          const val = subjAnswers[q.id];
+          if (val !== 'yes') allYes = false;
+          if (val !== 'no') allNo = false;
+          if (!allYes && !allNo) break; // дальше можно не проверять
+        }
+        if (allYes) agg[subjId]._allYes++;
+        if (allNo) agg[subjId]._allNo++;
+      }
     });
   });
 
   return agg;
+}
+
+// Возвращает true, если в опросе нужно показывать колонки «все Да / все Нет».
+// Условие: включена общая опция show_intersections И помечено хотя бы 2 Да/Нет вопроса.
+function v4HasIntersections(settings) {
+  if (!settings || !settings.show_intersections) return false;
+  const questions = settings.questions || [];
+  const intersectionQs = questions.filter(q =>
+    q.kind === 'yesno' && (q.include_in_intersection === undefined || q.include_in_intersection === true)
+  );
+  return intersectionQs.length >= 2;
 }
 
 // Рейтинг участников по ОДНОМУ Да/Нет вопросу: массив [{user_id, pseudonym, yes, no}],
@@ -4808,12 +4866,22 @@ function renderV4YesNoTable(subjects, questions, agg, rowFilterFn) {
   const visibleSubjects = subjects.filter(rowFilterFn);
   if (visibleSubjects.length === 0) return '';
 
+  // Показывать ли колонки «все Да» / «все Нет» (зависит от настроек опроса).
+  const showIntersections = v4HasIntersections(currentSurvey?.settings);
+
+  // Заголовок столбца — короткая подпись, если есть, иначе полная формулировка.
+  const colHeader = (q) => escapeHtml(q.short_label || q.text);
+
   let html = '<div class="card"><h3 style="margin-top:0;">Результаты Да / Нет</h3>';
   html += '<div class="vote-table-wrapper"><table class="vote-table">';
   html += '<thead><tr><th>Участник</th>';
   yesnoQuestions.forEach(q => {
-    html += `<th>${escapeHtml(q.text)}</th>`;
+    html += `<th>${colHeader(q)}</th>`;
   });
+  if (showIntersections) {
+    html += '<th title="Сколько голосующих ответили «Да» на все помеченные вопросы про этого участника">все Да</th>';
+    html += '<th title="Сколько голосующих ответили «Нет» на все помеченные вопросы про этого участника">все Нет</th>';
+  }
   html += '</tr></thead><tbody>';
   visibleSubjects.forEach(subj => {
     html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
@@ -4826,6 +4894,12 @@ function renderV4YesNoTable(subjects, questions, agg, rowFilterFn) {
         html += `<td><span class="badge active">Да: ${cell.yes}</span> <span class="badge archived">Нет: ${cell.no}</span></td>`;
       }
     });
+    if (showIntersections) {
+      const allYes = agg[subj.user_id]?._allYes || 0;
+      const allNo = agg[subj.user_id]?._allNo || 0;
+      html += `<td><strong>${allYes}</strong></td>`;
+      html += `<td><strong>${allNo}</strong></td>`;
+    }
     html += '</tr>';
   });
   html += '</tbody></table></div></div>';
@@ -4971,7 +5045,10 @@ function buildV4ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
   if (yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
     lines.push('Результаты Да / Нет');
     lines.push('-'.repeat(30));
-    const header = ['Участник', ...yesnoQuestions.map(q => q.text)];
+    const showIntersections = v4HasIntersections(currentSurvey?.settings);
+    const colHeader = (q) => q.short_label || q.text;
+    const header = ['Участник', ...yesnoQuestions.map(colHeader)];
+    if (showIntersections) header.push('все Да', 'все Нет');
     lines.push(header.join(' | '));
     lines.push(header.map(h => '-'.repeat(h.length)).join('-+-'));
     visibleSubjects.forEach(subj => {
@@ -4982,6 +5059,10 @@ function buildV4ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
         if (total === 0) row.push('—');
         else row.push(`Да: ${cell.yes} / Нет: ${cell.no}`);
       });
+      if (showIntersections) {
+        row.push(String(agg[subj.user_id]?._allYes || 0));
+        row.push(String(agg[subj.user_id]?._allNo || 0));
+      }
       lines.push(row.join(' | '));
     });
     lines.push('');
@@ -5046,10 +5127,18 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
   }
 
   if (yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
+    const showIntersections = v4HasIntersections(currentSurvey?.settings);
     html += '<h3 style="margin:16px 0 6px 0;">Результаты Да / Нет</h3>';
     html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
     html += `<th style="${thStyle}">Участник</th>`;
-    yesnoQuestions.forEach(q => { html += `<th style="${thStyle}">${escapeForHtml(q.text)}</th>`; });
+    yesnoQuestions.forEach(q => {
+      const colHeader = q.short_label || q.text;
+      html += `<th style="${thStyle}">${escapeForHtml(colHeader)}</th>`;
+    });
+    if (showIntersections) {
+      html += `<th style="${thStyle}">все Да</th>`;
+      html += `<th style="${thStyle}">все Нет</th>`;
+    }
     html += '</tr></thead><tbody>';
     visibleSubjects.forEach(subj => {
       html += '<tr>';
@@ -5063,6 +5152,12 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
           html += `<td style="${tdStyle}">Да: ${cell.yes} / Нет: ${cell.no}</td>`;
         }
       });
+      if (showIntersections) {
+        const allYes = agg[subj.user_id]?._allYes || 0;
+        const allNo = agg[subj.user_id]?._allNo || 0;
+        html += `<td style="${tdStyle}"><strong>${allYes}</strong></td>`;
+        html += `<td style="${tdStyle}"><strong>${allNo}</strong></td>`;
+      }
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -5285,6 +5380,7 @@ function describeV4Settings(settings) {
   parts.push(visLabels[settings.yesno_visibility] || settings.yesno_visibility);
   if (settings.show_aggregate) parts.push('со сводным рейтингом');
   if (settings.reveal_voters) parts.push('организатор видит авторов');
+  if (settings.show_intersections) parts.push('со столбцами «все Да / все Нет»');
   const qCount = (settings.questions || []).length;
   parts.push(qCount + ' ' + pluralize(qCount, 'вопрос', 'вопроса', 'вопросов'));
   return parts.join(', ');
@@ -5994,6 +6090,7 @@ async function openNewSurveyModal() {
   document.querySelector('input[name="ns-v4-yesno-visibility"][value="organizer_only"]').checked = true;
   document.getElementById('ns-v4-show-aggregate').checked = false;
   document.getElementById('ns-v4-reveal-voters').checked = false;
+  document.getElementById('ns-v4-show-intersections').checked = false;
   document.getElementById('ns-v4-questions-list').innerHTML = '';
   v4QuestionCounter = 0;
 
@@ -6221,6 +6318,10 @@ function renumberV3Questions() {
 function addV4Question() {
   v4QuestionCounter++;
   const id = 'v4q-' + v4QuestionCounter;
+  // Видимость галочки include_in_intersection зависит от общей настройки show_intersections.
+  // Если общая настройка выключена — галочка скрыта (флаг всё равно сохраняется как true,
+  // чтобы при включении общей настройки все Да/Нет вопросы по умолчанию учитывались).
+  const showIntersectionsOn = document.getElementById('ns-v4-show-intersections')?.checked || false;
   const html = `
     <div class="question-item" data-v4qid="${id}">
       <div class="question-item-header">
@@ -6228,6 +6329,10 @@ function addV4Question() {
         <button class="link-btn" data-remove-v4q="${id}">✕ удалить</button>
       </div>
       <textarea placeholder="Текст вопроса (например: «Я доверил бы этому человеку важное поручение»)" data-field="text"></textarea>
+      <div style="margin-top: 6px;">
+        <input type="text" data-field="short_label" maxlength="50" placeholder="Короткая подпись для отчёта (необязательно, до 50 символов)" style="width: 100%; font-size: 13px;">
+        <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">Используется в шапке таблицы результатов. Если оставить пустым — подставится полная формулировка.</div>
+      </div>
       <div class="question-item-options">
         <label>Тип ответа:
           <select data-field="kind">
@@ -6236,6 +6341,7 @@ function addV4Question() {
           </select>
         </label>
         <label data-show-for="yesno"><input type="checkbox" data-field="optional"> Необязательный</label>
+        <label data-show-for="yesno" data-intersection-toggle style="display:${showIntersectionsOn ? 'flex' : 'none'};"><input type="checkbox" data-field="include_in_intersection" checked> Учитывать в столбцах «все Да» / «все Нет»</label>
         <label data-show-for="text" style="display:none;"><input type="checkbox" data-field="show_to_participants"> Показывать ответы участникам анонимно</label>
       </div>
     </div>
@@ -6249,8 +6355,17 @@ function addV4Question() {
   });
   item.querySelector('[data-field="kind"]').addEventListener('change', (e) => {
     const isText = e.target.value === 'text';
-    item.querySelector('[data-show-for="yesno"]').style.display = isText ? 'none' : 'flex';
-    item.querySelector('[data-show-for="text"]').style.display = isText ? 'flex' : 'none';
+    // У вопросов типа «yesno» показываем optional и (если включена общая настройка) intersection-toggle.
+    // У вопросов типа «text» — только show_to_participants.
+    const optionalLabel = item.querySelector('[data-show-for="yesno"]:not([data-intersection-toggle])');
+    const intersectionLabel = item.querySelector('[data-intersection-toggle]');
+    const textLabel = item.querySelector('[data-show-for="text"]');
+    if (optionalLabel) optionalLabel.style.display = isText ? 'none' : 'flex';
+    if (intersectionLabel) {
+      const showIntOn = document.getElementById('ns-v4-show-intersections')?.checked || false;
+      intersectionLabel.style.display = (isText || !showIntOn) ? 'none' : 'flex';
+    }
+    if (textLabel) textLabel.style.display = isText ? 'flex' : 'none';
   });
   renumberV4Questions();
 }
@@ -6423,6 +6538,7 @@ function collectFormData() {
     const yesnoVisibility = document.querySelector('input[name="ns-v4-yesno-visibility"]:checked').value;
     const showAggregate = document.getElementById('ns-v4-show-aggregate').checked;
     const revealVoters = document.getElementById('ns-v4-reveal-voters').checked;
+    const showIntersections = document.getElementById('ns-v4-show-intersections').checked;
 
     const questionItems = document.querySelectorAll('#ns-v4-questions-list .question-item');
     if (questionItems.length === 0) return { error: 'Добавьте хотя бы один вопрос' };
@@ -6438,8 +6554,19 @@ function collectFormData() {
         return { error: 'Некорректный тип ответа в вопросе ' + qNum };
       }
       const q = { id: 'q' + qNum, text, kind };
+
+      // Короткая подпись для отчёта (общая для всех видов вопросов).
+      // Если поле пусто — не сохраняем, в отчёте будет использована полная формулировка text.
+      const shortLabelInput = item.querySelector('[data-field="short_label"]');
+      const shortLabel = (shortLabelInput?.value || '').trim();
+      if (shortLabel) q.short_label = shortLabel;
+
       if (kind === 'yesno') {
         q.optional = item.querySelector('[data-field="optional"]').checked;
+        // Учитывать ли в столбцах «все Да / все Нет». По умолчанию true.
+        // Сохраняем флаг всегда, чтобы при копировании опроса значение восстановилось корректно.
+        const incCheckbox = item.querySelector('[data-field="include_in_intersection"]');
+        q.include_in_intersection = incCheckbox ? !!incCheckbox.checked : true;
       } else {
         q.show_to_participants = item.querySelector('[data-field="show_to_participants"]').checked;
       }
@@ -6452,6 +6579,7 @@ function collectFormData() {
     settings.yesno_visibility = yesnoVisibility;
     settings.show_aggregate = showAggregate;
     settings.reveal_voters = revealVoters;
+    settings.show_intersections = showIntersections;
     settings.questions = questions;
 
     // В Варианте 4 общее поле visibility не используется — своя модель видимости
@@ -6976,6 +7104,23 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('btn-add-v1-question', 'click', addV1Question);
   bind('btn-add-v3-question', 'click', addV3Question);
   bind('btn-add-v4-question', 'click', addV4Question);
+
+  // Общая галочка «Показывать столбцы все Да / все Нет» управляет видимостью индивидуальных
+  // галочек include_in_intersection у каждого Да/Нет вопроса. Сама галочка не очищает данные,
+  // только показывает/скрывает блоки.
+  const showIntersToggle = document.getElementById('ns-v4-show-intersections');
+  if (showIntersToggle) {
+    showIntersToggle.addEventListener('change', () => {
+      const on = showIntersToggle.checked;
+      document.querySelectorAll('#ns-v4-questions-list [data-intersection-toggle]').forEach(label => {
+        // Показываем только у Да/Нет вопросов
+        const item = label.closest('.question-item');
+        const kindSel = item?.querySelector('[data-field="kind"]');
+        const isYesNo = kindSel?.value === 'yesno';
+        label.style.display = (on && isYesNo) ? 'flex' : 'none';
+      });
+    });
+  }
   bind('btn-back-to-list', 'click', backToList);
   bind('btn-group-settings', 'click', openGroupSettings);
   bind('btn-back-from-group', 'click', backFromGroup);
