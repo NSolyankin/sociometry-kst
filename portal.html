@@ -4859,6 +4859,25 @@ function renderV4AggregateTable(subjects, questions, agg) {
 }
 
 // Таблица Да/Нет для V4. rowFilterFn(subj) — true если строку показывать.
+// Ключ localStorage для запоминания режима таблицы (Подробно / Компактно).
+// Глобальный, не привязан к опросу — это пользовательское предпочтение, а не настройка опроса.
+const V4_TABLE_MODE_KEY = 'v4-table-mode';
+
+function getV4TableMode() {
+  try {
+    const m = localStorage.getItem(V4_TABLE_MODE_KEY);
+    return (m === 'compact' || m === 'detailed') ? m : 'detailed';
+  } catch (e) {
+    return 'detailed';
+  }
+}
+
+function setV4TableMode(mode) {
+  try {
+    localStorage.setItem(V4_TABLE_MODE_KEY, mode);
+  } catch (e) { /* приватный режим браузера — игнорируем */ }
+}
+
 function renderV4YesNoTable(subjects, questions, agg, rowFilterFn) {
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   if (yesnoQuestions.length === 0) return '';
@@ -4869,10 +4888,22 @@ function renderV4YesNoTable(subjects, questions, agg, rowFilterFn) {
   // Показывать ли колонки «все Да» / «все Нет» (зависит от настроек опроса).
   const showIntersections = v4HasIntersections(currentSurvey?.settings);
 
+  // Режим таблицы: 'detailed' (бейджи Да/Нет) или 'compact' (только число «Да»).
+  const mode = getV4TableMode();
+
   // Заголовок столбца — короткая подпись, если есть, иначе полная формулировка.
   const colHeader = (q) => escapeHtml(q.short_label || q.text);
 
-  let html = '<div class="card"><h3 style="margin-top:0;">Результаты Да / Нет</h3>';
+  let html = '<div class="card">';
+  // Заголовок и переключатель режима в одной строке
+  html += '<div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px;">';
+  html += '<h3 style="margin:0;">Результаты Да / Нет</h3>';
+  html += '<div class="no-print" style="display:flex; gap:4px; font-size:13px;" id="v4-table-mode-switcher">';
+  html += `<button class="secondary small" data-mode="detailed" ${mode === 'detailed' ? 'style="background:var(--accent); color:white;"' : ''} type="button">Подробно</button>`;
+  html += `<button class="secondary small" data-mode="compact" ${mode === 'compact' ? 'style="background:var(--accent); color:white;"' : ''} type="button">Компактно</button>`;
+  html += '</div>';
+  html += '</div>';
+
   html += '<div class="vote-table-wrapper"><table class="vote-table">';
   html += '<thead><tr><th>Участник</th>';
   yesnoQuestions.forEach(q => {
@@ -4883,27 +4914,63 @@ function renderV4YesNoTable(subjects, questions, agg, rowFilterFn) {
     html += '<th title="Сколько голосующих ответили «Нет» на все помеченные вопросы про этого участника">все Нет</th>';
   }
   html += '</tr></thead><tbody>';
+
   visibleSubjects.forEach(subj => {
     html += `<tr><td class="subject-name">${escapeHtml(subj.pseudonym)}</td>`;
+
+    // Подсчёт суммарного числа ответов про субъекта — для прочерков в колонках пересечений
+    let totalAnswers = 0;
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      totalAnswers += (cell?.yes || 0) + (cell?.no || 0);
+    });
+    const noOneVoted = totalAnswers === 0;
+
     yesnoQuestions.forEach(q => {
       const cell = agg[subj.user_id]?.[q.id];
       const total = (cell?.yes || 0) + (cell?.no || 0);
       if (total === 0) {
         html += '<td><span style="color:var(--muted);">—</span></td>';
+      } else if (mode === 'compact') {
+        // Компактно: только число «Да»
+        html += `<td style="text-align:center;"><strong>${cell.yes}</strong></td>`;
       } else {
+        // Подробно: бейджи Да/Нет
         html += `<td><span class="badge active">Да: ${cell.yes}</span> <span class="badge archived">Нет: ${cell.no}</span></td>`;
       }
     });
     if (showIntersections) {
-      const allYes = agg[subj.user_id]?._allYes || 0;
-      const allNo = agg[subj.user_id]?._allNo || 0;
-      html += `<td><strong>${allYes}</strong></td>`;
-      html += `<td><strong>${allNo}</strong></td>`;
+      if (noOneVoted) {
+        html += '<td style="text-align:center;"><span style="color:var(--muted);">—</span></td>';
+        html += '<td style="text-align:center;"><span style="color:var(--muted);">—</span></td>';
+      } else {
+        const allYes = agg[subj.user_id]?._allYes || 0;
+        const allNo = agg[subj.user_id]?._allNo || 0;
+        html += `<td style="text-align:center;"><strong>${allYes}</strong></td>`;
+        html += `<td style="text-align:center;"><strong>${allNo}</strong></td>`;
+      }
     }
     html += '</tr>';
   });
   html += '</tbody></table></div></div>';
   return html;
+}
+
+// Привязка кликов на переключателе режима. Вызывается после рендера таблицы.
+// Важно: rerender'им ВЕСЬ блок результатов (через текущую функцию рендера),
+// а не только таблицу — потому что в зависимости от режима рендеры могут различаться.
+function bindV4TableModeSwitcher(rerenderFn) {
+  const switcher = document.getElementById('v4-table-mode-switcher');
+  if (!switcher) return;
+  switcher.querySelectorAll('button[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      const cur = getV4TableMode();
+      if (mode === cur) return;
+      setV4TableMode(mode);
+      if (typeof rerenderFn === 'function') rerenderFn();
+    });
+  });
 }
 
 // Раздел свободных текстов V4. Видимость каждого вопроса определяется
@@ -4998,7 +5065,14 @@ function renderV4VoterDetailsSection(responses, questions, subjects) {
 // ---- Экспорт V4: panel + buffer + print ----
 
 function renderV4ExportToolbar() {
-  return '<div class="no-print" style="margin-bottom:16px; display:flex; gap:8px; justify-content:flex-end;">' +
+  // Кнопка «Компактная таблица» появляется только если в опросе есть Да/Нет вопросы.
+  // Проверяем через currentSurvey, доступный в момент рендера toolbar'а.
+  const hasYesNo = (currentSurvey?.settings?.questions || []).some(q => q.kind === 'yesno');
+  const compactBtn = hasYesNo
+    ? '<button class="secondary small" id="btn-copy-v4-compact" type="button" title="Компактная таблица в стиле классической социометрии — только число «Да» в каждой ячейке, для вставки в Word/Excel">📋 Компактная таблица</button>'
+    : '';
+  return '<div class="no-print" style="margin-bottom:16px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">' +
+    compactBtn +
     '<button class="secondary small" id="btn-copy-v4" type="button">📋 Скопировать как текст</button>' +
     '<button class="secondary small" id="btn-print-v4" type="button">🖨️ Печать / Сохранить в PDF</button>' +
     '</div>';
@@ -5007,6 +5081,8 @@ function renderV4ExportToolbar() {
 function bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregate) {
   const copyBtn = document.getElementById('btn-copy-v4');
   if (copyBtn) copyBtn.addEventListener('click', () => copyV4ResultsToClipboard(rowFilterFn, questionVisibleFn, showAggregate));
+  const compactBtn = document.getElementById('btn-copy-v4-compact');
+  if (compactBtn) compactBtn.addEventListener('click', () => copyV4CompactToClipboard(rowFilterFn));
   const printBtn = document.getElementById('btn-print-v4');
   if (printBtn) printBtn.addEventListener('click', () => window.print());
 }
@@ -5191,6 +5267,214 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
   return html;
 }
 
+// ============================================================
+// КОМПАКТНАЯ ТАБЛИЦА V4 — формат классической социометрии (как в эталонных PDF).
+// Каждая ячейка — только число «Да» (без «Нет»). Шапка с метаданными.
+// Алфавитная сортировка строк. Удобно для вставки в Word/Excel.
+// ============================================================
+
+// Сортирует subjects по псевдониму (русская локаль). Не мутирует оригинал.
+function sortSubjectsByPseudonym(subjects) {
+  return [...(subjects || [])].sort((a, b) =>
+    (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru', { sensitivity: 'base' })
+  );
+}
+
+// Дата в формате DD.MM.YYYY, по локали ru-RU. Источник — created_at опроса
+// (когда опрос был создан) или сегодняшняя дата как fallback.
+function formatV4ReportDate(survey) {
+  let d;
+  if (survey?.created_at) {
+    d = new Date(survey.created_at);
+  } else {
+    d = new Date();
+  }
+  if (isNaN(d.getTime())) d = new Date();
+  return d.toLocaleDateString('ru-RU');
+}
+
+// HTML-таблица в эталонном формате. Только Да/Нет вопросы, только число «Да»
+// в каждой ячейке. Если в опросе включены пересечения — добавляются колонки
+// «все +» и «все –». Прочерк ставится, если про субъекта вообще никто не голосовал.
+function buildV4CompactHtml(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, settings, rowFilterFn) {
+  const escapeForHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  if (yesnoQuestions.length === 0) return '';
+
+  const sortedSubjects = sortSubjectsByPseudonym(subjects.filter(rowFilterFn));
+  if (sortedSubjects.length === 0) return '';
+
+  const showIntersections = v4HasIntersections(settings);
+  const dateStr = formatV4ReportDate(currentSurvey);
+
+  // Стили — простые, без зависимости от CSS-переменных, чтобы корректно вставлялось в Word.
+  const tdStyle = 'border:1px solid #555; padding:5px 10px; text-align:center; vertical-align:middle;';
+  const tdLeft = tdStyle.replace('text-align:center;', 'text-align:left;');
+  const thStyle = tdStyle + ' background:#e8e8e8; font-weight:bold; font-size:13px;';
+  const headerCellStyle = 'border:1px solid #555; padding:6px 10px; background:#d8d8d8; font-weight:bold; text-align:center;';
+
+  let html = '';
+  // Метаданные сверху — отдельной таблицей в две строки, как в эталонном PDF
+  const totalCols = 1 + yesnoQuestions.length + (showIntersections ? 2 : 0);
+  html += '<table style="border-collapse:collapse; border:1px solid #555; margin-bottom:0; font-family:sans-serif; font-size:13px;">';
+  html += `<tr><td colspan="${totalCols}" style="${headerCellStyle}">${escapeForHtml(surveyTitle)}</td></tr>`;
+  html += `<tr><td colspan="${totalCols - 1}" style="${headerCellStyle.replace('text-align:center;', 'text-align:left;')}">В исследовании приняло участие: ${responsesCount} ${pluralize(responsesCount, 'человек', 'человека', 'человек')}</td>`;
+  html += `<td style="${headerCellStyle}">${escapeForHtml(dateStr)}</td></tr>`;
+
+  // Шапка таблицы с вопросами
+  html += '<tr>';
+  html += `<th style="${thStyle} text-align:left;">&nbsp;</th>`;
+  yesnoQuestions.forEach(q => {
+    const colHeader = q.short_label || q.text;
+    html += `<th style="${thStyle}">${escapeForHtml(colHeader)}</th>`;
+  });
+  if (showIntersections) {
+    html += `<th style="${thStyle}">все +</th>`;
+    html += `<th style="${thStyle}">все –</th>`;
+  }
+  html += '</tr>';
+
+  // Строки субъектов
+  sortedSubjects.forEach(subj => {
+    html += '<tr>';
+    html += `<td style="${tdLeft}"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+    // Проверим, голосовал ли вообще кто-то про этого субъекта по подсчётным вопросам.
+    // Если нет — во всех колонках будет прочерк.
+    let totalAnswers = 0;
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      totalAnswers += (cell?.yes || 0) + (cell?.no || 0);
+    });
+    const noOneVoted = totalAnswers === 0;
+
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      const yesCount = cell?.yes || 0;
+      const totalCell = (cell?.yes || 0) + (cell?.no || 0);
+      if (totalCell === 0) {
+        html += `<td style="${tdStyle} color:#888;">—</td>`;
+      } else {
+        html += `<td style="${tdStyle}">${yesCount}</td>`;
+      }
+    });
+
+    if (showIntersections) {
+      const allYes = agg[subj.user_id]?._allYes || 0;
+      const allNo = agg[subj.user_id]?._allNo || 0;
+      if (noOneVoted) {
+        html += `<td style="${tdStyle} color:#888;">—</td>`;
+        html += `<td style="${tdStyle} color:#888;">—</td>`;
+      } else {
+        html += `<td style="${tdStyle}">${allYes}</td>`;
+        html += `<td style="${tdStyle}">${allNo}</td>`;
+      }
+    }
+    html += '</tr>';
+  });
+
+  html += '</table>';
+  return html;
+}
+
+// Текстовая версия с разделителями \t — вставляется в Excel как готовая таблица.
+function buildV4CompactText(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, settings, rowFilterFn) {
+  const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
+  if (yesnoQuestions.length === 0) return '';
+
+  const sortedSubjects = sortSubjectsByPseudonym(subjects.filter(rowFilterFn));
+  if (sortedSubjects.length === 0) return '';
+
+  const showIntersections = v4HasIntersections(settings);
+  const dateStr = formatV4ReportDate(currentSurvey);
+
+  const lines = [];
+  lines.push(surveyTitle);
+  lines.push(`В исследовании приняло участие: ${responsesCount} ${pluralize(responsesCount, 'человек', 'человека', 'человек')}\t${dateStr}`);
+  lines.push('');
+
+  // Шапка
+  const headerCols = ['', ...yesnoQuestions.map(q => q.short_label || q.text)];
+  if (showIntersections) {
+    headerCols.push('все +', 'все –');
+  }
+  lines.push(headerCols.join('\t'));
+
+  // Строки
+  sortedSubjects.forEach(subj => {
+    let totalAnswers = 0;
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      totalAnswers += (cell?.yes || 0) + (cell?.no || 0);
+    });
+    const noOneVoted = totalAnswers === 0;
+
+    const row = [subj.pseudonym];
+    yesnoQuestions.forEach(q => {
+      const cell = agg[subj.user_id]?.[q.id];
+      const yesCount = cell?.yes || 0;
+      const totalCell = (cell?.yes || 0) + (cell?.no || 0);
+      row.push(totalCell === 0 ? '—' : String(yesCount));
+    });
+    if (showIntersections) {
+      if (noOneVoted) {
+        row.push('—', '—');
+      } else {
+        row.push(String(agg[subj.user_id]?._allYes || 0));
+        row.push(String(agg[subj.user_id]?._allNo || 0));
+      }
+    }
+    lines.push(row.join('\t'));
+  });
+
+  return lines.join('\n');
+}
+
+async function copyV4CompactToClipboard(rowFilterFn) {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const subjects = getV4SubjectsForResults();
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV4(responses, questions, subjects);
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+
+  const html = buildV4CompactHtml(subjects, questions, agg, s.title, responses.length, totalParticipants, s.settings, rowFilterFn);
+  const text = buildV4CompactText(subjects, questions, agg, s.title, responses.length, totalParticipants, s.settings, rowFilterFn);
+
+  const showOk = () => {
+    const btn = document.getElementById('btn-copy-v4-compact');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Скопировано';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  };
+
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      showOk();
+      return;
+    }
+  } catch (err) {
+    console.warn('[v4-compact] clipboard.write failed, falling back to writeText:', err);
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showOk();
+  } catch (err) {
+    console.error('[v4-compact] error:', err);
+    alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст результатов:\n\n' + text);
+  }
+}
+
 async function copyV4ResultsToClipboard(rowFilterFn, questionVisibleFn, showAggregate) {
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -5295,6 +5579,7 @@ async function renderResultsV4ForOrganizer() {
 
   body.innerHTML = html;
   bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregate);
+  bindV4TableModeSwitcher(() => renderResultsV4ForOrganizer());
 }
 
 async function renderResultsV4ForParticipant() {
@@ -5364,6 +5649,7 @@ async function renderResultsV4ForParticipant() {
 
   body.innerHTML = html;
   bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregateForMe);
+  bindV4TableModeSwitcher(() => renderResultsV4ForParticipant());
 }
 
 function renderParticipantViewV4() {
