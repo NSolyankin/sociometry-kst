@@ -1224,7 +1224,13 @@
 </div>
 
 <script>
-const SUPABASE_URL = 'https://nxxjbiwrkrlylpfypzvi.supabase.co';
+// SUPABASE_URL теперь указывает на Cloudflare Worker, который проксирует
+// запросы на реальный Supabase (nxxjbiwrkrlylpfypzvi.supabase.co).
+// Это нужно, потому что прямой домен Supabase блокируется ТСПУ в РФ
+// без VPN. Worker — kst-proxy.nsolyankin.workers.dev, код см. в Cloudflare
+// dashboard. Если Worker по каким-то причинам перестанет работать —
+// можно вернуть прямой URL: 'https://nxxjbiwrkrlylpfypzvi.supabase.co'.
+const SUPABASE_URL = 'https://kst-proxy.nsolyankin.workers.dev';
 const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 
 const SURVEY_TYPES = {
