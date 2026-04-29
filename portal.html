@@ -8,6 +8,13 @@
 <meta http-equiv="Expires" content="0">
 <title>Портал опросов КСТ</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Библиотеки для DOCX-экспорта V5 (см. функции downloadV5*).
+     docx — формирует .docx-файл из JS, jszip — собирает несколько файлов в .zip.
+     Версия docx@7.8.2 — последняя с UMD-сборкой, экспонирующей window.docx.
+     Если CDN недоступен или путь устарел — кнопки DOCX покажут понятное сообщение
+     об ошибке (см. isDocxLibAvailable). -->
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root {
     --bg: #f5f5f7;
@@ -6638,7 +6645,7 @@ async function renderResultsV5ForOrganizer() {
 
   let html = '<div class="print-root">';
   html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
-  html += renderV5ExportToolbar();
+  html += renderV5ExportToolbar(true);
   html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants} ${pluralize(totalParticipants, 'участника', 'участников', 'участников')}.</div>`;
   html += '<p style="color:var(--muted); font-size:13px;">Имена голосующих скрыты. Вы видите все агрегированные результаты — это право организатора.</p>';
@@ -6678,7 +6685,7 @@ async function renderResultsV5ForParticipant() {
 
   let html = '<div class="print-root">';
   html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
-  if (showPersonal) html += renderV5ExportToolbar();
+  if (showPersonal) html += renderV5ExportToolbar(false);
   html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants}.</div>`;
   if (!showPersonal) {
@@ -6832,11 +6839,23 @@ function renderV5NominationReport(n, nAgg, nameById, isOrganizer) {
 
 // ---------- ЭКСПОРТ V5 ----------
 
-function renderV5ExportToolbar() {
+function renderV5ExportToolbar(isOrganizer) {
+  // У organizer'а — две кнопки скачивания DOCX (общий файл / zip с файлом на каждого).
+  // У participant'а — одна кнопка скачивания личного DOCX.
+  let docxButtons = '';
+  if (isOrganizer) {
+    docxButtons = `
+      <button class="secondary small" id="btn-v5-docx-one" title="Один файл со всеми участниками подряд">📄 DOCX один файл</button>
+      <button class="secondary small" id="btn-v5-docx-zip" title="ZIP-архив, в котором файл по каждому участнику отдельно">📦 DOCX по каждому (zip)</button>
+    `;
+  } else {
+    docxButtons = `<button class="secondary small" id="btn-v5-docx-my" title="Скачать ваш личный отчёт в формате Word">📄 Скачать мой отчёт (DOCX)</button>`;
+  }
   return `
     <div class="export-toolbar no-print" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
       <button class="secondary small" id="btn-v5-copy">📋 Копировать в буфер</button>
       <button class="secondary small" id="btn-v5-print">🖨 Печать / PDF</button>
+      ${docxButtons}
     </div>
   `;
 }
@@ -6846,6 +6865,14 @@ function bindV5ExportToolbar(isOrganizer) {
   if (copyBtn) copyBtn.addEventListener('click', () => copyV5ResultsToClipboard(isOrganizer));
   const printBtn = document.getElementById('btn-v5-print');
   if (printBtn) printBtn.addEventListener('click', () => window.print());
+
+  // DOCX-кнопки
+  const myBtn = document.getElementById('btn-v5-docx-my');
+  if (myBtn) myBtn.addEventListener('click', downloadV5MyReport);
+  const oneBtn = document.getElementById('btn-v5-docx-one');
+  if (oneBtn) oneBtn.addEventListener('click', downloadV5OneOrgReport);
+  const zipBtn = document.getElementById('btn-v5-docx-zip');
+  if (zipBtn) zipBtn.addEventListener('click', downloadV5ZipReport);
 }
 
 function buildV5ResultsText(isOrganizer) {
@@ -6956,6 +6983,499 @@ async function copyV5ResultsToClipboard(isOrganizer) {
   } catch (e) {
     console.warn('[v5-copy] failed:', e);
     alert('Не удалось скопировать. Попробуйте выделить и скопировать вручную.');
+  }
+}
+
+// ============================================================
+// V5: DOCX-ОТЧЁТ ПО ОДНОМУ УЧАСТНИКУ
+// ============================================================
+// Формат — двухколоночная таблица (как в эталонном PDF):
+//   Шапка: «<месяц> <год>» (слева) и псевдоним участника (справа)
+//   Заголовок: название опроса
+//   Таблица: левая колонка — название номинации + описание,
+//            правая колонка — список текстовых ответов от голосовавших
+//                            (без имён авторов, по решению Николая).
+//   В таблице — по одной строке на каждый текстовый вопрос номинации.
+//   Если за этого участника проголосовало несколько человек, их ответы
+//   собираются списком в одной ячейке.
+//   Если в номинации нет текстовых вопросов — одна строка с «Выбрали N раз».
+
+function isDocxLibAvailable() {
+  return typeof window.docx === 'object' && window.docx
+      && typeof window.docx.Document === 'function';
+}
+
+// Месяц-год в формате «апрель 2026» (как в эталонном файле).
+function formatMonthYear(d) {
+  const months = ['январь','февраль','март','апрель','май','июнь',
+                  'июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+  return months[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+// Безопасное имя файла из псевдонима: только буквы/цифры/_- ; пустое → 'участник'.
+function safeFileName(name) {
+  let s = (name || '').replace(/[^A-Za-zА-Яа-яЁё0-9_\-]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!s) s = 'участник';
+  return s;
+}
+
+// Собирает «сырой» материал для отчёта по одному кандидату:
+// возвращает массив строк-данных для таблицы:
+//   [{ left: { title, description }, right: [{ q, texts: [..] }] | null, mentions }]
+// При новом payload-формате правая колонка — список ответов на каждый вопрос.
+// При старом (текст один на номинацию) — заносим как один пункт без q.
+function buildV5DataForUser(userId, settings, agg) {
+  const nominations = settings.nominations || [];
+  const userAgg = agg.per_user[userId] || { mentions: {}, texts: {} };
+  const data = [];
+  nominations.forEach(n => {
+    const mentions = (userAgg.mentions || {})[n.id] || 0;
+    const textsForNom = (userAgg.texts || {})[n.id] || {};
+    const questions = n.questions || [];
+
+    if (mentions === 0 && Object.keys(textsForNom).length === 0) {
+      // В этой номинации участника не выбирали — пропускаем.
+      return;
+    }
+
+    const rightRows = [];
+    questions.forEach(q => {
+      const arr = textsForNom[q.id] || [];
+      rightRows.push({ q, texts: arr.slice() });
+    });
+
+    data.push({
+      left: { title: n.title, description: n.description || '' },
+      right: rightRows,
+      mentions
+    });
+  });
+  return data;
+}
+
+// Создаёт Document (объект docx-библиотеки) для одного участника.
+async function buildV5PersonalDocxDocument(userId, userName, settings, agg, surveyTitle) {
+  const D = window.docx;
+  const data = buildV5DataForUser(userId, settings, agg);
+  const monthYear = formatMonthYear(new Date());
+
+  // --- Шапка: дата слева + псевдоним справа (двухячеечная таблица) ---
+  const headerRow = new D.TableRow({
+    children: [
+      new D.TableCell({
+        borders: noBorders(D),
+        children: [new D.Paragraph({ children: [new D.TextRun({ text: monthYear })] })]
+      }),
+      new D.TableCell({
+        borders: noBorders(D),
+        children: [new D.Paragraph({
+          alignment: D.AlignmentType.RIGHT,
+          children: [new D.TextRun({ text: userName, bold: true })]
+        })]
+      })
+    ]
+  });
+  const headerTable = new D.Table({
+    rows: [headerRow],
+    width: { size: 100, type: D.WidthType.PERCENTAGE }
+  });
+
+  // --- Заголовок отчёта по центру: название опроса ---
+  const titleParagraph = new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { before: 240, after: 240 },
+    children: [new D.TextRun({ text: surveyTitle, bold: true, size: 28 })]
+  });
+
+  // --- Основная двухколоночная таблица ---
+  const bodyRows = [];
+
+  if (data.length === 0) {
+    // Никто не выбрал этого участника ни в одной номинации.
+    bodyRows.push(new D.TableRow({
+      children: [
+        new D.TableCell({
+          children: [new D.Paragraph({
+            children: [new D.TextRun({
+              text: 'В этом опросе вас не выбрали ни в одной номинации.',
+              italics: true
+            })]
+          })],
+          columnSpan: 2
+        })
+      ]
+    }));
+  } else {
+    data.forEach(item => {
+      const leftChildren = [
+        new D.Paragraph({
+          children: [new D.TextRun({ text: item.left.title, bold: true })]
+        })
+      ];
+      if (item.left.description) {
+        leftChildren.push(new D.Paragraph({
+          children: [new D.TextRun({ text: item.left.description, size: 20 })]
+        }));
+      }
+      // Подсчёт упоминаний — мелким шрифтом
+      leftChildren.push(new D.Paragraph({
+        children: [new D.TextRun({
+          text: 'Выбрали: ' + item.mentions + ' ' + pluralize(item.mentions, 'раз', 'раза', 'раз'),
+          size: 18,
+          color: '6e6e73'
+        })]
+      }));
+
+      // Если у номинации есть текстовые вопросы — на каждый вопрос делаем
+      // отдельную строку таблицы (по решению Николая: «один вопрос → одна строка»).
+      const questions = item.right;
+      if (questions.length === 0) {
+        // Нет вопросов — одна строка с пометкой
+        bodyRows.push(new D.TableRow({
+          children: [
+            new D.TableCell({ children: leftChildren }),
+            new D.TableCell({
+              children: [new D.Paragraph({
+                children: [new D.TextRun({
+                  text: '(только голос, без комментариев)',
+                  italics: true, color: '6e6e73'
+                })]
+              })]
+            })
+          ]
+        }));
+      } else {
+        // Несколько строк — на каждый вопрос отдельно. В первой строке
+        // левая ячейка с rowSpan = число вопросов.
+        questions.forEach((qrow, idx) => {
+          const isFirst = idx === 0;
+          const rowCells = [];
+          if (isFirst) {
+            rowCells.push(new D.TableCell({
+              children: leftChildren,
+              rowSpan: questions.length
+            }));
+          }
+          // Правая ячейка: текст вопроса + список ответов
+          const rightChildren = [
+            new D.Paragraph({
+              spacing: { after: 60 },
+              children: [new D.TextRun({ text: qrow.q.text, italics: true, size: 20, color: '6e6e73' })]
+            })
+          ];
+          if (qrow.texts.length === 0) {
+            rightChildren.push(new D.Paragraph({
+              children: [new D.TextRun({
+                text: '(нет ответов)', italics: true, color: '6e6e73', size: 20
+              })]
+            }));
+          } else {
+            qrow.texts.forEach(t => {
+              rightChildren.push(new D.Paragraph({
+                bullet: { level: 0 },
+                children: [new D.TextRun({ text: t })]
+              }));
+            });
+          }
+          rowCells.push(new D.TableCell({ children: rightChildren }));
+          bodyRows.push(new D.TableRow({ children: rowCells }));
+        });
+      }
+    });
+  }
+
+  const bodyTable = new D.Table({
+    rows: bodyRows,
+    width: { size: 100, type: D.WidthType.PERCENTAGE },
+    columnWidths: [4500, 4500]
+  });
+
+  return new D.Document({
+    sections: [{
+      properties: {},
+      children: [headerTable, titleParagraph, bodyTable]
+    }]
+  });
+}
+
+// «Без рамок» для шапки.
+function noBorders(D) {
+  return {
+    top: { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    bottom: { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    left: { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    right: { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+  };
+}
+
+// Для одного общего файла организатора: склеиваем все секции (по странице на участника).
+async function buildV5OrgCombinedDocxDocument(usersToInclude, settings, agg, surveyTitle) {
+  const D = window.docx;
+  const monthYear = formatMonthYear(new Date());
+  const sections = [];
+
+  if (usersToInclude.length === 0) {
+    sections.push({
+      properties: {},
+      children: [new D.Paragraph({
+        children: [new D.TextRun({
+          text: 'В этом опросе никого не выбрали — отчёт пуст.',
+          italics: true
+        })]
+      })]
+    });
+  } else {
+    usersToInclude.forEach((u, idx) => {
+      // Шапка
+      const headerTable = new D.Table({
+        rows: [new D.TableRow({
+          children: [
+            new D.TableCell({
+              borders: noBorders(D),
+              children: [new D.Paragraph({ children: [new D.TextRun({ text: monthYear })] })]
+            }),
+            new D.TableCell({
+              borders: noBorders(D),
+              children: [new D.Paragraph({
+                alignment: D.AlignmentType.RIGHT,
+                children: [new D.TextRun({ text: u.name, bold: true })]
+              })]
+            })
+          ]
+        })],
+        width: { size: 100, type: D.WidthType.PERCENTAGE }
+      });
+
+      const titleParagraph = new D.Paragraph({
+        alignment: D.AlignmentType.CENTER,
+        spacing: { before: 240, after: 240 },
+        children: [new D.TextRun({ text: surveyTitle, bold: true, size: 28 })]
+      });
+
+      // Тело: тот же подход, что и для одиночного отчёта
+      const data = buildV5DataForUser(u.id, settings, agg);
+      const bodyRows = [];
+      if (data.length === 0) {
+        bodyRows.push(new D.TableRow({
+          children: [new D.TableCell({
+            children: [new D.Paragraph({
+              children: [new D.TextRun({
+                text: 'В этом опросе ' + u.name + ' не выбрали ни в одной номинации.',
+                italics: true
+              })]
+            })],
+            columnSpan: 2
+          })]
+        }));
+      } else {
+        data.forEach(item => {
+          const leftChildren = [
+            new D.Paragraph({ children: [new D.TextRun({ text: item.left.title, bold: true })] })
+          ];
+          if (item.left.description) {
+            leftChildren.push(new D.Paragraph({
+              children: [new D.TextRun({ text: item.left.description, size: 20 })]
+            }));
+          }
+          leftChildren.push(new D.Paragraph({
+            children: [new D.TextRun({
+              text: 'Выбрали: ' + item.mentions + ' ' + pluralize(item.mentions, 'раз', 'раза', 'раз'),
+              size: 18, color: '6e6e73'
+            })]
+          }));
+
+          const questions = item.right;
+          if (questions.length === 0) {
+            bodyRows.push(new D.TableRow({
+              children: [
+                new D.TableCell({ children: leftChildren }),
+                new D.TableCell({
+                  children: [new D.Paragraph({
+                    children: [new D.TextRun({
+                      text: '(только голос, без комментариев)',
+                      italics: true, color: '6e6e73'
+                    })]
+                  })]
+                })
+              ]
+            }));
+          } else {
+            questions.forEach((qrow, qidx) => {
+              const rowCells = [];
+              if (qidx === 0) {
+                rowCells.push(new D.TableCell({
+                  children: leftChildren,
+                  rowSpan: questions.length
+                }));
+              }
+              const rightChildren = [
+                new D.Paragraph({
+                  spacing: { after: 60 },
+                  children: [new D.TextRun({ text: qrow.q.text, italics: true, size: 20, color: '6e6e73' })]
+                })
+              ];
+              if (qrow.texts.length === 0) {
+                rightChildren.push(new D.Paragraph({
+                  children: [new D.TextRun({
+                    text: '(нет ответов)', italics: true, color: '6e6e73', size: 20
+                  })]
+                }));
+              } else {
+                qrow.texts.forEach(t => {
+                  rightChildren.push(new D.Paragraph({
+                    bullet: { level: 0 },
+                    children: [new D.TextRun({ text: t })]
+                  }));
+                });
+              }
+              rowCells.push(new D.TableCell({ children: rightChildren }));
+              bodyRows.push(new D.TableRow({ children: rowCells }));
+            });
+          }
+        });
+      }
+
+      const bodyTable = new D.Table({
+        rows: bodyRows,
+        width: { size: 100, type: D.WidthType.PERCENTAGE },
+        columnWidths: [4500, 4500]
+      });
+
+      // Каждый раздел — на новой странице (page break)
+      const section = {
+        properties: {},
+        children: [headerTable, titleParagraph, bodyTable]
+      };
+      sections.push(section);
+    });
+  }
+
+  return new D.Document({ sections });
+}
+
+// Скачивание blob под заданным именем.
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+// ---- Кнопки действий: для participant'а — личный отчёт ----
+async function downloadV5MyReport() {
+  if (!isDocxLibAvailable()) {
+    alert('Библиотека для DOCX не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  if (!currentSurvey || !currentUser) return;
+  const settings = currentSurvey.settings || {};
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV5(responses, settings);
+  const myName = currentProfile?.pseudonym || 'участник';
+  try {
+    const doc = await buildV5PersonalDocxDocument(
+      currentUser.id, myName, settings, agg, currentSurvey.title || ''
+    );
+    const blob = await window.docx.Packer.toBlob(doc);
+    const fname = 'Отчёт_' + safeFileName(myName) + '_' + safeFileName(currentSurvey.title || 'опрос') + '.docx';
+    downloadBlob(blob, fname);
+  } catch (e) {
+    console.error('[v5-docx-my] failed:', e);
+    alert('Не удалось сформировать DOCX: ' + (e.message || e));
+  }
+}
+
+// ---- Кнопки действий: для организатора — один общий файл со всеми ----
+async function downloadV5OneOrgReport() {
+  if (!isDocxLibAvailable()) {
+    alert('Библиотека для DOCX не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  if (!currentSurvey) return;
+  const settings = currentSurvey.settings || {};
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV5(responses, settings);
+  const all = allGroupParticipantsV3 || [];
+  // В общий файл включаем только тех, кого выбрали хотя бы раз.
+  const involvedIds = new Set();
+  Object.keys(agg.per_user).forEach(uid => {
+    const u = agg.per_user[uid];
+    if (u && (Object.keys(u.mentions || {}).length > 0 || Object.keys(u.texts || {}).length > 0)) {
+      involvedIds.add(uid);
+    }
+  });
+  const usersToInclude = all
+    .filter(p => involvedIds.has(p.user_id))
+    .map(p => ({ id: p.user_id, name: p.pseudonym }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+
+  try {
+    const doc = await buildV5OrgCombinedDocxDocument(
+      usersToInclude, settings, agg, currentSurvey.title || ''
+    );
+    const blob = await window.docx.Packer.toBlob(doc);
+    const fname = 'Сводный_отчёт_' + safeFileName(currentSurvey.title || 'опрос') + '.docx';
+    downloadBlob(blob, fname);
+  } catch (e) {
+    console.error('[v5-docx-one] failed:', e);
+    alert('Не удалось сформировать DOCX: ' + (e.message || e));
+  }
+}
+
+// ---- Кнопки действий: для организатора — zip с файлом на каждого ----
+async function downloadV5ZipReport() {
+  if (!isDocxLibAvailable()) {
+    alert('Библиотека для DOCX не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  if (typeof window.JSZip !== 'function') {
+    alert('Библиотека для ZIP не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  if (!currentSurvey) return;
+  const settings = currentSurvey.settings || {};
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV5(responses, settings);
+  const all = allGroupParticipantsV3 || [];
+  const involvedIds = new Set();
+  Object.keys(agg.per_user).forEach(uid => {
+    const u = agg.per_user[uid];
+    if (u && (Object.keys(u.mentions || {}).length > 0 || Object.keys(u.texts || {}).length > 0)) {
+      involvedIds.add(uid);
+    }
+  });
+  const usersToInclude = all
+    .filter(p => involvedIds.has(p.user_id))
+    .map(p => ({ id: p.user_id, name: p.pseudonym }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+
+  if (usersToInclude.length === 0) {
+    alert('В этом опросе никого не выбрали — нет файлов для архива.');
+    return;
+  }
+
+  try {
+    const zip = new window.JSZip();
+    for (const u of usersToInclude) {
+      const doc = await buildV5PersonalDocxDocument(
+        u.id, u.name, settings, agg, currentSurvey.title || ''
+      );
+      const blob = await window.docx.Packer.toBlob(doc);
+      const fname = 'Отчёт_' + safeFileName(u.name) + '.docx';
+      zip.file(fname, blob);
+    }
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const zipName = 'Отчёты_по_участникам_' + safeFileName(currentSurvey.title || 'опрос') + '.zip';
+    downloadBlob(zipBlob, zipName);
+  } catch (e) {
+    console.error('[v5-docx-zip] failed:', e);
+    alert('Не удалось сформировать ZIP: ' + (e.message || e));
   }
 }
 
