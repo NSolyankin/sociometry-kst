@@ -1233,6 +1233,79 @@
 const SUPABASE_URL = 'https://kst-proxy.nsolyankin.workers.dev';
 const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 
+// ============================================================
+// МАСКИРОВКА AUTH-ПУТЕЙ ДЛЯ ОБХОДА ТСПУ
+// ============================================================
+// ТСПУ научилось распознавать характерные пути Supabase Auth (особенно
+// POST /auth/v1/token?grant_type=password) и блокирует эти запросы с
+// ERR_CONNECTION_RESET. Чтобы это обойти, мы перехватываем глобальный
+// fetch и переписываем auth-пути на нестандартные. На стороне Worker'а
+// (см. Cloudflare dashboard, файл worker.js) точно такая же карта в
+// обратную сторону — Worker распознаёт замаскированные пути и шлёт на
+// реальные эндпоинты Supabase.
+//
+// Если когда-нибудь надо будет отключить маскировку — просто закомментируйте
+// весь блок ниже до пометки END.
+const AUTH_PATH_MASK = [
+  // Порядок важен: более специфичные пути выше.
+  { from: '/auth/v1/token?grant_type=password',    to: '/api/v1/login' },
+  { from: '/auth/v1/token?grant_type=refresh_token', to: '/api/v1/refresh' },
+  { from: '/auth/v1/logout',                       to: '/api/v1/logout' },
+  { from: '/auth/v1/signup',                       to: '/api/v1/signup' },
+  { from: '/auth/v1/recover',                      to: '/api/v1/recover' },
+  { from: '/auth/v1/user',                         to: '/api/v1/user' },
+  { from: '/auth/v1/verify',                       to: '/api/v1/verify' },
+];
+
+(function installFetchMask() {
+  if (typeof window === 'undefined' || !window.fetch) return;
+  const origFetch = window.fetch.bind(window);
+
+  function maskUrl(urlStr) {
+    if (!urlStr || typeof urlStr !== 'string') return urlStr;
+    if (urlStr.indexOf(SUPABASE_URL) !== 0) return urlStr;
+    const tail = urlStr.substring(SUPABASE_URL.length); // например "/auth/v1/token?grant_type=password"
+    for (const rule of AUTH_PATH_MASK) {
+      // Точное совпадение начала пути с учётом query (более специфичные правила сначала).
+      if (tail === rule.from || tail.indexOf(rule.from) === 0) {
+        // Если в from уже была query (.../...?grant_type=...) — to полностью её заменяет.
+        // Если в tail после rule.from остался ещё «&дальше=...» — не должно быть в auth-эндпоинтах,
+        // но на всякий случай переносим.
+        const rest = tail.substring(rule.from.length);
+        const masked = SUPABASE_URL + rule.to + rest;
+        return masked;
+      }
+    }
+    return urlStr;
+  }
+
+  window.fetch = function(input, init) {
+    try {
+      if (typeof input === 'string') {
+        const masked = maskUrl(input);
+        if (masked !== input) {
+          return origFetch(masked, init);
+        }
+      } else if (input && typeof input === 'object' && input.url) {
+        // Это Request-объект. Создаём новый с замаскированным URL.
+        const masked = maskUrl(input.url);
+        if (masked !== input.url) {
+          // У Request нельзя просто поменять url, нужно создать новый Request.
+          // Копируем все важные поля, кроме url.
+          const newReq = new Request(masked, input);
+          return origFetch(newReq, init);
+        }
+      }
+    } catch (e) {
+      console.warn('[fetch-mask] error, falling back to original:', e);
+    }
+    return origFetch(input, init);
+  };
+
+  console.log('[fetch-mask] installed for ' + AUTH_PATH_MASK.length + ' auth paths');
+})();
+// END маскировка
+
 const SURVEY_TYPES = {
   variant_1: { label: 'Вариант 1', description: 'Каждый участник выбирает несколько коллег по заданному критерию.' },
   variant_2: { label: 'Вариант 2', description: 'Каждый участник отвечает на список вопросов про коллег.' },
