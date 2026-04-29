@@ -1342,12 +1342,42 @@ function showScreen(name) {
 async function loadProfile(userId) {
   console.log('[profile] loading for ' + userId);
 
-  // 1. Загружаем все ACTIVE memberships юзера + названия групп через join
-  const { data: memberships, error: mErr } = await sb
+  // 1. Загружаем все ACTIVE memberships юзера + названия групп через join.
+  // ВАЖНО: оборачиваем в Promise.race с таймаутом, потому что через прокси
+  // Cloudflare Worker иногда join-запрос возвращает данные, но supabase-js
+  // не может их распарсить и промис не резолвится. Без таймаута логин
+  // повисает после строки [profile] loading for... — без видимой ошибки.
+  console.log('[profile] requesting memberships...');
+  const membershipsPromise = sb
     .from('memberships')
     .select('group_id, role, pseudonym, groups(name)')
     .eq('user_id', userId)
     .eq('active', true);
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('memberships request timeout 15s')), 15000));
+
+  let memberships, mErr;
+  try {
+    const result = await Promise.race([membershipsPromise, timeout]);
+    memberships = result.data;
+    mErr = result.error;
+  } catch (e) {
+    console.error('[profile] memberships timeout/exception:', e);
+    // Fallback: пробуем без join groups(name) — возможно проблема в join-парсинге
+    console.log('[profile] retrying memberships without join...');
+    const { data: m2, error: mErr2 } = await sb
+      .from('memberships')
+      .select('group_id, role, pseudonym')
+      .eq('user_id', userId)
+      .eq('active', true);
+    if (mErr2) {
+      console.error('[profile] memberships fallback error:', mErr2);
+      return null;
+    }
+    memberships = (m2 || []).map(m => ({ ...m, groups: null }));
+    mErr = null;
+  }
+  console.log('[profile] memberships response received');
 
   if (mErr) {
     console.error('[profile] memberships error:', mErr);
