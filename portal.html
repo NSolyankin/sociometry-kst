@@ -1295,11 +1295,26 @@ function hardLocalLogout() {
   console.log('[hardLogout] done');
 }
 
+// Флаг занятости загрузки — защищает polling от наложения предыдущей итерации
+// на следующую (если loadSurveys ещё работает, новый tick пропускается).
+// Иначе при медленной сети запросы накапливаются и упираются в браузерный
+// лимит «6 одновременных соединений на домен», после чего всё виснет.
+let surveysLoadInFlight = false;
+
 function startPolling() {
   if (pollingInterval) return;
   console.log('[polling] start');
   pollingInterval = setInterval(() => {
     console.log('[polling] tick');
+    // Не запускаем повторно, если предыдущая загрузка ещё не завершилась.
+    if (surveysLoadInFlight) {
+      console.log('[polling] skip — previous load in flight');
+      return;
+    }
+    // Если вкладка не активна — тоже пропускаем (экономим лимит Cloudflare).
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
     loadSurveys();
   }, 10000);
 }
@@ -1397,6 +1412,19 @@ async function loadPseudonyms() {
 }
 
 async function loadSurveys() {
+  if (surveysLoadInFlight) {
+    console.log('[surveys] skip — already loading');
+    return;
+  }
+  surveysLoadInFlight = true;
+  try {
+    await loadSurveysInner();
+  } finally {
+    surveysLoadInFlight = false;
+  }
+}
+
+async function loadSurveysInner() {
   console.log('[surveys] loading for group ' + currentGroupId);
   const { data, error } = await sb
     .from('surveys')
@@ -1435,32 +1463,35 @@ async function loadSurveys() {
 
   const counts = {};
   const voted = {};
-  for (const s of data) {
-    if (s.type !== 'variant_1' && s.type !== 'variant_2' && s.type !== 'variant_3' && s.type !== 'variant_4' && s.type !== 'variant_5') continue;
-    try {
-      const { count } = await sb
-        .from('responses')
-        .select('id', { count: 'exact', head: true })
-        .eq('survey_id', s.id);
-      counts[s.id] = count || 0;
-    } catch (e) {
-      console.warn('[surveys] count exception for ' + s.id + ':', e);
-      counts[s.id] = 0;
-    }
 
-    if (myId) {
-      try {
-        const { count: myCount, error: mErr } = await sb
-          .from('responses')
-          .select('id', { count: 'exact', head: true })
+  // Распараллеливаем запросы по всем опросам через Promise.all.
+  // Раньше тут был последовательный for-цикл с двумя await на каждый опрос —
+  // через прокси Cloudflare Worker это давало ~7 сек на запрос × 2N запросов,
+  // и при N=3 загрузка одного экрана занимала ~50 сек. С Promise.all общее
+  // время ≈ времени самого медленного запроса, а не сумма всех.
+  const interestingTypes = ['variant_1', 'variant_2', 'variant_3', 'variant_4', 'variant_5'];
+  const surveyTasks = data
+    .filter(s => interestingTypes.includes(s.type))
+    .map(async s => {
+      // Параллельно — оба count-запроса для этого опроса
+      const [countRes, votedRes] = await Promise.all([
+        sb.from('responses').select('id', { count: 'exact', head: true })
           .eq('survey_id', s.id)
-          .eq('user_id', myId);
-        if (!mErr) voted[s.id] = (myCount || 0) > 0;
-      } catch (e) {
-        console.warn('[surveys] myVoted exception for ' + s.id + ':', e);
+          .then(r => r, e => ({ count: 0, error: e })),
+        myId
+          ? sb.from('responses').select('id', { count: 'exact', head: true })
+              .eq('survey_id', s.id).eq('user_id', myId)
+              .then(r => r, e => ({ count: 0, error: e }))
+          : Promise.resolve({ count: 0, error: null })
+      ]);
+      counts[s.id] = countRes.count || 0;
+      if (myId && !votedRes.error) {
+        voted[s.id] = (votedRes.count || 0) > 0;
       }
-    }
-  }
+      if (countRes.error) console.warn('[surveys] count exception for ' + s.id + ':', countRes.error);
+    });
+  await Promise.all(surveyTasks);
+
   renderSurveys(data, counts, voted, totalP);
 }
 
