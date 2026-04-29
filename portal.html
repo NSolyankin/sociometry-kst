@@ -1439,59 +1439,53 @@ async function loadSurveysInner() {
   }
   console.log('[surveys] loaded ' + data.length);
 
-  // Общее число участников-participant'ов в группе (для прогресс-бара явки организатору).
-  // Обёрнуто в try/catch — если эта вспомогательная фича падает, дашборд всё равно рендерится.
-  let totalP = 0;
-  try {
-    const { count, error: tErr } = await sb
-      .from('memberships')
-      .select('id', { count: 'exact', head: true })
-      .eq('group_id', currentGroupId)
-      .eq('active', true)
-      .eq('role', 'participant');
-    if (tErr) {
-      console.warn('[surveys] totalParticipants error:', tErr);
-    } else {
-      totalP = count || 0;
-    }
-  } catch (e) {
-    console.warn('[surveys] totalParticipants exception:', e);
-  }
-
   // Идентификатор текущего пользователя — для флага «я проголосовал»
   const myId = currentUser?.id;
 
   const counts = {};
   const voted = {};
+  let totalP = 0;
 
-  // Распараллеливаем запросы по всем опросам через Promise.all.
-  // Раньше тут был последовательный for-цикл с двумя await на каждый опрос —
-  // через прокси Cloudflare Worker это давало ~7 сек на запрос × 2N запросов,
-  // и при N=3 загрузка одного экрана занимала ~50 сек. С Promise.all общее
-  // время ≈ времени самого медленного запроса, а не сумма всех.
+  // ДВУХСТАДИЙНЫЙ РЕНДЕР:
+  // 1. Сразу рисуем список опросов (без счётчиков и флагов «я голосовал»),
+  //    чтобы пользователь видел дашборд через ~0.5 секунды, а не ждал
+  //    20+ секунд медленных HEAD-запросов через прокси.
+  // 2. Запускаем fire-and-forget все count-запросы параллельно. Когда они
+  //    приходят — обновляем числа на уже отрисованных карточках.
+  // 3. Ошибки в count-запросах не блокируют дашборд: пустые числа лучше
+  //    чем «Загрузка...» бесконечно.
+
+  renderSurveys(data, counts, voted, totalP); // первый рендер — мгновенно
+
   const interestingTypes = ['variant_1', 'variant_2', 'variant_3', 'variant_4', 'variant_5'];
+
+  const totalPTask = sb
+    .from('memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('group_id', currentGroupId)
+    .eq('active', true)
+    .eq('role', 'participant')
+    .then(r => { if (!r.error) totalP = r.count || 0; }, e => {
+      console.warn('[surveys] totalParticipants exception:', e);
+    });
+
   const surveyTasks = data
     .filter(s => interestingTypes.includes(s.type))
-    .map(async s => {
-      // Параллельно — оба count-запроса для этого опроса
-      const [countRes, votedRes] = await Promise.all([
-        sb.from('responses').select('id', { count: 'exact', head: true })
-          .eq('survey_id', s.id)
-          .then(r => r, e => ({ count: 0, error: e })),
-        myId
-          ? sb.from('responses').select('id', { count: 'exact', head: true })
-              .eq('survey_id', s.id).eq('user_id', myId)
-              .then(r => r, e => ({ count: 0, error: e }))
-          : Promise.resolve({ count: 0, error: null })
-      ]);
-      counts[s.id] = countRes.count || 0;
-      if (myId && !votedRes.error) {
-        voted[s.id] = (votedRes.count || 0) > 0;
-      }
-      if (countRes.error) console.warn('[surveys] count exception for ' + s.id + ':', countRes.error);
-    });
-  await Promise.all(surveyTasks);
+    .map(s => Promise.all([
+      sb.from('responses').select('id', { count: 'exact', head: true })
+        .eq('survey_id', s.id)
+        .then(r => { counts[s.id] = r.count || 0; },
+              e => { counts[s.id] = 0; console.warn('[surveys] count exception for ' + s.id + ':', e); }),
+      myId
+        ? sb.from('responses').select('id', { count: 'exact', head: true })
+            .eq('survey_id', s.id).eq('user_id', myId)
+            .then(r => { if (!r.error) voted[s.id] = (r.count || 0) > 0; },
+                  e => { console.warn('[surveys] myVoted exception for ' + s.id + ':', e); })
+        : Promise.resolve()
+    ]));
 
+  // Ждём все count-запросы и перерисовываем с актуальными числами
+  await Promise.all([totalPTask, ...surveyTasks]);
   renderSurveys(data, counts, voted, totalP);
 }
 
