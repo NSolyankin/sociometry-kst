@@ -1374,22 +1374,19 @@ async function loadProfile(userId) {
   try { localStorage.setItem(LS_CURRENT_GROUP_KEY, currentGroupId); } catch(e) {}
   console.log('[profile] current group: ' + currentGroupId + ' (' + currentGroupName + ')');
 
-  // 3. Подгружаем email из profiles (нужен для шапки и для legacy-кода)
-  const { data: prof, error: pErr } = await sb
-    .from('profiles')
-    .select('id, email')
-    .eq('id', userId)
-    .maybeSingle();
-  if (pErr) {
-    console.error('[profile] profiles email error:', pErr);
-  }
+  // 3. Email — берём из auth-сессии (currentUser.email), supabase-js всегда
+  // его подкладывает после signInWithPassword/getSession. Раньше тут был
+  // отдельный запрос к таблице profiles, но через прокси Cloudflare Worker
+  // он стабильно висел в Pending и блокировал переход на дашборд. Email из
+  // auth-сессии — то же самое значение, только без сетевого запроса.
+  const emailFromAuth = (currentUser && currentUser.email) || null;
 
   // 4. Собираем объект с тем же интерфейсом, что был раньше
   const result = {
     id: userId,
     pseudonym: chosen.pseudonym,
     role: chosen.role,
-    email: prof?.email || null,
+    email: emailFromAuth,
     group_id: chosen.group_id
   };
   console.log('[profile] loaded:', result);
