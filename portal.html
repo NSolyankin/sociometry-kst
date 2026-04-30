@@ -1240,28 +1240,221 @@
 </div>
 
 <script>
-// SUPABASE_URL теперь указывает на Cloudflare Worker, который проксирует
-// запросы на реальный Supabase (nxxjbiwrkrlylpfypzvi.supabase.co).
-// Это нужно, потому что прямой домен Supabase блокируется ТСПУ в РФ
-// без VPN. Worker — kst-proxy.nsolyankin.workers.dev, код см. в Cloudflare
-// dashboard. Если Worker по каким-то причинам перестанет работать —
-// можно вернуть прямой URL: 'https://nxxjbiwrkrlylpfypzvi.supabase.co'.
-const SUPABASE_URL = 'https://kst-proxy.nsolyankin.workers.dev';
+// ============================================================
+// СПИСОК ПРОКСИ И FALLBACK-ЛОГИКА
+// ============================================================
+// Прямой домен Supabase (nxxjbiwrkrlylpfypzvi.supabase.co) блокируется ТСПУ
+// в РФ без VPN. Поэтому используется один из прокси-зеркал:
+//   1. Vercel    — probe-vercel-kappa.vercel.app
+//   2. Deno      — probe-deno.nsolyankin.deno.net
+//   3. Cloudflare Worker — kst-proxy.nsolyankin.workers.dev (исторически первый,
+//      у части пользователей сейчас POST логина блокируется ТСПУ)
+//
+// Логика выбора:
+//   - При загрузке страницы ищем в localStorage последний рабочий прокси.
+//   - Если есть и кэш свежий (< 1 часа) — используем его сразу.
+//   - Иначе делаем параллельный health-check всех трёх с тайм-аутом 3 сек,
+//     берём первый ответивший.
+//   - Если ни один не ответил — используем Vercel как дефолтный
+//     (с надеждой, что в реальной работе он восстановится).
+//
+// Все три прокси принимают одинаковую схему URL:
+//   <PROXY>/auth/v1/token       -> Supabase /auth/v1/token
+//   <PROXY>/rest/v1/...         -> Supabase /rest/v1/...
+//   <PROXY>/healthcheck         -> локальный healthcheck (без обращения к Supabase)
+//
+// Маскировка путей (см. installFetchMask ниже) применяется ТОЛЬКО к Worker —
+// Vercel/Deno прокси умеют принимать обычные пути Supabase напрямую.
+
+const PROXY_LIST = [
+  {
+    id: 'vercel',
+    url: 'https://probe-vercel-kappa.vercel.app',
+    needsMask: false
+  },
+  {
+    id: 'deno',
+    url: 'https://probe-deno.nsolyankin.deno.net',
+    needsMask: false
+  },
+  {
+    id: 'worker',
+    url: 'https://kst-proxy.nsolyankin.workers.dev',
+    needsMask: true
+  }
+];
+
+const PROXY_LS_KEY = 'sb-proxy-choice';
+const PROXY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 час
+const PROXY_HEALTHCHECK_TIMEOUT_MS = 3000;
+
+// Активный прокси и его настройки. Заполняются при загрузке страницы в selectProxy().
+let SUPABASE_URL = PROXY_LIST[0].url;     // дефолт до выполнения health-check
+let ACTIVE_PROXY = PROXY_LIST[0];
 const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 
+// Загрузить из localStorage последний выбранный прокси (если есть и кэш свежий).
+function loadProxyFromCache() {
+  try {
+    const raw = localStorage.getItem(PROXY_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.id || !parsed.savedAt) return null;
+    const age = Date.now() - parsed.savedAt;
+    if (age > PROXY_CACHE_TTL_MS) {
+      console.log('[proxy] cache expired (' + Math.round(age/1000) + 's old)');
+      return null;
+    }
+    const found = PROXY_LIST.find(p => p.id === parsed.id);
+    if (!found) {
+      console.log('[proxy] cached id ' + parsed.id + ' not in current list');
+      return null;
+    }
+    return found;
+  } catch (e) {
+    console.warn('[proxy] cache read error:', e);
+    return null;
+  }
+}
+
+function saveProxyToCache(proxy) {
+  try {
+    localStorage.setItem(PROXY_LS_KEY, JSON.stringify({
+      id: proxy.id,
+      savedAt: Date.now()
+    }));
+  } catch (e) {
+    console.warn('[proxy] cache write error:', e);
+  }
+}
+
+function clearProxyCache() {
+  try { localStorage.removeItem(PROXY_LS_KEY); } catch (e) {}
+}
+
+// Health-check одного прокси с тайм-аутом. Резолвится в proxy при успехе и null при провале.
+function pingProxy(proxy, timeoutMs) {
+  return new Promise((resolve) => {
+    const controller = new AbortController();
+    const tid = setTimeout(() => {
+      try { controller.abort(); } catch (e) {}
+      resolve(null);
+    }, timeoutMs);
+
+    // Используем оригинальный fetch (до маскировки) — на этом этапе fetch ещё не перехвачен.
+    fetch(proxy.url + '/healthcheck', { method: 'GET', signal: controller.signal })
+      .then(r => {
+        clearTimeout(tid);
+        if (r && r.ok) resolve(proxy);
+        else resolve(null);
+      })
+      .catch(() => {
+        clearTimeout(tid);
+        resolve(null);
+      });
+  });
+}
+
+// Прочитать список «недавно битых» прокси из localStorage.
+// Если запись старше 5 минут — игнорируем (даём прокси повторный шанс).
+function readSkipList() {
+  try {
+    const raw = localStorage.getItem('sb-proxy-skip');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.ids) || !parsed.savedAt) return [];
+    const age = Date.now() - parsed.savedAt;
+    if (age > 5 * 60 * 1000) {
+      localStorage.removeItem('sb-proxy-skip');
+      return [];
+    }
+    return parsed.ids;
+  } catch (e) {
+    return [];
+  }
+}
+
+// Параллельный health-check всех прокси. Возвращает первый ответивший
+// (по порядку из PROXY_LIST, не по времени ответа). Это важно, чтобы
+// предпочтение было стабильным: если оба ответили — выбираем Vercel.
+async function selectProxy() {
+  // Сначала кэш
+  const cached = loadProxyFromCache();
+  if (cached) {
+    console.log('[proxy] using cached: ' + cached.id);
+    return cached;
+  }
+
+  const skipIds = readSkipList();
+  if (skipIds.length > 0) {
+    console.log('[proxy] skip list: ' + skipIds.join(','));
+  }
+  const candidates = PROXY_LIST.filter(p => skipIds.indexOf(p.id) === -1);
+  // Если все прокси в skip-list — игнорируем skip и пробуем все
+  const finalList = candidates.length > 0 ? candidates : PROXY_LIST;
+
+  console.log('[proxy] running health-checks for ' + finalList.length + ' proxies');
+  const results = await Promise.all(
+    finalList.map(p => pingProxy(p, PROXY_HEALTHCHECK_TIMEOUT_MS))
+  );
+  for (let i = 0; i < results.length; i++) {
+    if (results[i]) {
+      const winner = results[i];
+      console.log('[proxy] selected: ' + winner.id);
+      saveProxyToCache(winner);
+      return winner;
+    }
+  }
+  console.warn('[proxy] no proxy responded, falling back to default: ' + PROXY_LIST[0].id);
+  return PROXY_LIST[0];
+}
+
+// Применить выбранный прокси к глобальным переменным.
+function applyProxy(proxy) {
+  ACTIVE_PROXY = proxy;
+  SUPABASE_URL = proxy.url;
+  console.log('[proxy] active: ' + proxy.id + ' (' + proxy.url + ')');
+}
+
+// Помечает текущий прокси как нерабочий и переключается на следующий.
+// Пользователь увидит перезагрузку страницы (нужно, потому что supabase-js
+// фиксирует URL при создании клиента и поменять его на лету сложно).
+let _proxyMarkedBad = false; // защита от двойного reload
+function markCurrentProxyBadAndReload() {
+  if (_proxyMarkedBad) return;
+  _proxyMarkedBad = true;
+  console.warn('[proxy] marking ' + ACTIVE_PROXY.id + ' as bad, reloading');
+  clearProxyCache();
+  // Сохраняем «исключённый» прокси на короткое время, чтобы не выбрать его снова
+  try {
+    let existing = [];
+    try {
+      const raw = localStorage.getItem('sb-proxy-skip');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.ids)) existing = parsed.ids;
+      }
+    } catch (e) {}
+    if (existing.indexOf(ACTIVE_PROXY.id) === -1) existing.push(ACTIVE_PROXY.id);
+    localStorage.setItem('sb-proxy-skip', JSON.stringify({
+      ids: existing,
+      savedAt: Date.now()
+    }));
+  } catch (e) {}
+  window.location.reload();
+}
+
+
 // ============================================================
-// МАСКИРОВКА AUTH-ПУТЕЙ ДЛЯ ОБХОДА ТСПУ
+// МАСКИРОВКА AUTH-ПУТЕЙ ДЛЯ ОБХОДА ТСПУ (ТОЛЬКО ДЛЯ WORKER)
 // ============================================================
 // ТСПУ научилось распознавать характерные пути Supabase Auth (особенно
 // POST /auth/v1/token?grant_type=password) и блокирует эти запросы с
-// ERR_CONNECTION_RESET. Чтобы это обойти, мы перехватываем глобальный
-// fetch и переписываем auth-пути на нестандартные. На стороне Worker'а
-// (см. Cloudflare dashboard, файл worker.js) точно такая же карта в
-// обратную сторону — Worker распознаёт замаскированные пути и шлёт на
-// реальные эндпоинты Supabase.
+// ERR_CONNECTION_RESET. Worker умеет принимать замаскированные пути и
+// перенаправлять на реальные эндпоинты Supabase. На Vercel и Deno прокси
+// маскировка не нужна — там запрос проходит как есть.
 //
-// Если когда-нибудь надо будет отключить маскировку — просто закомментируйте
-// весь блок ниже до пометки END.
+// Маскировка применяется ТОЛЬКО если ACTIVE_PROXY.needsMask === true.
 const AUTH_PATH_MASK = [
   // Порядок важен: более специфичные пути выше.
   { from: '/auth/v1/token?grant_type=password',    to: '/api/v1/login' },
@@ -1273,53 +1466,105 @@ const AUTH_PATH_MASK = [
   { from: '/auth/v1/verify',                       to: '/api/v1/verify' },
 ];
 
-(function installFetchMask() {
+// Счётчик ошибок подключения к текущему прокси.
+// Если за короткое время накапливаются несколько fail'ов — переключаемся на следующий.
+let _proxyConnectionFailures = 0;
+const PROXY_FAIL_THRESHOLD = 3;
+const PROXY_FAIL_WINDOW_MS = 30 * 1000; // 30 секунд
+let _firstFailureAt = 0;
+
+function recordProxyFailure(reason) {
+  const now = Date.now();
+  if (now - _firstFailureAt > PROXY_FAIL_WINDOW_MS) {
+    // Окно истекло — обнуляем счётчик
+    _proxyConnectionFailures = 0;
+    _firstFailureAt = now;
+  }
+  _proxyConnectionFailures++;
+  console.warn('[proxy] failure #' + _proxyConnectionFailures + ' on ' + ACTIVE_PROXY.id + ': ' + reason);
+  if (_proxyConnectionFailures >= PROXY_FAIL_THRESHOLD) {
+    console.warn('[proxy] threshold reached, switching to next proxy');
+    markCurrentProxyBadAndReload();
+  }
+}
+
+// Эвристика «это connection-error от ТСПУ» — TypeError "Failed to fetch",
+// или AbortError, или явное упоминание сетевой ошибки. Не считаем 4xx/5xx
+// (они доходят до клиента нормально, это уже ответ сервера).
+function isConnectionError(err) {
+  if (!err) return false;
+  const name = String(err.name || '');
+  const msg = String(err.message || err);
+  if (name === 'TypeError' && msg.includes('fetch')) return true;
+  if (name === 'AbortError') return false; // не считаем aborted запросы
+  if (msg.indexOf('Failed to fetch') !== -1) return true;
+  if (msg.indexOf('NetworkError') !== -1) return true;
+  if (msg.indexOf('ERR_CONNECTION') !== -1) return true;
+  if (msg.indexOf('ERR_NETWORK') !== -1) return true;
+  return false;
+}
+
+// Устанавливает перехват глобального fetch:
+//   - если ACTIVE_PROXY.needsMask: переписывает auth-пути по карте
+//   - ловит сетевые ошибки на запросах к SUPABASE_URL и считает их в счётчик
+function setupFetchInterceptor() {
   if (typeof window === 'undefined' || !window.fetch) return;
+  if (window._sbFetchPatched) return; // защита от повторного патча
+  window._sbFetchPatched = true;
+
   const origFetch = window.fetch.bind(window);
+  const useMask = !!(ACTIVE_PROXY && ACTIVE_PROXY.needsMask);
 
   function maskUrl(urlStr) {
+    if (!useMask) return urlStr;
     if (!urlStr || typeof urlStr !== 'string') return urlStr;
     if (urlStr.indexOf(SUPABASE_URL) !== 0) return urlStr;
-    const tail = urlStr.substring(SUPABASE_URL.length); // например "/auth/v1/token?grant_type=password"
+    const tail = urlStr.substring(SUPABASE_URL.length);
     for (const rule of AUTH_PATH_MASK) {
-      // Точное совпадение начала пути с учётом query (более специфичные правила сначала).
       if (tail === rule.from || tail.indexOf(rule.from) === 0) {
-        // Если в from уже была query (.../...?grant_type=...) — to полностью её заменяет.
-        // Если в tail после rule.from остался ещё «&дальше=...» — не должно быть в auth-эндпоинтах,
-        // но на всякий случай переносим.
         const rest = tail.substring(rule.from.length);
-        const masked = SUPABASE_URL + rule.to + rest;
-        return masked;
+        return SUPABASE_URL + rule.to + rest;
       }
     }
     return urlStr;
   }
 
+  function isOurRequest(input) {
+    let u = '';
+    if (typeof input === 'string') u = input;
+    else if (input && typeof input === 'object' && input.url) u = input.url;
+    return u.indexOf(SUPABASE_URL) === 0;
+  }
+
   window.fetch = function(input, init) {
+    let finalInput = input;
+    let isOurs = isOurRequest(input);
     try {
-      if (typeof input === 'string') {
-        const masked = maskUrl(input);
-        if (masked !== input) {
-          return origFetch(masked, init);
-        }
-      } else if (input && typeof input === 'object' && input.url) {
-        // Это Request-объект. Создаём новый с замаскированным URL.
-        const masked = maskUrl(input.url);
-        if (masked !== input.url) {
-          // У Request нельзя просто поменять url, нужно создать новый Request.
-          // Копируем все важные поля, кроме url.
-          const newReq = new Request(masked, input);
-          return origFetch(newReq, init);
+      if (useMask) {
+        if (typeof input === 'string') {
+          const masked = maskUrl(input);
+          if (masked !== input) finalInput = masked;
+        } else if (input && typeof input === 'object' && input.url) {
+          const masked = maskUrl(input.url);
+          if (masked !== input.url) finalInput = new Request(masked, input);
         }
       }
     } catch (e) {
       console.warn('[fetch-mask] error, falling back to original:', e);
     }
-    return origFetch(input, init);
+    const promise = origFetch(finalInput, init);
+    if (isOurs) {
+      promise.catch(err => {
+        if (isConnectionError(err)) {
+          recordProxyFailure(err.message || String(err));
+        }
+      });
+    }
+    return promise;
   };
 
-  console.log('[fetch-mask] installed for ' + AUTH_PATH_MASK.length + ' auth paths');
-})();
+  console.log('[fetch-mask] installed (mask=' + useMask + ', proxy=' + ACTIVE_PROXY.id + ')');
+}
 // END маскировка
 
 const SURVEY_TYPES = {
@@ -1361,11 +1606,14 @@ function createSbClient() {
 
 function hardLocalLogout() {
   console.log('[hardLogout] start');
+  // Ключи, которые НЕ трогаем при logout (они относятся к выбору прокси
+  // и текущей группе, а не к авторизации).
+  const KEEP_KEYS = new Set(['sb-proxy-choice', 'sb-proxy-skip', 'sb-current-group']);
   try {
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('sb-')) keysToRemove.push(k);
+      if (k && k.startsWith('sb-') && !KEEP_KEYS.has(k)) keysToRemove.push(k);
     }
     keysToRemove.forEach(k => {
       console.log('[hardLogout] removing ' + k);
@@ -9823,6 +10071,29 @@ function cancelReset() {
 
 async function init() {
   console.log('[boot] init start');
+
+  // ============================================================
+  // ШАГ 1. Выбор прокси (Vercel / Deno / Worker) с health-check
+  // ============================================================
+  // Пробуем кэш, иначе пингуем все прокси параллельно. На время этого
+  // шага показываем минимальный статус в консоли. Этот шаг занимает
+  // обычно ~10-100ms (если кэш свежий) или до 3 секунд (если кэша нет
+  // и нужен health-check).
+  try {
+    const chosen = await selectProxy();
+    applyProxy(chosen);
+  } catch (e) {
+    console.error('[boot] selectProxy failed, using default:', e);
+    applyProxy(PROXY_LIST[0]);
+  }
+  // Установка перехвата fetch (для маскировки путей и счёта ошибок).
+  // Делаем это ДО создания клиента, чтобы supabase-js сразу шёл через
+  // правильную трассу.
+  setupFetchInterceptor();
+
+  // ============================================================
+  // ШАГ 2. Создание Supabase-клиента
+  // ============================================================
   sb = createSbClient();
 
   // Проверяем, не пришёл ли пользователь по ссылке восстановления пароля.
