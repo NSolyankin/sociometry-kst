@@ -594,7 +594,7 @@
       <option value="">— Загрузка списка групп… —</option>
     </select>
 
-    <label>Псевдоним</label>
+    <label>Игровое имя</label>
     <select id="register-pseudonym" disabled>
       <option value="">— Сначала выберите группу —</option>
     </select>
@@ -686,7 +686,7 @@
               <ol style="padding-left:20px; margin:0;">
                 <li><strong>Создать опрос.</strong> Кнопка «+ Новый опрос» на дашборде. Выбрать тип (Вариант 1 — социометрический выбор, Вариант 2 — универсальная анкета, Вариант 3 — номинации), сформулировать вопросы, настроить видимость результатов. Можно указать <strong>дедлайн</strong> — дату, после которой у опроса появится пометка «Просрочен» (голосование при этом не блокируется, только визуальный сигнал).</li>
                 <li><strong>Сообщить участникам.</strong> Кнопка <strong>«📋 Ссылка»</strong> на карточке активного опроса копирует ссылку на портал в буфер — удобно сразу вставить в общий чат или личные сообщения.</li>
-                <li><strong>Отслеживать явку.</strong> На карточке активного опроса прямо на дашборде виден прогресс-бар <strong>«Явка: X/Y»</strong> — сколько participant'ов уже проголосовало. Обновляется каждые 10 секунд автоматически (polling). Если нужно подробнее — откройте опрос, там список «Проголосовали / Ещё не проголосовали» с псевдонимами.</li>
+                <li><strong>Отслеживать явку.</strong> На карточке активного опроса прямо на дашборде виден прогресс-бар <strong>«Явка: X/Y»</strong> — сколько participant'ов уже проголосовало. Обновляется каждые 10 секунд автоматически (polling). Если нужно подробнее — откройте опрос, там список «Проголосовали / Ещё не проголосовали» с игровыми именами.</li>
                 <li><strong>Архивировать.</strong> Когда все проголосовали (или истёк срок) — кнопка «Архивировать» на карточке или на экране опроса. После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам.</li>
                 <li><strong>Посмотреть результаты.</strong> После архивации экран опроса покажет сводные таблицы. Можно экспортировать: «🖨️ Печать / Сохранить в PDF» или «📋 Скопировать как текст» (при вставке в Word получится таблица с границами).</li>
               </ol>
@@ -697,7 +697,7 @@
           <details style="margin-top:8px; border-left:3px solid var(--accent); padding:8px 12px; background:#fafbfc; border-radius:4px;">
             <summary style="cursor:pointer; font-weight:500;">2. Как выбрать тип опроса — Вариант 1, 2 или 3</summary>
             <div style="margin-top:10px; font-size:14px; line-height:1.6;">
-              <p style="margin-top:0;"><strong>Вариант 1 — Социометрический выбор.</strong> Классика Морено: каждый участник выбирает N имён по заданному критерию («С кем бы я пошёл в команду?»). В результате — рейтинг популярности. Если включить «тональность», можно комбинировать сближающие и отталкивающие вопросы и получить сводный индекс симпатий-антипатий. Подходит для выбора лидера, диагностики ядра группы, классической социометрии.</p>
+              <p style="margin-top:0;"><strong>Вариант 1 — Социометрический выбор.</strong> Классика Морено: каждый участник называет имена по заданному критерию. Можно сделать классическую анкету социометрии: создать четыре вопроса с количеством имён по 1 («С кем бы стал делать в первую очередь», «во вторую», «в третью», «с кем бы не хотел делать») и включить сводную таблицу — в результатах появится таблица «имена участников × вопросы» с количеством голосов в каждой ячейке, в формате обычного отчёта группы 161. Если включить «тональность», можно комбинировать сближающие и отталкивающие вопросы и получить сводный индекс симпатий-антипатий. Подходит для выбора лидера, диагностики ядра группы, классической социометрии.</p>
               <p><strong>Вариант 2 — Универсальная анкета.</strong> Каждый участник отвечает на одни и те же вопросы про каждого оцениваемого человека. Тип ответа у каждого вопроса отдельный (Да/Нет или свободный текст). Гибкая видимость результатов — от «только организатор видит» до «все видят всё». Подходит для «360 градусов внутри группы», аттестации, структурированной обратной связи.</p>
               <p><strong>Вариант 3 — Номинации.</strong> Список именных «титулов»: каждая номинация со своим списком кандидатов и (опционально) текстовыми вопросами «За что именно?». Голосующий сам решает, в какой номинации участвовать, а какую пропустить. В результатах: рейтинг по каждой номинации и личный отчёт каждому участнику «кто и в чём меня выбрал». Подходит для церемоний награждения, итоговых встреч, ретроспективы со сбором обратной связи в свободной форме.</p>
               <p style="margin-bottom:0;"><strong>Правило выбора:</strong> рейтинг по одному критерию — Вариант 1. Сетка «участник × вопрос» — Вариант 2. Несколько разных «титулов» с разным числом победителей — Вариант 3.</p>
@@ -732,10 +732,10 @@
           </details>
 
           <details style="margin-top:8px; border-left:3px solid var(--accent); padding:8px 12px; background:#fafbfc; border-radius:4px;">
-            <summary style="cursor:pointer; font-weight:500;">5. Псевдонимы группы</summary>
+            <summary style="cursor:pointer; font-weight:500;">5. Игровые имена группы</summary>
             <div style="margin-top:10px; font-size:14px; line-height:1.6;">
-              <p style="margin-top:0;"><strong>Что такое справочник псевдонимов.</strong> Список имён, разрешённых в этой группе. При регистрации новый участник выбирает имя из свободных — занять произвольное нельзя. Это защищает единство мира имён (мифологические, по проекту «Тройки», и т.д.).</p>
-              <p><strong>Добавить новое имя.</strong> Блок «Добавить новое имя» под таблицей псевдонимов. Введите имя, нажмите «Добавить». Сразу появится в списке как свободное.</p>
+              <p style="margin-top:0;"><strong>Что такое справочник игровых имён.</strong> Список имён, разрешённых в этой группе. При регистрации новый участник выбирает имя из свободных — занять произвольное нельзя. Это защищает единство мира имён (мифологические, по проекту «Тройки», и т.д.).</p>
+              <p><strong>Добавить новое имя.</strong> Блок «Добавить новое имя» под таблицей игровых имён. Введите имя, нажмите «Добавить». Сразу появится в списке как свободное.</p>
               <p><strong>Удалить имя.</strong> Только полностью свободные имена (никем не занятые и не закреплённые за исключёнными). Кнопка «Удалить» у таких имён.</p>
               <p style="margin-bottom:0;"><strong>Почему имя исключённого не возвращается в свободные.</strong> Это защита от путаницы: голоса в архивных опросах привязаны к этому имени. Если другой человек потом займёт то же имя, станет непонятно, кто именно что сказал в старом опросе. Имя остаётся закреплённым за исключённым участником навсегда.</p>
             </div>
@@ -772,8 +772,8 @@
     </div>
 
     <div class="card">
-      <h2 style="margin-top:0;">Псевдонимы группы</h2>
-      <p style="color:var(--muted); font-size:13px;">Список всех имён, разрешённых в этой группе. Имя занятого участника помечено его псевдонимом. Имена исключённых участников остаются закреплёнными за ними и не возвращаются в свободные.</p>
+      <h2 style="margin-top:0;">Игровые имена группы</h2>
+      <p style="color:var(--muted); font-size:13px;">Список всех имён, разрешённых в этой группе. Имя занятого участника помечено его игровым именем. Имена исключённых участников остаются закреплёнными за ними и не возвращаются в свободные.</p>
       <div id="group-pseudonyms-list">
         <div class="empty-state">Загрузка…</div>
       </div>
@@ -800,7 +800,7 @@
 
     <div id="my-membership-card" class="card">
       <h2 style="margin-top:0;">Моё участие в группе</h2>
-      <p style="color:var(--muted); font-size:13px;">Вы можете покинуть эту группу самостоятельно. Ваш псевдоним останется закреплённым за вами — другой участник его не сможет занять. Ваши голоса в архивных опросах сохранятся. Если передумаете — организатор сможет восстановить ваше участие через блок «Исключённые из группы».</p>
+      <p style="color:var(--muted); font-size:13px;">Вы можете покинуть эту группу самостоятельно. Ваше игровое имя останется закреплённым за вами — другой участник его не сможет занять. Ваши голоса в архивных опросах сохранятся. Если передумаете — организатор сможет восстановить ваше участие через блок «Исключённые из группы».</p>
       <div id="my-membership-error" class="error hidden"></div>
       <div id="my-membership-info" class="info hidden"></div>
       <div id="my-membership-actions">
@@ -868,14 +868,14 @@
       <div id="join-error" class="error hidden"></div>
       <div id="join-info" class="info hidden"></div>
 
-      <p style="color:var(--muted); font-size:14px;">Выберите группу, в которую хотите вступить, и свободный псевдоним. Вы станете обычным участником этой группы.</p>
+      <p style="color:var(--muted); font-size:14px;">Выберите группу, в которую хотите вступить, и свободное игровое имя. Вы станете обычным участником этой группы.</p>
 
       <label>Группа</label>
       <select id="join-group">
         <option value="">— Загрузка… —</option>
       </select>
 
-      <label>Псевдоним</label>
+      <label>Игровое имя</label>
       <select id="join-pseudonym" disabled>
         <option value="">— Сначала выберите группу —</option>
       </select>
@@ -897,7 +897,7 @@
       <div id="create-group-error" class="error hidden"></div>
       <div id="create-group-info" class="info hidden"></div>
 
-      <p style="color:var(--muted); font-size:14px;">Создаёт новую группу. Вы автоматически становитесь её главным организатором с указанным псевдонимом. Остальные участники зарегистрируются сами, а вы потом сможете добавить псевдонимы в Настройках группы и при необходимости передать роль главного.</p>
+      <p style="color:var(--muted); font-size:14px;">Создаёт новую группу. Вы автоматически становитесь её главным организатором с указанным игровым именем. Остальные участники зарегистрируются сами, а вы потом сможете добавить игровые имена в Настройках группы и при необходимости передать роль главного.</p>
 
       <label>Идентификатор группы</label>
       <input type="text" id="create-group-id" placeholder="Например: novosibirsk" autocomplete="off">
@@ -907,7 +907,7 @@
       <input type="text" id="create-group-name" placeholder="Например: КСТ Новосибирск" autocomplete="off">
       <p style="color:var(--muted); font-size:12px; margin-top:-4px;">Отображаемое имя группы — то, что участники увидят в переключателе и на экране регистрации.</p>
 
-      <label>Ваш псевдоним в новой группе</label>
+      <label>Ваше игровое имя в новой группе</label>
       <input type="text" id="create-group-pseudonym" placeholder="Например: Альфа" autocomplete="off">
       <p style="color:var(--muted); font-size:12px; margin-top:-4px;">Под этим именем вы войдёте в новую группу как главный организатор. Можно использовать то же имя, что и в других группах, или новое.</p>
 
@@ -941,7 +941,7 @@
           <input type="radio" name="ns-type" value="variant_1" checked>
           <div class="radio-option-content">
             <div class="radio-option-label">Вариант 1 — Социометрический выбор</div>
-            <div class="radio-option-desc"><strong>Когда выбирать:</strong> нужен рейтинг популярности или карта симпатий. Каждый участник называет несколько имён в ответ на вопрос-критерий — «С кем бы я пошёл в одну команду?», «Кого бы выбрал лидером?». В результате видно, кто набрал больше выборов. Подходит для выбора лидера, диагностики ядра группы, классической социометрии Морено. Можно включить тональность вопросов (сближение/отторжение) и получить сводный индекс симпатий-антипатий.</div>
+            <div class="radio-option-desc"><strong>Когда выбирать:</strong> нужен рейтинг популярности или карта симпатий. Каждый участник называет имена в ответ на вопрос-критерий — «С кем бы стал делать в первую очередь?», «Кого бы выбрал лидером?». В результате видно, кто набрал больше выборов. Подходит для выбора лидера, диагностики ядра группы, классической социометрии Морено. Если у каждого вопроса задать количество имён 1 (1 выбор, 2 выбор, 3 выбор, негативный выбор) и включить сводную таблицу — получится отчёт в формате обычного социометрического исследования группы 161. Можно включить тональность вопросов (сближение/отторжение) и получить сводный индекс симпатий-антипатий.</div>
           </div>
         </label>
         <!--
@@ -1005,6 +1005,22 @@
           <div class="radio-option-content">
             <div class="radio-option-label">Использовать тональность вопросов (сближение / отторжение)</div>
             <div class="radio-option-desc">Если включено — у каждого вопроса нужно указать тональность, а в результатах появится сводный индекс «сближающие минус отталкивающие». Если сомневаетесь — оставьте выключенным. Позже изменить настройку нельзя, только создать новый опрос.</div>
+          </div>
+        </label>
+
+        <h3>Сводная таблица</h3>
+        <label class="checkbox-option" style="margin-bottom: 8px;">
+          <input type="checkbox" id="ns-v1-show-summary-table">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Показывать сводную таблицу результатов</div>
+            <div class="radio-option-desc">В результатах появится таблица «имена участников × вопросы» в формате классической социометрии. В строках — все участники группы по алфавиту, в столбцах — вопросы (используется краткое название столбца, если задано), в ячейках — количество голосов. Можно скопировать таблицу, скачать в Word или распечатать.</div>
+          </div>
+        </label>
+        <label class="checkbox-option" style="margin-bottom: 12px; margin-left: 24px;">
+          <input type="checkbox" id="ns-v1-show-summary-table-to-participants">
+          <div class="radio-option-content">
+            <div class="radio-option-label">Показывать сводную таблицу участникам тоже</div>
+            <div class="radio-option-desc">Если выключено — таблицу видит только организатор. Если включено — каждый участник в архиве опроса увидит ту же таблицу. Имеет смысл только при включённой галочке выше.</div>
           </div>
         </label>
       </div>
@@ -1816,6 +1832,8 @@ function fillNewSurveyFormFromSource(src) {
   if (src.type === 'variant_1') {
     document.getElementById('ns-v1-allow-self').checked = !!settings.allow_self;
     document.getElementById('ns-v1-use-tone').checked = !!settings.use_tone;
+    document.getElementById('ns-v1-show-summary-table').checked = !!settings.show_summary_table;
+    document.getElementById('ns-v1-show-summary-table-to-participants').checked = !!settings.show_summary_table_to_participants;
     updateV1ToneVisibility();
 
     // Очистим дефолтный пустой вопрос и заполним из источника
@@ -1828,6 +1846,8 @@ function fillNewSurveyFormFromSource(src) {
       item.querySelector('[data-field="text"]').value = q.text || '';
       const cntInput = item.querySelector('[data-field="count"]');
       if (cntInput && q.count) cntInput.value = q.count;
+      const shortLabelInput = item.querySelector('[data-field="short_label"]');
+      if (shortLabelInput && q.short_label) shortLabelInput.value = q.short_label;
       if (settings.use_tone && q.tone) {
         const toneInput = item.querySelector(`input[data-field="tone"][value="${q.tone}"]`);
         if (toneInput) toneInput.checked = true;
@@ -2139,17 +2159,17 @@ async function loadFreePseudonymsForJoin() {
   if (error) {
     console.error('[join] free_pseudonyms error:', error);
     psSel.innerHTML = '<option value="">— Ошибка загрузки —</option>';
-    showJoinError('Не удалось загрузить список псевдонимов: ' + error.message);
+    showJoinError('Не удалось загрузить список игровых имён: ' + error.message);
     return;
   }
   console.log('[join] free pseudonyms: ' + data.length);
   if (data.length === 0) {
     psSel.innerHTML = '<option value="">— В этой группе нет свободных имён —</option>';
     psSel.disabled = true;
-    showJoinError('В выбранной группе нет свободных псевдонимов. Обратитесь к организатору этой группы.');
+    showJoinError('В выбранной группе нет свободных игровых имён. Обратитесь к организатору этой группы.');
     return;
   }
-  psSel.innerHTML = '<option value="">— Выберите псевдоним —</option>';
+  psSel.innerHTML = '<option value="">— Выберите игровое имя —</option>';
   data.forEach(row => {
     const opt = document.createElement('option');
     opt.value = row.name;
@@ -2174,7 +2194,7 @@ async function doJoinGroup() {
   const ps = document.getElementById('join-pseudonym').value;
 
   if (!gid) { showJoinError('Выберите группу'); return; }
-  if (!ps) { showJoinError('Выберите псевдоним'); return; }
+  if (!ps) { showJoinError('Выберите игровое имя'); return; }
 
   console.log('[join] attempt:', { gid, ps });
 
@@ -2191,11 +2211,11 @@ async function doJoinGroup() {
       if (msg.includes('already a member')) {
         msg = 'Вы уже состоите в этой группе.';
       } else if (msg.includes('already taken')) {
-        msg = 'Этот псевдоним уже занят. Выберите другой.';
-        // Перезагрузить список свободных псевдонимов, вдруг кто-то успел занять
+        msg = 'Это игровое имя уже занято. Выберите другое.';
+        // Перезагрузить список свободных игровых имён, вдруг кто-то успел занять
         await loadFreePseudonymsForJoin();
       } else if (msg.includes('not in the pseudonym list')) {
-        msg = 'Псевдоним не найден в справочнике группы. Выберите из списка.';
+        msg = 'Это игровое имя не найдено в справочнике группы. Выберите из списка.';
       }
       showJoinError(msg);
       return;
@@ -2272,10 +2292,10 @@ async function doCreateGroup() {
   // Клиентская валидация — первая линия защиты, сервер всё равно проверит ещё раз
   if (!gid) { showCreateGroupError('Введите идентификатор группы'); return; }
   if (!name) { showCreateGroupError('Введите название группы'); return; }
-  if (!ps) { showCreateGroupError('Введите ваш псевдоним в новой группе'); return; }
+  if (!ps) { showCreateGroupError('Введите ваше игровое имя в новой группе'); return; }
   if (gid.length > 50) { showCreateGroupError('Идентификатор не длиннее 50 символов'); return; }
   if (name.length > 100) { showCreateGroupError('Название не длиннее 100 символов'); return; }
-  if (ps.length > 50) { showCreateGroupError('Псевдоним не длиннее 50 символов'); return; }
+  if (ps.length > 50) { showCreateGroupError('Игровое имя не длиннее 50 символов'); return; }
   if (/\s/.test(gid)) { showCreateGroupError('Идентификатор не должен содержать пробелов'); return; }
   if (/[/\\]/.test(gid)) { showCreateGroupError('Идентификатор не должен содержать символов / или \\'); return; }
 
@@ -2301,8 +2321,23 @@ async function doCreateGroup() {
         msg = 'Создавать группы может только главный организатор. У вас сейчас нет этой роли ни в одной группе.';
       } else if (msg.includes('уже существует')) {
         msg = 'Группа с таким идентификатором уже существует. Выберите другой id.';
-      } else if (msg.includes('Псевдоним')) {
-        // оставляем как есть — серверное сообщение про псевдоним уже понятное
+      } else if (msg.match(/[Пп]севдоним/)) {
+        // Серверное сообщение содержит слово «Псевдоним» в любой форме —
+        // заменяем на «Игровое имя» в видимом пользователю тексте
+        // (миграция БД-функции отдельно, здесь правим только UI).
+        msg = msg
+          .replace(/Псевдонимы/g, 'Игровые имена')
+          .replace(/Псевдонима/g, 'Игрового имени')
+          .replace(/Псевдониму/g, 'Игровому имени')
+          .replace(/Псевдонимом/g, 'Игровым именем')
+          .replace(/Псевдониме/g, 'Игровом имени')
+          .replace(/Псевдоним/g, 'Игровое имя')
+          .replace(/псевдонимы/g, 'игровые имена')
+          .replace(/псевдонима/g, 'игрового имени')
+          .replace(/псевдониму/g, 'игровому имени')
+          .replace(/псевдонимом/g, 'игровым именем')
+          .replace(/псевдониме/g, 'игровом имени')
+          .replace(/псевдоним/g, 'игровое имя');
       }
       showCreateGroupError(msg);
       return;
@@ -2335,7 +2370,7 @@ async function doCreateGroup() {
 }
 
 function renderDashboard() {
-  const pseudonym = currentProfile?.pseudonym || '(без псевдонима)';
+  const pseudonym = currentProfile?.pseudonym || '(без имени)';
   const role = currentProfile?.role || 'participant';
   document.getElementById('user-pseudonym').textContent = pseudonym;
 
@@ -3332,6 +3367,399 @@ function renderV1Descriptions(descriptions, subQuestions, mode) {
   return html;
 }
 
+// ============================================================
+// СВОДНАЯ ТАБЛИЦА V1 (формат классической социометрии Морено)
+// ============================================================
+// Строки — все participant'ы группы по алфавиту (включая тех, кого не выбрали).
+// Столбцы — вопросы опроса по порядку (используется short_label, если задан).
+// Ячейки — количество голосов за это имя в этом вопросе. Пустая ячейка вместо нуля.
+// Показывается только если settings.show_summary_table === true.
+// Participant видит таблицу только если settings.show_summary_table_to_participants === true.
+
+// Построение данных для таблицы: массив строк {name, counts: {qid: number}}
+function buildV1SummaryRows(agg, questions) {
+  // Собираем имена всех participant'ов группы (отсортированы по алфавиту в loadGroupParticipants)
+  const allNames = (allGroupParticipants || []).slice();
+  // Дополнительно — имена, которые встречаются в ответах, но почему-то не в allGroupParticipants
+  // (например, исключённые из группы после голосования). Добавляем в конец списка.
+  const namesFromAgg = new Set();
+  questions.forEach(q => {
+    Object.keys(agg[q.id] || {}).forEach(n => namesFromAgg.add(n));
+  });
+  const knownSet = new Set(allNames);
+  const extra = [];
+  namesFromAgg.forEach(n => {
+    if (!knownSet.has(n)) extra.push(n);
+  });
+  extra.sort((a, b) => a.localeCompare(b, 'ru'));
+  const finalNames = allNames.concat(extra);
+
+  return finalNames.map(name => {
+    const counts = {};
+    questions.forEach(q => {
+      counts[q.id] = (agg[q.id]?.[name]?.count) || 0;
+    });
+    return { name, counts };
+  });
+}
+
+// Краткое имя столбца: short_label, если задано, иначе обрезанный текст вопроса (до 30 симв.)
+function getV1ColumnHeader(q) {
+  if (q.short_label && q.short_label.trim()) return q.short_label.trim();
+  const text = q.text || '';
+  if (text.length <= 30) return text;
+  return text.slice(0, 30) + '…';
+}
+
+// Дата создания опроса в формате ДД.ММ.ГГГГ
+function formatV1ReportDate(survey) {
+  let d;
+  if (survey?.created_at) {
+    d = new Date(survey.created_at);
+  } else {
+    d = new Date();
+  }
+  if (isNaN(d.getTime())) d = new Date();
+  return d.toLocaleDateString('ru-RU');
+}
+
+// Рендер сводной таблицы V1 в HTML — для встраивания на экран результатов.
+// Использует CSS-классы портала (vote-table) для единообразия с остальными таблицами.
+function renderV1SummaryTable(rows, questions, useTone) {
+  if (!rows || rows.length === 0) {
+    return '<p style="color:var(--muted);">Нет данных для сводной таблицы.</p>';
+  }
+  let html = '<div class="vote-table-wrapper"><table class="vote-table"><thead><tr>';
+  html += '<th></th>';
+  questions.forEach(q => {
+    const header = getV1ColumnHeader(q);
+    const toneMark = useTone && q.tone === 'negative' ? ' <span style="color:#d32f2f; font-size:11px;">(–)</span>' : '';
+    html += `<th>${escapeHtml(header)}${toneMark}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += `<tr><td class="subject-name">${escapeHtml(r.name)}</td>`;
+    questions.forEach(q => {
+      const v = r.counts[q.id] || 0;
+      if (v === 0) {
+        html += '<td></td>';
+      } else {
+        html += `<td><strong>${v}</strong></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// HTML-таблица с инлайновыми стилями — для копирования в буфер и для печати.
+// Аналог buildV4CompactHtml: вставляется в Word/Outlook как настоящая таблица.
+function buildV1SummaryHtmlForExport(rows, questions, surveyTitle, groupName, respondentsCount, dateStr, useTone) {
+  const escapeForHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const tdStyle = 'border:1px solid #555; padding:5px 10px; text-align:center; vertical-align:middle;';
+  const tdLeft = tdStyle.replace('text-align:center;', 'text-align:left;');
+  const thStyle = tdStyle + ' background:#e8e8e8; font-weight:bold; font-size:13px;';
+  const headerCellStyle = 'border:1px solid #555; padding:6px 10px; background:#d8d8d8; font-weight:bold; text-align:center;';
+
+  const totalCols = 1 + questions.length;
+  // Заголовок: «<группа> <название опроса>» + строка участия + дата
+  const headerLine = (groupName ? groupName + ' ' : '') + surveyTitle;
+
+  let html = '<table style="border-collapse:collapse; border:1px solid #555; font-family:sans-serif; font-size:13px;">';
+  html += `<tr><td colspan="${totalCols}" style="${headerCellStyle}">${escapeForHtml(headerLine)}</td></tr>`;
+  if (totalCols >= 2) {
+    html += `<tr><td colspan="${totalCols - 1}" style="${headerCellStyle.replace('text-align:center;', 'text-align:left;')}">В исследовании приняли участие: ${respondentsCount} ${pluralize(respondentsCount, 'человек', 'человека', 'человек')}</td>`;
+    html += `<td style="${headerCellStyle}">${escapeForHtml(dateStr)}</td></tr>`;
+  } else {
+    html += `<tr><td style="${headerCellStyle}">В исследовании приняли участие: ${respondentsCount} · ${escapeForHtml(dateStr)}</td></tr>`;
+  }
+
+  // Шапка таблицы
+  html += '<tr>';
+  html += `<th style="${thStyle} text-align:left;">&nbsp;</th>`;
+  questions.forEach(q => {
+    const header = getV1ColumnHeader(q);
+    const toneSuffix = useTone && q.tone === 'negative' ? ' (–)' : '';
+    html += `<th style="${thStyle}">${escapeForHtml(header + toneSuffix)}</th>`;
+  });
+  html += '</tr>';
+
+  // Строки субъектов
+  rows.forEach(r => {
+    html += '<tr>';
+    html += `<td style="${tdLeft}"><strong>${escapeForHtml(r.name)}</strong></td>`;
+    questions.forEach(q => {
+      const v = r.counts[q.id] || 0;
+      if (v === 0) {
+        html += `<td style="${tdStyle}"></td>`;
+      } else {
+        html += `<td style="${tdStyle}">${v}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  return html;
+}
+
+// Текстовая версия таблицы — TSV (вставляется в Excel/Sheets как таблица).
+function buildV1SummaryText(rows, questions, surveyTitle, groupName, respondentsCount, dateStr, useTone) {
+  const lines = [];
+  const headerLine = (groupName ? groupName + ' ' : '') + surveyTitle;
+  lines.push(headerLine);
+  lines.push(`В исследовании приняли участие: ${respondentsCount} ${pluralize(respondentsCount, 'человек', 'человека', 'человек')}\t${dateStr}`);
+  lines.push('');
+
+  const headerCols = ['', ...questions.map(q => {
+    const h = getV1ColumnHeader(q);
+    return useTone && q.tone === 'negative' ? h + ' (–)' : h;
+  })];
+  lines.push(headerCols.join('\t'));
+
+  rows.forEach(r => {
+    const cols = [r.name];
+    questions.forEach(q => {
+      const v = r.counts[q.id] || 0;
+      cols.push(v === 0 ? '' : String(v));
+    });
+    lines.push(cols.join('\t'));
+  });
+
+  return lines.join('\n');
+}
+
+// Получить название группы для шапки таблицы. Используем currentGroupName, если он задан.
+function getCurrentGroupNameForReport() {
+  // currentGroupName устанавливается при загрузке профиля
+  return (typeof currentGroupName === 'string' && currentGroupName.trim()) ? currentGroupName.trim() : '';
+}
+
+// Копирование сводной таблицы V1 в буфер обмена.
+async function copyV1SummaryToClipboard() {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const useTone = s.settings?.use_tone === true;
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV1(responses, questions);
+  const rows = buildV1SummaryRows(agg, questions);
+  const respondentsCount = responses.length;
+  const dateStr = formatV1ReportDate(s);
+  const groupName = getCurrentGroupNameForReport();
+
+  const html = buildV1SummaryHtmlForExport(rows, questions, s.title, groupName, respondentsCount, dateStr, useTone);
+  const text = buildV1SummaryText(rows, questions, s.title, groupName, respondentsCount, dateStr, useTone);
+
+  const showOk = () => {
+    const btn = document.getElementById('btn-copy-v1-summary');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Скопировано';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  };
+
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      showOk();
+      return;
+    }
+  } catch (err) {
+    console.warn('[v1-summary] clipboard.write failed, falling back to writeText:', err);
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showOk();
+  } catch (err) {
+    console.error('[v1-summary] copy error:', err);
+    alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст таблицы:\n\n' + text);
+  }
+}
+
+// Сборка DOCX-документа со сводной таблицей V1.
+async function buildV1SummaryDocxDocument(rows, questions, surveyTitle, groupName, respondentsCount, dateStr, useTone) {
+  const D = window.docx;
+  const headerLine = (groupName ? groupName + ' ' : '') + surveyTitle;
+
+  // Шапка
+  const titleParagraph = new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { after: 120 },
+    children: [new D.TextRun({ text: headerLine, bold: true, size: 28 })]
+  });
+  const subtitleParagraph = new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { after: 240 },
+    children: [new D.TextRun({
+      text: 'В исследовании приняли участие: ' + respondentsCount + ' ' +
+            pluralize(respondentsCount, 'человек', 'человека', 'человек') +
+            ' · ' + dateStr,
+      size: 22,
+      color: '6e6e73'
+    })]
+  });
+
+  // Шапка таблицы
+  const headerRow = new D.TableRow({
+    tableHeader: true,
+    children: [
+      new D.TableCell({
+        shading: { fill: 'D8D8D8' },
+        children: [new D.Paragraph({
+          children: [new D.TextRun({ text: '', bold: true })]
+        })]
+      }),
+      ...questions.map(q => {
+        const header = getV1ColumnHeader(q);
+        const toneSuffix = useTone && q.tone === 'negative' ? ' (–)' : '';
+        return new D.TableCell({
+          shading: { fill: 'E8E8E8' },
+          children: [new D.Paragraph({
+            alignment: D.AlignmentType.CENTER,
+            children: [new D.TextRun({ text: header + toneSuffix, bold: true, size: 20 })]
+          })]
+        });
+      })
+    ]
+  });
+
+  // Строки данных
+  const dataRows = rows.map(r => {
+    return new D.TableRow({
+      children: [
+        new D.TableCell({
+          children: [new D.Paragraph({
+            children: [new D.TextRun({ text: r.name, bold: true, size: 22 })]
+          })]
+        }),
+        ...questions.map(q => {
+          const v = r.counts[q.id] || 0;
+          return new D.TableCell({
+            children: [new D.Paragraph({
+              alignment: D.AlignmentType.CENTER,
+              children: [new D.TextRun({ text: v === 0 ? '' : String(v), size: 22 })]
+            })]
+          });
+        })
+      ]
+    });
+  });
+
+  const table = new D.Table({
+    rows: [headerRow, ...dataRows],
+    width: { size: 100, type: D.WidthType.PERCENTAGE }
+  });
+
+  return new D.Document({
+    sections: [{
+      properties: {},
+      children: [titleParagraph, subtitleParagraph, table]
+    }]
+  });
+}
+
+// Скачивание DOCX со сводной таблицей V1.
+async function downloadV1SummaryDocx() {
+  if (!isDocxLibAvailable()) {
+    alert('Библиотека для создания DOCX не загрузилась. Попробуйте обновить страницу или используйте «Копировать таблицу».');
+    return;
+  }
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const useTone = s.settings?.use_tone === true;
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV1(responses, questions);
+  const rows = buildV1SummaryRows(agg, questions);
+  const respondentsCount = responses.length;
+  const dateStr = formatV1ReportDate(s);
+  const groupName = getCurrentGroupNameForReport();
+
+  const btn = document.getElementById('btn-docx-v1-summary');
+  const orig = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Готовим файл…';
+  }
+
+  try {
+    const doc = await buildV1SummaryDocxDocument(rows, questions, s.title, groupName, respondentsCount, dateStr, useTone);
+    const blob = await window.docx.Packer.toBlob(doc);
+    const filename = safeFileName('Сводная таблица — ' + s.title) + '.docx';
+    downloadBlob(blob, filename);
+    if (btn) {
+      btn.textContent = '✓ Скачано';
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.disabled = false;
+      }, 2000);
+    }
+  } catch (err) {
+    console.error('[v1-summary] docx error:', err);
+    alert('Не удалось создать DOCX: ' + err.message);
+    if (btn) {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
+  }
+}
+
+// Печать сводной таблицы V1 в отдельном окне.
+function printV1Summary() {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const useTone = s.settings?.use_tone === true;
+  const responses = cachedAllResponses || [];
+  const agg = aggregateResponsesV1(responses, questions);
+  const rows = buildV1SummaryRows(agg, questions);
+  const respondentsCount = responses.length;
+  const dateStr = formatV1ReportDate(s);
+  const groupName = getCurrentGroupNameForReport();
+
+  const tableHtml = buildV1SummaryHtmlForExport(rows, questions, s.title, groupName, respondentsCount, dateStr, useTone);
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) {
+    alert('Не удалось открыть окно печати — возможно, всплывающие окна заблокированы браузером. Разрешите всплывающие окна для этого сайта и попробуйте ещё раз.');
+    return;
+  }
+  const doc = w.document;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + escapeHtml(s.title) + '</title>');
+  doc.write('<style>body{font-family:sans-serif; padding:20px;} table{border-collapse:collapse;} @media print { body { padding:0; } }</style>');
+  doc.write('</head><body>');
+  doc.write(tableHtml);
+  doc.write('<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>');
+  doc.write('</body></html>');
+  doc.close();
+}
+
+// Панель кнопок экспорта таблицы V1
+function renderV1SummaryExportToolbar() {
+  return '<div class="no-print" style="margin:8px 0 12px 0; display:flex; gap:8px; flex-wrap:wrap;">' +
+    '<button class="secondary small" id="btn-copy-v1-summary" type="button">📋 Копировать таблицу</button>' +
+    '<button class="secondary small" id="btn-docx-v1-summary" type="button">📄 Скачать в Word</button>' +
+    '<button class="secondary small" id="btn-print-v1-summary" type="button">🖨️ Печать</button>' +
+    '</div>';
+}
+
+function bindV1SummaryExportToolbar() {
+  const copyBtn = document.getElementById('btn-copy-v1-summary');
+  if (copyBtn) copyBtn.addEventListener('click', () => copyV1SummaryToClipboard());
+  const docxBtn = document.getElementById('btn-docx-v1-summary');
+  if (docxBtn) docxBtn.addEventListener('click', () => downloadV1SummaryDocx());
+  const printBtn = document.getElementById('btn-print-v1-summary');
+  if (printBtn) printBtn.addEventListener('click', () => printV1Summary());
+}
+
 async function renderResultsV1ForOrganizer() {
   const body = document.getElementById('survey-body');
   body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
@@ -3378,6 +3806,16 @@ async function renderResultsV1ForOrganizer() {
   }
 
   const agg = aggregateResponsesV1(responses, questions);
+
+  // Сводная таблица — если включена в настройках. Видна организатору всегда (даже
+  // если флажок «показывать participant'ам» выключен).
+  if (s.settings?.show_summary_table === true) {
+    const summaryRows = buildV1SummaryRows(agg, questions);
+    const useTone = s.settings?.use_tone === true;
+    html += '<h3 style="margin-top:24px;">Сводная таблица</h3>';
+    html += renderV1SummaryExportToolbar();
+    html += renderV1SummaryTable(summaryRows, questions, useTone);
+  }
 
   // Блок по каждому вопросу
   html += '<h3 style="margin-top:24px;">Результаты по вопросам</h3>';
@@ -3447,6 +3885,11 @@ async function renderResultsV1ForOrganizer() {
     const btn = document.getElementById('btn-archive-here');
     if (btn) btn.addEventListener('click', () => archiveSurveyFromScreen());
   }
+
+  // Обработчики кнопок экспорта сводной таблицы — если она присутствует
+  if (s.settings?.show_summary_table === true) {
+    bindV1SummaryExportToolbar();
+  }
 }
 
 // Рендер одного ответа V1 в детализации для организатора (без карты «Ваш ответ»)
@@ -3507,11 +3950,30 @@ async function renderResultsV1ForParticipant() {
     html += '<p style="color:var(--muted);">Вы не участвовали в этом опросе.</p>';
   }
 
-  // 2. none — больше ничего
+  // Сводная таблица — если включена и разрешена для participant'ов.
+  // Управляется отдельным флагом, не зависит от visibility опроса (none/self_only/full).
+  // Если флаг включён — participant видит таблицу даже при visibility='none'.
+  const showSummaryToMe = s.settings?.show_summary_table === true
+    && s.settings?.show_summary_table_to_participants === true;
+  // Для отображения таблицы нужны ответы — если их ещё нет, информацию покажет блок ниже.
+  if (showSummaryToMe && responses.length > 0) {
+    const agg0 = aggregateResponsesV1(responses, questions);
+    const summaryRows = buildV1SummaryRows(agg0, questions);
+    html += '<h3 style="margin-top:24px;">Сводная таблица</h3>';
+    html += renderV1SummaryExportToolbar();
+    html += renderV1SummaryTable(summaryRows, questions, useTone);
+  }
+
+  // 2. none — больше ничего (но сводная таблица уже показана выше, если включена)
   if (visibility === 'none') {
-    html += '<div class="info" style="margin-top:16px;">Общие результаты этого опроса доступны только организатору.</div>';
+    if (!showSummaryToMe) {
+      html += '<div class="info" style="margin-top:16px;">Общие результаты этого опроса доступны только организатору.</div>';
+    }
     html += '</div>';
     body.innerHTML = html;
+    if (showSummaryToMe && responses.length > 0) {
+      bindV1SummaryExportToolbar();
+    }
     return;
   }
 
@@ -3605,6 +4067,11 @@ async function renderResultsV1ForParticipant() {
 
   html += '</div>';
   body.innerHTML = html;
+
+  // Обработчики кнопок экспорта сводной таблицы — если она присутствует
+  if (showSummaryToMe) {
+    bindV1SummaryExportToolbar();
+  }
 }
 
 // ============================================================
@@ -7808,13 +8275,13 @@ function renderPseudonymsBlock() {
   const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
 
   if (!groupPseudonyms || groupPseudonyms.length === 0) {
-    container.innerHTML = '<div class="empty-state">В этой группе пока нет псевдонимов.</div>';
+    container.innerHTML = '<div class="empty-state">В этой группе пока нет игровых имён.</div>';
   } else {
     // Счётчик: сколько свободных
     const freeCount = groupPseudonyms.filter(p => !p.membership).length;
     let html = `<div class="pseudonyms-summary">Всего имён в справочнике: <strong>${groupPseudonyms.length}</strong> · свободных: <strong>${freeCount}</strong></div>`;
     html += '<div class="members-table-wrapper"><table class="pseudonyms-table">';
-    html += '<thead><tr><th>Псевдоним</th><th>Статус</th>';
+    html += '<thead><tr><th>Игровое имя</th><th>Статус</th>';
     if (isOrganizer) html += '<th>Действия</th>';
     html += '</tr></thead><tbody>';
     groupPseudonyms.forEach(p => {
@@ -7875,7 +8342,7 @@ function renderExcludedBlock() {
   card.classList.remove('hidden');
 
   let html = '<div class="members-table-wrapper"><table class="members-table">';
-  html += '<thead><tr><th>Псевдоним</th><th>Email</th><th>Исключён</th>';
+  html += '<thead><tr><th>Игровое имя</th><th>Email</th><th>Исключён</th>';
   if (isOrganizer) html += '<th>Действия</th>';
   html += '</tr></thead><tbody>';
 
@@ -7933,7 +8400,7 @@ function renderMyMembershipBlock() {
 
   // Participant или co_organizer — показываем кнопку
   const roleLabel = myRole === 'co_organizer' ? 'со-организатор' : 'участник';
-  let html = '<p style="font-size:14px; margin-top:0;">Ваш псевдоним в этой группе: <strong>' + escapeHtml(myPseudonym) + '</strong> (' + roleLabel + ').</p>';
+  let html = '<p style="font-size:14px; margin-top:0;">Ваше игровое имя в этой группе: <strong>' + escapeHtml(myPseudonym) + '</strong> (' + roleLabel + ').</p>';
   html += '<button class="danger small" id="btn-leave-group">Покинуть группу</button>';
   container.innerHTML = html;
 
@@ -7952,7 +8419,7 @@ async function doLeaveGroup() {
   const myPseudonym = currentProfile?.pseudonym || '';
 
   const confirmMsg = 'Вы уверены, что хотите покинуть группу «' + groupLabel + '»?\n\n' +
-    'Ваш псевдоним «' + myPseudonym + '» останется закреплённым за вами — другой участник его не сможет занять. ' +
+    'Ваше игровое имя «' + myPseudonym + '» останется закреплённым за вами — другой участник его не сможет занять. ' +
     'Ваши голоса в архивных опросах сохранятся. ' +
     'Если передумаете, организатор сможет восстановить ваше участие через блок «Исключённые из группы».';
   if (!confirm(confirmMsg)) return;
@@ -8067,7 +8534,7 @@ async function addPseudonymToGroup() {
   const name = raw.trim();
 
   if (!name) {
-    errorBox.textContent = 'Введите имя псевдонима';
+    errorBox.textContent = 'Введите игровое имя';
     errorBox.classList.remove('hidden');
     return;
   }
@@ -8137,7 +8604,7 @@ function renderGroupMembers() {
   }
 
   let html = '<div class="members-table-wrapper"><table class="members-table">';
-  html += '<thead><tr><th>Псевдоним</th><th>Email</th><th>Роль</th>';
+  html += '<thead><tr><th>Игровое имя</th><th>Email</th><th>Роль</th>';
   if (isOrganizer) html += '<th>Действия</th>';
   html += '</tr></thead><tbody>';
 
@@ -8292,6 +8759,8 @@ async function openNewSurveyModal() {
   // Сброс V1
   document.getElementById('ns-v1-allow-self').checked = false;
   document.getElementById('ns-v1-use-tone').checked = false;
+  document.getElementById('ns-v1-show-summary-table').checked = false;
+  document.getElementById('ns-v1-show-summary-table-to-participants').checked = false;
   document.getElementById('ns-v1-questions-list').innerHTML = '';
   v1QuestionCounter = 0;
 
@@ -8428,8 +8897,12 @@ function addV1Question() {
         <span class="question-item-num">Вопрос ${num}</span>
         <button class="link-btn" data-remove-v1q="${id}">✕ удалить вопрос</button>
       </div>
-      <textarea placeholder="Текст вопроса (например: «С кем бы я хотел работать в одной команде?»)" data-field="text"></textarea>
-      <div class="question-item-options" style="margin-bottom:8px;">
+      <textarea placeholder="Текст вопроса (например: «С кем бы стал делать в первую очередь?»)" data-field="text"></textarea>
+      <div style="margin-top: 6px;">
+        <input type="text" data-field="short_label" maxlength="50" placeholder="Краткое название столбца в сводной таблице (необязательно)" style="width: 100%; font-size: 13px;">
+        <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">Только для оформления сводной таблицы — голосующие всегда видят полную формулировку выше. Если длинный вопрос плохо помещается в шапку столбца — укажите здесь короткий вариант (например, «1 выбор», «2 выбор», «негативный выбор»). Если оставить пустым, в таблице будет полная формулировка.</div>
+      </div>
+      <div class="question-item-options" style="margin-bottom:8px; margin-top:8px;">
         <label>Количество имён:
           <input type="number" data-field="count" min="1" max="${maxCount}" value="1" style="width:60px;">
         </label>
@@ -8474,7 +8947,7 @@ function addV1SubQuestion(questionItem) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:6px; align-items:center; margin-bottom:4px;';
   row.innerHTML = `
-    <input type="text" data-field="subq-text" placeholder="Например: «Какие качества позволяют так считать?»" style="flex:1; margin-bottom:0;">
+    <input type="text" data-field="subq-text" placeholder="Например: «Какие качества, какие действия указывают, чтобы так считать?»" style="flex:1; margin-bottom:0;">
     <button class="link-btn" data-remove-subq type="button">✕</button>
   `;
   row.querySelector('[data-remove-subq]').addEventListener('click', () => row.remove());
@@ -8564,7 +9037,7 @@ function addV4Question() {
         <span class="question-item-num" data-v4-num>Вопрос —</span>
         <button class="link-btn" data-remove-v4q="${id}">✕ удалить</button>
       </div>
-      <textarea placeholder="Текст вопроса (например: «Я доверил бы этому человеку важное поручение»)" data-field="text"></textarea>
+      <textarea placeholder="Текст вопроса (например: «Я нанял бы этого человека на работу» или «Я доверил бы этому человеку собственность»)" data-field="text"></textarea>
       <div style="margin-top: 6px;">
         <input type="text" data-field="short_label" maxlength="50" placeholder="Краткое название столбца в таблице результатов (необязательно)" style="width: 100%; font-size: 13px;">
         <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">Только для оформления таблицы результатов — голосующие всегда видят полную формулировку выше. Если длинный вопрос плохо помещается в шапку столбца — укажите здесь короткий вариант (например, «нанялся бы на работу»). Если оставить пустым, в таблице будет полная формулировка.</div>
@@ -8633,7 +9106,7 @@ function addV5Nomination() {
         <span class="question-item-num" data-v5n-num>Номинация —</span>
         <button class="link-btn" data-remove-v5n="${id}">✕ удалить</button>
       </div>
-      <input type="text" data-field="title" placeholder="Название номинации (например: «Самый ценный игрок»)" style="width:100%; margin-bottom:8px;">
+      <input type="text" data-field="title" placeholder="Название номинации (например: «Человеческий человек. Душа и сердце группы»)" style="width:100%; margin-bottom:8px;">
       <textarea data-field="description" placeholder="Описание / критерий (необязательно — поможет голосующим понять, по какому признаку выбирать)" style="min-height:50px;"></textarea>
       <div class="question-item-options" style="margin-top:8px;">
         <label>Минимум имён, которое нужно выбрать:
@@ -8676,7 +9149,7 @@ function addV5Question(nominationItem) {
   const html = `
     <div data-v5qrow style="display:flex; gap:6px; align-items:flex-start; margin-bottom:6px;">
       <div style="flex:1;">
-        <input type="text" data-field="question_text" placeholder="Текст вопроса (например: «За что именно?»)" style="width:100%; margin:0;">
+        <input type="text" data-field="question_text" placeholder="Текст вопроса (например: «За какие качества и действия?» или «Над чем еще стоит поработать?»)" style="width:100%; margin:0;">
         <label style="font-size:12px; color:var(--muted); display:flex; align-items:center; margin-top:4px;">
           <input type="checkbox" data-field="question_optional" style="width:auto; margin:0 4px 0 0;"> Необязательный
         </label>
@@ -8753,6 +9226,13 @@ function collectFormData() {
         sub_questions: subQuestions
       };
 
+      // Краткое название столбца — необязательное
+      const shortLabelInput = item.querySelector('[data-field="short_label"]');
+      if (shortLabelInput) {
+        const shortLabel = shortLabelInput.value.trim();
+        if (shortLabel) q.short_label = shortLabel;
+      }
+
       // Флаг видимости под-вопросов участникам (только если под-вопросы есть)
       if (subQuestions.length > 0) {
         q.show_sub_to_participants = item.querySelector('[data-field="show-sub"]').checked;
@@ -8778,6 +9258,15 @@ function collectFormData() {
 
     settings.allow_self = allowSelf;
     settings.use_tone = useTone;
+    // Настройки сводной таблицы
+    const showSummary = document.getElementById('ns-v1-show-summary-table')?.checked || false;
+    settings.show_summary_table = showSummary;
+    if (showSummary) {
+      settings.show_summary_table_to_participants =
+        document.getElementById('ns-v1-show-summary-table-to-participants')?.checked || false;
+    } else {
+      settings.show_summary_table_to_participants = false;
+    }
     settings.questions = questions;
   }
 
@@ -9061,17 +9550,17 @@ async function loadFreePseudonymsForRegister() {
   if (error) {
     console.error('[register] free_pseudonyms error:', error);
     psSel.innerHTML = '<option value="">— Ошибка загрузки —</option>';
-    showRegisterError('Не удалось загрузить список псевдонимов: ' + error.message);
+    showRegisterError('Не удалось загрузить список игровых имён: ' + error.message);
     return;
   }
   console.log('[register] free pseudonyms: ' + data.length);
   if (data.length === 0) {
     psSel.innerHTML = '<option value="">— В этой группе нет свободных имён —</option>';
     psSel.disabled = true;
-    showRegisterError('В выбранной группе нет свободных псевдонимов. Обратитесь к организатору этой группы.');
+    showRegisterError('В выбранной группе нет свободных игровых имён. Обратитесь к организатору этой группы.');
     return;
   }
-  psSel.innerHTML = '<option value="">— Выберите псевдоним —</option>';
+  psSel.innerHTML = '<option value="">— Выберите игровое имя —</option>';
   data.forEach(row => {
     const opt = document.createElement('option');
     opt.value = row.name;
@@ -9108,7 +9597,7 @@ async function doRegister() {
   if (!password || password.length < 6) { showRegisterError('Пароль должен быть не короче 6 символов'); return; }
   if (password !== password2) { showRegisterError('Пароли не совпадают'); return; }
   if (!groupId) { showRegisterError('Выберите группу'); return; }
-  if (!pseudonym) { showRegisterError('Выберите псевдоним'); return; }
+  if (!pseudonym) { showRegisterError('Выберите игровое имя'); return; }
 
   console.log('[register] attempt:', { email, groupId, pseudonym });
 
@@ -9134,7 +9623,7 @@ async function doRegister() {
       // в сообщение вида "Database error saving new user". Покажем оригинал если есть.
       let msg = error.message || 'Ошибка регистрации';
       if (msg.includes('pseudonym') && msg.includes('already taken')) {
-        msg = 'Этот псевдоним уже занят в выбранной группе. Обновите страницу и выберите другой.';
+        msg = 'Это игровое имя уже занято в выбранной группе. Обновите страницу и выберите другое.';
       } else if (msg.includes('already registered') || msg.includes('User already')) {
         msg = 'Пользователь с таким email уже зарегистрирован. Попробуйте войти.';
       }
