@@ -934,6 +934,14 @@
       <input type="date" id="ns-deadline" style="max-width:200px;">
       <p style="margin-top:4px; color:var(--muted); font-size:13px;">После этой даты в карточке опроса появится пометка «Просрочен», но голосование останется открытым. Можно не указывать — тогда без ограничения по времени.</p>
 
+      <label class="checkbox-option" style="margin-top:12px;">
+        <input type="checkbox" id="ns-require-manual-publish">
+        <div class="radio-option-content">
+          <div class="radio-option-label">Сначала просмотр результатов организатором, потом публикация</div>
+          <div class="radio-option-desc">После архивации опроса результаты будут видны только организатору — участники получат к ним доступ только когда организатор нажмёт «Опубликовать результаты» на экране опроса. Это даёт возможность сначала просмотреть собранные ответы и при необходимости отредактировать состав публикации. Если выключено — после архивации участники сразу видят свою часть результатов согласно настройкам видимости.</div>
+        </div>
+      </label>
+
       <h3>Тип опроса</h3>
       <p style="margin-top:0; color:var(--muted); font-size:14px;">Во всех вариантах голосуют только обычные участники. Организаторы и со-организаторы не голосуют и не оцениваются — если организатор хочет получить обратную связь и про себя, ему нужно заранее передать главную роль другому и стать обычным участником.</p>
       <div class="radio-group" id="ns-type-group">
@@ -2013,6 +2021,142 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ============================================================
+// ПУБЛИКАЦИЯ РЕЗУЛЬТАТОВ — ХЕЛПЕРЫ
+// ============================================================
+// Опрос имеет настройку settings.require_manual_publish (boolean).
+// Если она true — после архивации участники видят результаты только
+// после явной публикации (organizer нажимает «Опубликовать»).
+// Дата публикации хранится в столбце surveys.results_published_at.
+//
+// Если settings.require_manual_publish не выставлен или false —
+// поведение по умолчанию: участники видят результаты сразу при status='archived'
+// (старая логика).
+//
+// У уже существующих архивных опросов (созданных до этой миграции)
+// поле results_published_at автоматически проставляется в БД
+// (см. migration-publish-results.sql), поэтому для них тоже всё работает.
+
+// Требует ли опрос ручной публикации?
+function requiresManualPublish(survey) {
+  return !!(survey && survey.settings && survey.settings.require_manual_publish);
+}
+
+// Опубликованы ли результаты этого опроса для participant'ов?
+//   - Активный опрос — нет (результаты ещё в процессе сбора)
+//   - Архивный + флаг ручной публикации:
+//       * если results_published_at выставлен — да
+//       * иначе — нет, ждём кнопку «Опубликовать»
+//   - Архивный без флага — да (старая логика)
+function areResultsPublishedForParticipants(survey) {
+  if (!survey) return false;
+  if (survey.status !== 'archived') return false;
+  if (requiresManualPublish(survey)) {
+    return !!survey.results_published_at;
+  }
+  return true;
+}
+
+// Видны ли участнику чужие ответы (на этапе клиентской проверки).
+// Свой ответ участник всегда видит — это отдельная логика в renderOwnResponse*.
+function canParticipantSeeOthersResponses(survey) {
+  return areResultsPublishedForParticipants(survey);
+}
+
+// Форматирует дату публикации в человеческий вид: «30.04.2026, 14:35».
+function formatPublishDate(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch (e) {
+    return '';
+  }
+}
+
+// Опубликовать результаты текущего опроса (RPC).
+async function publishCurrentSurveyResults() {
+  if (!currentSurvey) return;
+  const ok = confirm(
+    'Опубликовать результаты опроса для участников?\n\n' +
+    'После публикации каждый участник увидит свою часть результатов согласно настройкам видимости. ' +
+    'При необходимости публикацию можно будет отозвать.'
+  );
+  if (!ok) return;
+  console.log('[publish] survey ' + currentSurvey.id);
+  const { data, error } = await sb.rpc('publish_survey_results', { p_survey_id: currentSurvey.id });
+  if (error) {
+    alert('Не удалось опубликовать результаты: ' + (error.message || 'неизвестная ошибка'));
+    return;
+  }
+  // Обновим объект текущего опроса локально и перерендерим экран
+  currentSurvey.results_published_at = data || new Date().toISOString();
+  renderSurveyScreen();
+}
+
+// Отозвать публикацию результатов текущего опроса (RPC).
+async function unpublishCurrentSurveyResults() {
+  if (!currentSurvey) return;
+  const ok = confirm(
+    'Отозвать публикацию?\n\n' +
+    'Участники перестанут видеть общие результаты опроса до повторной публикации. ' +
+    'Их собственные ответы по-прежнему будут им видны.'
+  );
+  if (!ok) return;
+  console.log('[unpublish] survey ' + currentSurvey.id);
+  const { error } = await sb.rpc('unpublish_survey_results', { p_survey_id: currentSurvey.id });
+  if (error) {
+    alert('Не удалось отозвать публикацию: ' + (error.message || 'неизвестная ошибка'));
+    return;
+  }
+  currentSurvey.results_published_at = null;
+  renderSurveyScreen();
+}
+
+// Возвращает HTML баннера про публикацию результатов для организатора.
+// Появляется в результатах архивного опроса, у которого включён require_manual_publish.
+function renderPublishBannerForOrganizer(survey) {
+  if (!requiresManualPublish(survey)) return '';
+  if (survey.status !== 'archived') return '';
+  if (survey.results_published_at) {
+    // Опубликовано — показываем дату и кнопку «Отозвать»
+    const dateStr = formatPublishDate(survey.results_published_at);
+    return (
+      '<div class="info no-print" style="margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">' +
+        '<div>' +
+          '<strong>Результаты опубликованы для участников</strong>' +
+          (dateStr ? ' · ' + escapeHtml(dateStr) : '') +
+        '</div>' +
+        '<button class="secondary small" id="btn-unpublish-results" type="button">Отозвать публикацию</button>' +
+      '</div>'
+    );
+  }
+  // Не опубликовано — баннер с кнопкой «Опубликовать»
+  return (
+    '<div class="warning-box no-print" style="margin-bottom:16px;">' +
+      '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">' +
+        '<div>' +
+          '<strong>Результаты ещё не опубликованы для участников.</strong><br>' +
+          '<span style="font-size:13px;">Сейчас результаты видны только вам. Просмотрите их и нажмите «Опубликовать», когда будете готовы — после этого каждый участник увидит свою часть результатов.</span>' +
+        '</div>' +
+        '<button id="btn-publish-results" type="button">Опубликовать результаты</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+// Навешивает обработчики на кнопки баннера. Вызывать после установки innerHTML.
+function bindPublishBannerHandlers() {
+  const btnPub = document.getElementById('btn-publish-results');
+  if (btnPub) btnPub.addEventListener('click', () => publishCurrentSurveyResults());
+  const btnUnpub = document.getElementById('btn-unpublish-results');
+  if (btnUnpub) btnUnpub.addEventListener('click', () => unpublishCurrentSurveyResults());
+}
+
 async function archiveSurvey(id) {
   if (!confirm('Архивировать опрос? После архивации участники не смогут голосовать, а результаты станут видны согласно настройкам видимости.')) return;
   console.log('[archive] ' + id);
@@ -2063,6 +2207,10 @@ function fillNewSurveyFormFromSource(src) {
 
   // Название — добавляем префикс «Копия: », чтобы видно было, что это новая запись
   document.getElementById('ns-title').value = 'Копия: ' + (src.title || '');
+
+  // Общие настройки (видны во всех типах)
+  const reqPubEl = document.getElementById('ns-require-manual-publish');
+  if (reqPubEl) reqPubEl.checked = !!settings.require_manual_publish;
 
   // Тип опроса
   const typeRadio = document.querySelector(`input[name="ns-type"][value="${src.type}"]`);
@@ -2789,7 +2937,11 @@ function renderSurveyScreen() {
   // Участник + Вариант 1
   if (s.type === 'variant_1') {
     if (s.status === 'archived') {
-      renderResultsV1ForParticipant();
+      if (areResultsPublishedForParticipants(s)) {
+        renderResultsV1ForParticipant();
+      } else {
+        renderAwaitingPublication(s);
+      }
       return;
     }
     // Активный
@@ -2804,7 +2956,11 @@ function renderSurveyScreen() {
   // Участник + Вариант 2
   if (s.type === 'variant_2') {
     if (s.status === 'archived') {
-      renderResultsV2ForParticipant();
+      if (areResultsPublishedForParticipants(s)) {
+        renderResultsV2ForParticipant();
+      } else {
+        renderAwaitingPublication(s);
+      }
       return;
     }
     // Активный
@@ -2819,7 +2975,11 @@ function renderSurveyScreen() {
   // Участник + Вариант 3
   if (s.type === 'variant_3') {
     if (s.status === 'archived') {
-      renderResultsV3ForParticipant();
+      if (areResultsPublishedForParticipants(s)) {
+        renderResultsV3ForParticipant();
+      } else {
+        renderAwaitingPublication(s);
+      }
       return;
     }
     // Активный
@@ -2834,8 +2994,11 @@ function renderSurveyScreen() {
   // Участник + Вариант 2 (V4, «Универсальная анкета» в коде)
   if (s.type === 'variant_4') {
     if (s.status === 'archived') {
-      // Результаты V4 — будут реализованы в шаге 14.4
-      renderParticipantViewV4();
+      if (areResultsPublishedForParticipants(s)) {
+        renderParticipantViewV4();
+      } else {
+        renderAwaitingPublication(s);
+      }
       return;
     }
     // Активный
@@ -2843,7 +3006,7 @@ function renderSurveyScreen() {
       renderAlreadyVotedV4();
       return;
     }
-    // Голосование V4 — будет реализовано в шаге 14.3
+    // Голосование V4
     renderVoteFormV4();
     return;
   }
@@ -2851,7 +3014,11 @@ function renderSurveyScreen() {
   // Участник + Вариант 3 (V5, «Номинации» в коде)
   if (s.type === 'variant_5') {
     if (s.status === 'archived') {
-      renderParticipantViewV5();
+      if (areResultsPublishedForParticipants(s)) {
+        renderParticipantViewV5();
+      } else {
+        renderAwaitingPublication(s);
+      }
       return;
     }
     // Активный
@@ -2864,6 +3031,38 @@ function renderSurveyScreen() {
   }
 
   body.innerHTML = '<div class="card"><div class="error">Неизвестный тип опроса.</div></div>';
+}
+
+// Экран ожидания публикации — для participant'а в архивном опросе с require_manual_publish=true,
+// у которого результаты ещё не опубликованы. Показываем свой ответ + сообщение об ожидании.
+function renderAwaitingPublication(survey) {
+  const body = document.getElementById('survey-body');
+  let html = '<div class="card">';
+  html += '<div class="info" style="margin-bottom:16px;">' +
+    '<strong>Опрос завершён.</strong><br>' +
+    'Результаты ещё не опубликованы организатором. Загляните позже — когда организатор опубликует результаты, эта страница покажет вашу часть данных.' +
+    '</div>';
+
+  // Свой ответ — показываем, если он есть, по типу опроса
+  if (currentOwnResponse) {
+    html += '<h3 style="margin-top:0;">Ваш ответ</h3>';
+    if (survey.type === 'variant_1') {
+      html += renderOwnResponseV1(currentOwnResponse.payload);
+    } else if (survey.type === 'variant_2') {
+      html += renderOwnResponseV2(currentOwnResponse.payload);
+    } else if (survey.type === 'variant_3') {
+      html += renderOwnResponseV3(currentOwnResponse.payload);
+    } else if (survey.type === 'variant_4') {
+      html += renderOwnResponseV4(currentOwnResponse.payload);
+    } else if (survey.type === 'variant_5') {
+      html += renderOwnResponseV5(currentOwnResponse.payload);
+    }
+  } else {
+    html += '<p style="color:var(--muted);">Вы не участвовали в этом опросе.</p>';
+  }
+
+  html += '</div>';
+  body.innerHTML = html;
 }
 
 // ============================================================
@@ -2994,6 +3193,9 @@ async function renderResultsV2ForOrganizer() {
 
   let html = '<div class="card">';
 
+  // Баннер публикации
+  html += renderPublishBannerForOrganizer(s);
+
   // Верхняя панель действий
   html += '<div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:12px; flex-wrap:wrap;">';
   if (s.status === 'active') {
@@ -3018,6 +3220,7 @@ async function renderResultsV2ForOrganizer() {
     if (s.status === 'active') {
       document.getElementById('btn-archive-here').addEventListener('click', () => archiveSurveyFromScreen());
     }
+    bindPublishBannerHandlers();
     return;
   }
 
@@ -3065,6 +3268,7 @@ async function renderResultsV2ForOrganizer() {
     const btn = document.getElementById('btn-archive-here');
     if (btn) btn.addEventListener('click', () => archiveSurveyFromScreen());
   }
+  bindPublishBannerHandlers();
 }
 
 // Рендер таблицы одного конкретного ответа (для детализации)
@@ -4026,6 +4230,9 @@ async function renderResultsV1ForOrganizer() {
 
   let html = '<div class="card">';
 
+  // Баннер про публикацию результатов (если опрос архивный с require_manual_publish)
+  html += renderPublishBannerForOrganizer(s);
+
   // Панель действий
   html += '<div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:12px; flex-wrap:wrap;">';
   if (s.status === 'active') {
@@ -4050,6 +4257,7 @@ async function renderResultsV1ForOrganizer() {
     if (s.status === 'active') {
       document.getElementById('btn-archive-here').addEventListener('click', () => archiveSurveyFromScreen());
     }
+    bindPublishBannerHandlers();
     return;
   }
 
@@ -4138,6 +4346,9 @@ async function renderResultsV1ForOrganizer() {
   if (s.settings?.show_summary_table === true) {
     bindV1SummaryExportToolbar();
   }
+
+  // Обработчики кнопок «Опубликовать / Отозвать» баннера публикации
+  bindPublishBannerHandlers();
 }
 
 // Рендер одного ответа V1 в детализации для организатора (без карты «Ваш ответ»)
@@ -5101,6 +5312,8 @@ async function renderResultsV3ForOrganizer() {
   // Заголовок опроса для печати (в обычном UI он есть в шапке выше, но печатаем
   // только print-root, поэтому дублируем здесь, скрывая на экране)
   html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  // Баннер публикации (no-print — не выводится при печати)
+  html += renderPublishBannerForOrganizer(s);
   html += renderV3ExportToolbar();
   html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${subjects.length} участников.</div>`;
@@ -5118,6 +5331,7 @@ async function renderResultsV3ForOrganizer() {
 
   // Биндим кнопки экспорта (организатор видит всё)
   bindV3ExportToolbar(() => false);
+  bindPublishBannerHandlers();
 }
 
 async function renderResultsV3ForParticipant() {
@@ -6501,6 +6715,8 @@ async function renderResultsV4ForOrganizer() {
 
   let html = '<div class="print-root">';
   html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  // Баннер публикации (no-print)
+  html += renderPublishBannerForOrganizer(s);
   html += renderV4ExportToolbar();
   html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants} ${pluralize(totalParticipants, 'участника', 'участников', 'участников')}.</div>`;
@@ -6525,6 +6741,7 @@ async function renderResultsV4ForOrganizer() {
   body.innerHTML = html;
   bindV4ExportToolbar(rowFilterFn, questionVisibleFn, showAggregate);
   bindV4TableModeSwitcher(() => renderResultsV4ForOrganizer());
+  bindPublishBannerHandlers();
 }
 
 async function renderResultsV4ForParticipant() {
@@ -7491,6 +7708,8 @@ async function renderResultsV5ForOrganizer() {
 
   let html = '<div class="print-root">';
   html += `<h2 class="print-only" style="margin:0 0 12px 0;">${escapeHtml(s.title)}</h2>`;
+  // Баннер публикации (no-print)
+  html += renderPublishBannerForOrganizer(s);
   html += renderV5ExportToolbar(true);
   html += '<div class="card">';
   html += `<div class="success-box"><strong>Опрос архивирован.</strong><br>Проголосовало ${responses.length} из ${totalParticipants} ${pluralize(totalParticipants, 'участника', 'участников', 'участников')}.</div>`;
@@ -7505,6 +7724,7 @@ async function renderResultsV5ForOrganizer() {
   html += '</div>';
   body.innerHTML = html;
   bindV5ExportToolbar(true);
+  bindPublishBannerHandlers();
 }
 
 // ---------- ОТЧЁТ УЧАСТНИКА ----------
@@ -9002,6 +9222,8 @@ async function openNewSurveyModal() {
   document.getElementById('ns-title').value = '';
   const deadlineEl = document.getElementById('ns-deadline');
   if (deadlineEl) deadlineEl.value = '';
+  const reqPubEl = document.getElementById('ns-require-manual-publish');
+  if (reqPubEl) reqPubEl.checked = false;
   document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
 
   // Сброс V1
@@ -9425,6 +9647,15 @@ function collectFormData() {
   const deadlineRaw = (document.getElementById('ns-deadline')?.value || '').trim();
   if (deadlineRaw) {
     settings.deadline = deadlineRaw;
+  }
+
+  // Двухстадийная архивация — общее для всех типов.
+  // Если включено: после архивации результаты видны только организатору,
+  // пока он не нажмёт «Опубликовать». Если выключено: после архивации
+  // участники сразу видят свою часть результатов (старое поведение).
+  const requireManualPublish = !!document.getElementById('ns-require-manual-publish')?.checked;
+  if (requireManualPublish) {
+    settings.require_manual_publish = true;
   }
 
   if (type === 'variant_1') {
