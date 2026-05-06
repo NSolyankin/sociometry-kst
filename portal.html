@@ -1616,6 +1616,12 @@ function createSbClient() {
   });
 }
 
+// Отметка визита: запоминаем, для каких групп уже отметили last_seen_at в этом
+// сеансе. Без этого touchLastSeen вызывается на каждую навигацию по дашборду
+// (выход с экрана опроса, выход из Настроек) — это лишние RPC-запросы.
+// Сбрасывается при hardLocalLogout, при logout и при смене группы.
+let touchedGroupsThisSession = new Set();
+
 function hardLocalLogout() {
   console.log('[hardLogout] start');
   // Ключи, которые НЕ трогаем при logout (они относятся к выбору прокси
@@ -1641,6 +1647,8 @@ function hardLocalLogout() {
   currentGroupId = null;
   currentGroupName = '';
   currentUserMemberships = [];
+  // Сбрасываем кэш отметок визита — при следующем логине отметим заново
+  touchedGroupsThisSession.clear();
   console.log('[hardLogout] done');
 }
 
@@ -2054,6 +2062,61 @@ async function withButtonLock(buttonId, busyText, work) {
       stillThere.disabled = originalDisabled;
       if (busyText) stillThere.textContent = originalText;
     }
+  }
+}
+
+// ============================================================
+// ФОРМАТИРОВАНИЕ ДАТЫ ПОСЛЕДНЕГО ВИЗИТА
+// ============================================================
+// Превращает ISO-строку memberships.last_seen_at в человеко-читаемое
+// «Был сегодня в 14:32», «Был вчера в 09:15», «Был 28 апреля в 10:00»,
+// «Был 12 марта 2025». Если значения нет — «Нет данных».
+function formatLastSeen(iso) {
+  if (!iso) return 'Нет данных';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Нет данных';
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 24*60*60*1000);
+  const timeStr = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (d >= startOfToday) {
+    return 'Был сегодня в ' + timeStr;
+  }
+  if (d >= startOfYesterday) {
+    return 'Был вчера в ' + timeStr;
+  }
+  // В этом году — без указания года, иначе с годом
+  if (d.getFullYear() === now.getFullYear()) {
+    const dateStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    return 'Был ' + dateStr + ' в ' + timeStr;
+  }
+  const dateStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  return 'Был ' + dateStr;
+}
+
+// Записать в memberships.last_seen_at текущее время для пары (юзер, группа).
+// Не блокирующая операция: если запрос упадёт — логируем, но не останавливаем
+// загрузку портала (визит важен только для статистики, не для функционала).
+// Дедупликация: за один сеанс работы (от логина/загрузки до закрытия вкладки
+// или logout) для каждой группы вызов делается один раз, чтобы не спамить
+// сетью при навигации туда-сюда. Принудительно — через force=true.
+async function touchLastSeen(groupId, force) {
+  if (!groupId || !currentUser) return;
+  if (!force && touchedGroupsThisSession.has(groupId)) return;
+  touchedGroupsThisSession.add(groupId);
+  try {
+    const { error } = await sb.rpc('touch_last_seen', { p_group_id: groupId });
+    if (error) {
+      // Не критично — RPC может отсутствовать, если миграция ещё не применена
+      console.warn('[last-seen] touch failed:', error.message);
+      // При ошибке — снимаем флаг, чтобы при следующем заходе была новая попытка
+      touchedGroupsThisSession.delete(groupId);
+    } else {
+      console.log('[last-seen] touched for group ' + groupId);
+    }
+  } catch (e) {
+    console.warn('[last-seen] touch exception:', e);
+    touchedGroupsThisSession.delete(groupId);
   }
 }
 
@@ -2838,6 +2901,10 @@ function renderDashboard() {
 
   showScreen('dashboard');
   loadSurveys();
+
+  // Отметить визит в текущей группе (last_seen_at). Не дожидаемся —
+  // эта операция фоновая и не должна задерживать UI.
+  touchLastSeen(currentGroupId);
 }
 
 // ============================================================
@@ -8665,7 +8732,7 @@ async function loadGroupMembers() {
   // 1. Все ACTIVE memberships текущей группы (исключённые здесь не показываются)
   const { data: members, error: mErr } = await sb
     .from('memberships')
-    .select('user_id, pseudonym, role')
+    .select('user_id, pseudonym, role, last_seen_at')
     .eq('group_id', currentGroupId)
     .eq('active', true);
   if (mErr) {
@@ -8687,12 +8754,13 @@ async function loadGroupMembers() {
       (profs || []).forEach(p => { emailById[p.id] = p.email; });
     }
   }
-  // 3. Сборка в формате старого groupMembers (id/pseudonym/role/email)
+  // 3. Сборка в формате старого groupMembers (id/pseudonym/role/email/last_seen_at)
   const merged = members.map(m => ({
     id: m.user_id,
     pseudonym: m.pseudonym,
     role: m.role,
-    email: emailById[m.user_id] || null
+    email: emailById[m.user_id] || null,
+    last_seen_at: m.last_seen_at || null
   }));
   // Сортировка: главный → со-организаторы → участники, внутри — по алфавиту
   const roleOrder = { main_organizer: 0, co_organizer: 1, participant: 2 };
@@ -8732,7 +8800,7 @@ async function loadPseudonymsAndExcluded() {
   //    и для отдельного списка исключённых
   const { data: allMembs, error: mErr } = await sb
     .from('memberships')
-    .select('user_id, pseudonym, active, excluded_at')
+    .select('user_id, pseudonym, active, excluded_at, last_seen_at')
     .eq('group_id', currentGroupId);
   if (mErr) {
     console.error('[group-ps] memberships error:', mErr);
@@ -8771,7 +8839,8 @@ async function loadPseudonymsAndExcluded() {
     id: m.user_id,
     pseudonym: m.pseudonym,
     email: emailById[m.user_id] || null,
-    excluded_at: m.excluded_at || null
+    excluded_at: m.excluded_at || null,
+    last_seen_at: m.last_seen_at || null
   })).sort((a, b) => {
     // Сначала с известной датой по убыванию (свежие вверху), потом без даты
     if (a.excluded_at && b.excluded_at) return b.excluded_at.localeCompare(a.excluded_at);
@@ -8856,7 +8925,7 @@ function renderExcludedBlock() {
   card.classList.remove('hidden');
 
   let html = '<div class="members-table-wrapper"><table class="members-table">';
-  html += '<thead><tr><th>Игровое имя</th><th>Email</th><th>Исключён</th>';
+  html += '<thead><tr><th>Игровое имя</th><th>Email</th><th>Последний визит</th><th>Исключён</th>';
   if (isOrganizer) html += '<th>Действия</th>';
   html += '</tr></thead><tbody>';
 
@@ -8873,6 +8942,7 @@ function renderExcludedBlock() {
     html += '<tr>';
     html += `<td><strong>${escapeHtml(m.pseudonym || '—')}</strong></td>`;
     html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(m.email || '—')}</td>`;
+    html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(formatLastSeen(m.last_seen_at))}</td>`;
     html += `<td style="font-size:13px; color:var(--muted);">${excludedStr}</td>`;
     if (isOrganizer) {
       html += `<td><button class="secondary small" data-action="restore" data-id="${m.id}" data-name="${escapeHtml(m.pseudonym)}">Восстановить</button></td>`;
@@ -9119,6 +9189,7 @@ function renderGroupMembers() {
 
   let html = '<div class="members-table-wrapper"><table class="members-table">';
   html += '<thead><tr><th>Игровое имя</th><th>Email</th><th>Роль</th>';
+  if (isOrganizer) html += '<th>Последний визит</th>';
   if (isOrganizer) html += '<th>Действия</th>';
   html += '</tr></thead><tbody>';
 
@@ -9134,6 +9205,9 @@ function renderGroupMembers() {
     html += `<td><strong>${escapeHtml(m.pseudonym || '—')}</strong>${isSelf ? ' <span style="color:var(--muted); font-size:12px;">(вы)</span>' : ''}</td>`;
     html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(m.email || '—')}</td>`;
     html += `<td><span class="badge ${roleBadgeClass}">${roleLabel}</span></td>`;
+    if (isOrganizer) {
+      html += `<td style="font-size:13px; color:var(--muted);">${escapeHtml(formatLastSeen(m.last_seen_at))}</td>`;
+    }
 
     if (isOrganizer) {
       html += '<td><div class="member-actions">';
