@@ -4367,6 +4367,811 @@ function bindV1SummaryExportToolbar() {
   if (printBtn) printBtn.addEventListener('click', () => printV1Summary());
 }
 
+// ============================================================
+// V1: ЭКСПОРТ ВСЕГО ОПРОСА (копирование, общий DOCX, ZIP по участникам)
+// ============================================================
+// В отличие от renderV1SummaryExportToolbar, который относится только к
+// «Сводной таблице» (одна таблица «Имя × Вопрос»), эта панель относится ко
+// ВСЕМУ опросу: явка, рейтинги по каждому вопросу, сводный индекс
+// тональности (если use_tone), детализация по респондентам.
+//
+// 3 кнопки:
+//   📋 Копировать       — HTML+plain в буфер обмена
+//   📄 Сводный DOCX     — единый Word-файл со всеми вопросами и таблицами
+//                         (с диалогом: включать ли детализацию по респондентам)
+//   📦 ZIP по участникам — архив с DOCX-отчётом по каждому, кого выбрали
+//                         или кто голосовал.
+
+function renderV1FullExportToolbar(isOrganizer) {
+  // Только для организаторов — у participant'ов экран другой (renderResultsV1ForParticipant).
+  // Если isOrganizer=false — возвращаем пустоту, эта тулбар вообще не для них.
+  if (!isOrganizer) return '';
+  return `
+    <div class="export-toolbar no-print" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+      <button class="secondary small" id="btn-v1-full-copy" type="button">📋 Копировать в буфер</button>
+      <button class="secondary small" id="btn-v1-full-docx" type="button" title="Один Word-файл со всеми результатами опроса">📄 Сводный DOCX</button>
+      <button class="secondary small" id="btn-v1-full-zip" type="button" title="ZIP-архив с DOCX по каждому участнику отдельно">📦 DOCX по каждому (zip)</button>
+    </div>
+  `;
+}
+
+function bindV1FullExportToolbar() {
+  const copyBtn = document.getElementById('btn-v1-full-copy');
+  if (copyBtn) copyBtn.addEventListener('click', copyV1FullResultsToClipboard);
+  const docxBtn = document.getElementById('btn-v1-full-docx');
+  if (docxBtn) docxBtn.addEventListener('click', downloadV1FullDocxReport);
+  const zipBtn = document.getElementById('btn-v1-full-zip');
+  if (zipBtn) zipBtn.addEventListener('click', downloadV1ZipReport);
+}
+
+// ---------- АГРЕГАЦИЯ V1 ДЛЯ ЭКСПОРТА ----------
+
+// Перевернуть результат aggregateResponsesV1 в формат «по участнику»: для
+// каждого имени — список вопросов, в которых его выбрали, и кто его выбрал.
+// Используется ZIP-экспортом.
+//
+// Возвращает: Map<name, {
+//   asSubject: [{question, voters: [{respondent, sub}]}],   // его выбирали
+//   asRespondent: [{question, picks: [{name, sub}]}]         // он выбирал
+// }>
+function buildV1PerNameData(responses, questions) {
+  const data = new Map();
+  const ensure = (name) => {
+    if (!data.has(name)) data.set(name, { asSubject: [], asRespondent: [] });
+    return data.get(name);
+  };
+
+  // 1. asSubject — сначала по агрегату
+  questions.forEach(q => {
+    const qAgg = aggregateResponsesV1(responses, [q])[q.id];
+    Object.entries(qAgg).forEach(([name, info]) => {
+      const rec = ensure(name);
+      rec.asSubject.push({
+        question: q,
+        count: info.count,
+        descriptions: info.descriptions || []
+      });
+    });
+  });
+
+  // 2. asRespondent — пройдём по responses
+  responses.forEach(resp => {
+    const respondent = resp.respondent_name;
+    if (!respondent) return; // аноним — пропускаем
+    const rec = ensure(respondent);
+    const answers = (resp.payload || {}).answers || {};
+    questions.forEach(q => {
+      const slots = answers[q.id] || [];
+      const picks = slots
+        .filter(e => e && e.name)
+        .map(e => ({ name: e.name, sub: e.sub || null }));
+      if (picks.length > 0) {
+        rec.asRespondent.push({ question: q, picks });
+      }
+    });
+  });
+
+  return data;
+}
+
+// ---------- V1 КОПИРОВАНИЕ В БУФЕР ----------
+
+function buildV1FullResultsText() {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const useTone = s.settings?.use_tone === true;
+  const responses = cachedAllResponses || [];
+  const respondents = responses.map(r => r.respondent_name).filter(Boolean);
+  const couldVote = (allGroupParticipants || []).slice();
+  const respondentsSet = new Set(respondents);
+  const notVoted = couldVote.filter(n => !respondentsSet.has(n));
+  const agg = aggregateResponsesV1(responses, questions);
+
+  const lines = [];
+  lines.push(s.title);
+  lines.push('Вариант 1 — Социометрия');
+  lines.push('Проголосовало: ' + respondents.length + ' из ' + couldVote.length);
+  lines.push('');
+
+  if (respondents.length > 0) {
+    lines.push('Отметились: ' + respondents.join(', '));
+  }
+  if (notVoted.length > 0) {
+    lines.push('Ещё не проголосовали: ' + notVoted.join(', '));
+  }
+  lines.push('');
+
+  if (responses.length === 0) {
+    lines.push('(ответов пока нет)');
+    return lines.join('\n');
+  }
+
+  // Результаты по вопросам
+  questions.forEach(q => {
+    const toneSuffix = useTone && q.tone === 'positive' ? ' (сближение)'
+      : useTone && q.tone === 'negative' ? ' (отторжение)' : '';
+    lines.push('=== ' + q.text + toneSuffix + ' ===');
+    lines.push('Нужно было выбрать ' + q.count + ' ' + pluralNames(q.count) + '.');
+    const entries = Object.entries(agg[q.id])
+      .map(([name, d]) => ({ name, count: d.count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+    if (entries.length === 0) {
+      lines.push('(никого не выбрали)');
+    } else {
+      let prevCount = null;
+      let rank = 0;
+      entries.forEach((e, idx) => {
+        if (e.count !== prevCount) { rank = idx + 1; prevCount = e.count; }
+        lines.push(rank + '. ' + e.name + ' — ' + e.count);
+      });
+    }
+
+    // Описания (под-вопросы) — если есть
+    const subs = q.sub_questions || [];
+    if (subs.length > 0) {
+      const sortedAgg = Object.entries(agg[q.id]).sort((a, b) => b[1].count - a[1].count);
+      sortedAgg.forEach(([name, data]) => {
+        if (!data.descriptions || data.descriptions.length === 0) return;
+        lines.push('');
+        lines.push('— Описания про «' + name + '»:');
+        data.descriptions.forEach(desc => {
+          lines.push('  ' + desc.respondent + ':');
+          subs.forEach(sq => {
+            const val = desc.sub?.[sq.id];
+            if (val) {
+              lines.push('    ' + sq.text + ' ' + val);
+            }
+          });
+        });
+      });
+    }
+    lines.push('');
+  });
+
+  // Сводный индекс тональности
+  if (useTone) {
+    const idx = computeToneIndex(responses, questions);
+    const rows = Object.entries(idx)
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.total - a.total);
+    if (rows.length > 0) {
+      lines.push('=== Сводный индекс тональности ===');
+      lines.push('Сближающие минус отталкивающие, по убыванию.');
+      rows.forEach(r => {
+        const sign = r.total > 0 ? '+' : '';
+        lines.push(r.name + ': сближение ' + r.positive + ', отторжение ' + r.negative + ', итого ' + sign + r.total);
+      });
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildV1FullResultsHtml() {
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const useTone = s.settings?.use_tone === true;
+  const responses = cachedAllResponses || [];
+  const respondents = responses.map(r => r.respondent_name).filter(Boolean);
+  const couldVote = (allGroupParticipants || []).slice();
+  const respondentsSet = new Set(respondents);
+  const notVoted = couldVote.filter(n => !respondentsSet.has(n));
+  const agg = aggregateResponsesV1(responses, questions);
+
+  const tdStyle = 'border:1px solid #888; padding:6px 10px; vertical-align:top;';
+  const thStyle = tdStyle + ' background:#f0f0f0; font-weight:bold; text-align:left;';
+
+  let html = '';
+  html += `<h2 style="margin:0 0 4px 0;">${escapeHtml(s.title)}</h2>`;
+  html += `<p style="margin:0 0 12px 0; color:#555;">Вариант 1 — Социометрия. Проголосовало: ${respondents.length} из ${couldVote.length}</p>`;
+
+  if (respondents.length > 0) {
+    html += `<p style="margin:0 0 4px 0;"><strong>Отметились:</strong> ${respondents.map(escapeHtml).join(', ')}</p>`;
+  }
+  if (notVoted.length > 0) {
+    html += `<p style="margin:0 0 12px 0;"><strong>Ещё не проголосовали:</strong> ${notVoted.map(escapeHtml).join(', ')}</p>`;
+  }
+
+  if (responses.length === 0) {
+    html += '<p><em>(ответов пока нет)</em></p>';
+    return html;
+  }
+
+  questions.forEach(q => {
+    const toneSuffix = useTone && q.tone === 'positive' ? ' (сближение)'
+      : useTone && q.tone === 'negative' ? ' (отторжение)' : '';
+    html += `<h3 style="margin:18px 0 4px 0;">${escapeHtml(q.text)}${escapeHtml(toneSuffix)}</h3>`;
+    html += `<p style="margin:0 0 6px 0; color:#555;">Нужно было выбрать ${q.count} ${pluralNames(q.count)}.</p>`;
+
+    const entries = Object.entries(agg[q.id])
+      .map(([name, d]) => ({ name, count: d.count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+
+    if (entries.length === 0) {
+      html += '<p style="color:#888; font-style:italic;">(никого не выбрали)</p>';
+    } else {
+      html += '<table style="border-collapse:collapse; border:1px solid #888; margin:0 0 8px 0;"><thead><tr>';
+      html += `<th style="${thStyle}">№</th>`;
+      html += `<th style="${thStyle}">Имя</th>`;
+      html += `<th style="${thStyle}">Голосов</th>`;
+      html += '</tr></thead><tbody>';
+      let prevCount = null;
+      let rank = 0;
+      entries.forEach((e, idx) => {
+        if (e.count !== prevCount) { rank = idx + 1; prevCount = e.count; }
+        html += '<tr>';
+        html += `<td style="${tdStyle}">${rank}</td>`;
+        html += `<td style="${tdStyle}">${escapeHtml(e.name)}</td>`;
+        html += `<td style="${tdStyle}">${e.count}</td>`;
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+
+    // Описания (под-вопросы)
+    const subs = q.sub_questions || [];
+    if (subs.length > 0) {
+      const sortedAgg = Object.entries(agg[q.id]).sort((a, b) => b[1].count - a[1].count);
+      sortedAgg.forEach(([name, data]) => {
+        if (!data.descriptions || data.descriptions.length === 0) return;
+        html += `<h4 style="margin:10px 0 4px 0;">Описания про «${escapeHtml(name)}»</h4>`;
+        data.descriptions.forEach(desc => {
+          html += `<p style="margin:6px 0 2px 0;"><strong>${escapeHtml(desc.respondent)}</strong></p>`;
+          html += '<ul style="margin:0 0 6px 20px; padding:0;">';
+          subs.forEach(sq => {
+            const val = desc.sub?.[sq.id];
+            if (val) {
+              html += `<li><em>${escapeHtml(sq.text)}</em> ${escapeHtml(val)}</li>`;
+            }
+          });
+          html += '</ul>';
+        });
+      });
+    }
+  });
+
+  // Сводный индекс тональности
+  if (useTone) {
+    const idx = computeToneIndex(responses, questions);
+    const rows = Object.entries(idx)
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.total - a.total);
+    if (rows.length > 0) {
+      html += '<h3 style="margin:18px 0 6px 0;">Сводный индекс тональности</h3>';
+      html += '<p style="margin:0 0 6px 0; color:#555;">Сближающие минус отталкивающие, по убыванию.</p>';
+      html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
+      html += `<th style="${thStyle}">Имя</th>`;
+      html += `<th style="${thStyle}">Сближение</th>`;
+      html += `<th style="${thStyle}">Отторжение</th>`;
+      html += `<th style="${thStyle}">Итого</th>`;
+      html += '</tr></thead><tbody>';
+      rows.forEach(r => {
+        const sign = r.total > 0 ? '+' : '';
+        html += '<tr>';
+        html += `<td style="${tdStyle}">${escapeHtml(r.name)}</td>`;
+        html += `<td style="${tdStyle}">${r.positive}</td>`;
+        html += `<td style="${tdStyle}">${r.negative}</td>`;
+        html += `<td style="${tdStyle}"><strong>${sign}${r.total}</strong></td>`;
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+  }
+
+  return html;
+}
+
+async function copyV1FullResultsToClipboard() {
+  const text = buildV1FullResultsText();
+  const html = buildV1FullResultsHtml();
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      alert('Результаты скопированы в буфер обмена.');
+      return;
+    }
+  } catch (err) {
+    console.warn('[v1-full-copy] clipboard.write failed, falling back to writeText:', err);
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('Результаты скопированы в буфер обмена (только текстом).');
+  } catch (e) {
+    console.warn('[v1-full-copy] failed:', e);
+    alert('Не удалось скопировать. Попробуйте выделить и скопировать вручную.');
+  }
+}
+
+// ---------- V1 СВОДНЫЙ DOCX ПО ВСЕМУ ОПРОСУ ----------
+
+// Спрашивает у организатора, включать ли детализацию по респондентам,
+// и собирает Word-файл. Детализация — это раскрывающиеся блоки на экране
+// (ответы каждого участника по всем вопросам). В архивный отчёт обычно не
+// нужны, для анализа — нужны.
+async function downloadV1FullDocxReport() {
+  if (!isDocxLibAvailable()) {
+    alert('Библиотека для DOCX не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  const includeDetails = confirm(
+    'Включить в отчёт детализацию по респондентам (полные ответы каждого участника)?\n\n' +
+    'OK — включить (получится подробный документ для анализа)\n' +
+    'Отмена — без детализации (компактный документ для архива)'
+  );
+  try {
+    const doc = await buildV1FullDocxDocument(includeDetails);
+    const blob = await window.docx.Packer.toBlob(doc);
+    const fname = 'Результаты_' + safeFileName(currentSurvey.title || 'опрос') + '.docx';
+    downloadBlob(blob, fname);
+  } catch (e) {
+    console.error('[v1-full-docx] failed:', e);
+    alert('Не удалось сформировать DOCX: ' + (e.message || e));
+  }
+}
+
+async function buildV1FullDocxDocument(includeDetails) {
+  const D = window.docx;
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const useTone = s.settings?.use_tone === true;
+  const responses = cachedAllResponses || [];
+  const respondents = responses.map(r => r.respondent_name).filter(Boolean);
+  const couldVote = (allGroupParticipants || []).slice();
+  const respondentsSet = new Set(respondents);
+  const notVoted = couldVote.filter(n => !respondentsSet.has(n));
+  const agg = aggregateResponsesV1(responses, questions);
+
+  const children = [];
+
+  // Заголовок
+  children.push(new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { after: 120 },
+    children: [new D.TextRun({ text: s.title || '', bold: true, size: 32 })]
+  }));
+  children.push(new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { after: 240 },
+    children: [new D.TextRun({
+      text: 'Вариант 1 — Социометрия. Проголосовало: ' + respondents.length + ' из ' + couldVote.length,
+      size: 20, color: '6e6e73'
+    })]
+  }));
+
+  // Явка
+  children.push(new D.Paragraph({
+    spacing: { before: 120, after: 60 },
+    children: [new D.TextRun({ text: 'Явка', bold: true, size: 26 })]
+  }));
+  if (respondents.length > 0) {
+    children.push(new D.Paragraph({
+      children: [
+        new D.TextRun({ text: 'Отметились: ', bold: true }),
+        new D.TextRun({ text: respondents.join(', ') })
+      ]
+    }));
+  }
+  if (notVoted.length > 0) {
+    children.push(new D.Paragraph({
+      children: [
+        new D.TextRun({ text: 'Ещё не проголосовали: ', bold: true }),
+        new D.TextRun({ text: notVoted.join(', ') })
+      ]
+    }));
+  }
+
+  if (responses.length === 0) {
+    children.push(new D.Paragraph({
+      spacing: { before: 240 },
+      children: [new D.TextRun({ text: '(ответов пока нет)', italics: true })]
+    }));
+    return new D.Document({ sections: [{ children }] });
+  }
+
+  // Результаты по каждому вопросу
+  questions.forEach(q => {
+    const toneSuffix = useTone && q.tone === 'positive' ? ' (сближение)'
+      : useTone && q.tone === 'negative' ? ' (отторжение)' : '';
+    children.push(new D.Paragraph({
+      spacing: { before: 240, after: 60 },
+      children: [new D.TextRun({ text: q.text + toneSuffix, bold: true, size: 26 })]
+    }));
+    children.push(new D.Paragraph({
+      spacing: { after: 80 },
+      children: [new D.TextRun({
+        text: 'Нужно было выбрать ' + q.count + ' ' + pluralNames(q.count) + '.',
+        size: 18, color: '6e6e73'
+      })]
+    }));
+
+    const entries = Object.entries(agg[q.id])
+      .map(([name, d]) => ({ name, count: d.count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+
+    if (entries.length === 0) {
+      children.push(new D.Paragraph({
+        children: [new D.TextRun({ text: '(никого не выбрали)', italics: true })]
+      }));
+    } else {
+      const headRow = new D.TableRow({
+        tableHeader: true,
+        children: [
+          docxHeaderCell(D, '№'),
+          docxHeaderCell(D, 'Имя'),
+          docxHeaderCell(D, 'Голосов')
+        ]
+      });
+      const rows = [headRow];
+      let prevCount = null;
+      let rank = 0;
+      entries.forEach((e, idx) => {
+        if (e.count !== prevCount) { rank = idx + 1; prevCount = e.count; }
+        rows.push(new D.TableRow({
+          children: [
+            docxCell(D, String(rank)),
+            docxCell(D, e.name),
+            docxCell(D, String(e.count))
+          ]
+        }));
+      });
+      children.push(new D.Table({
+        rows,
+        width: { size: 100, type: D.WidthType.PERCENTAGE }
+      }));
+    }
+
+    // Описания (под-вопросы) — если есть и подсветка организатором
+    const subs = q.sub_questions || [];
+    if (subs.length > 0) {
+      const sortedAgg = Object.entries(agg[q.id]).sort((a, b) => b[1].count - a[1].count);
+      sortedAgg.forEach(([name, data]) => {
+        if (!data.descriptions || data.descriptions.length === 0) return;
+        children.push(new D.Paragraph({
+          spacing: { before: 160, after: 40 },
+          children: [new D.TextRun({ text: 'Описания про «' + name + '»', bold: true, size: 22 })]
+        }));
+        data.descriptions.forEach(desc => {
+          children.push(new D.Paragraph({
+            spacing: { before: 60, after: 0 },
+            children: [new D.TextRun({ text: desc.respondent, bold: true })]
+          }));
+          subs.forEach(sq => {
+            const val = desc.sub?.[sq.id];
+            if (val) {
+              children.push(new D.Paragraph({
+                spacing: { after: 0 },
+                indent: { left: 360 },
+                children: [
+                  new D.TextRun({ text: sq.text + ' ', italics: true, color: '6e6e73' }),
+                  new D.TextRun({ text: val })
+                ]
+              }));
+            }
+          });
+        });
+      });
+    }
+  });
+
+  // Сводный индекс тональности
+  if (useTone) {
+    const idx = computeToneIndex(responses, questions);
+    const rows = Object.entries(idx)
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.total - a.total);
+    if (rows.length > 0) {
+      children.push(new D.Paragraph({
+        spacing: { before: 320, after: 60 },
+        children: [new D.TextRun({ text: 'Сводный индекс тональности', bold: true, size: 26 })]
+      }));
+      children.push(new D.Paragraph({
+        spacing: { after: 80 },
+        children: [new D.TextRun({
+          text: 'Сближающие минус отталкивающие, по убыванию.',
+          size: 18, color: '6e6e73'
+        })]
+      }));
+      const tRows = [new D.TableRow({
+        tableHeader: true,
+        children: [
+          docxHeaderCell(D, 'Имя'),
+          docxHeaderCell(D, 'Сближение'),
+          docxHeaderCell(D, 'Отторжение'),
+          docxHeaderCell(D, 'Итого')
+        ]
+      })];
+      rows.forEach(r => {
+        const sign = r.total > 0 ? '+' : '';
+        tRows.push(new D.TableRow({
+          children: [
+            docxCell(D, r.name),
+            docxCell(D, String(r.positive)),
+            docxCell(D, String(r.negative)),
+            docxCell(D, sign + r.total)
+          ]
+        }));
+      });
+      children.push(new D.Table({
+        rows: tRows,
+        width: { size: 100, type: D.WidthType.PERCENTAGE }
+      }));
+    }
+  }
+
+  // Детализация по респондентам — опционально
+  if (includeDetails && responses.length > 0) {
+    children.push(new D.Paragraph({
+      spacing: { before: 360, after: 60 },
+      children: [new D.TextRun({ text: 'Детализация по респондентам', bold: true, size: 26 })]
+    }));
+    responses.forEach(resp => {
+      const name = resp.respondent_name || '(аноним)';
+      const date = new Date(resp.created_at).toLocaleString('ru-RU');
+      children.push(new D.Paragraph({
+        spacing: { before: 160, after: 40 },
+        children: [
+          new D.TextRun({ text: name, bold: true, size: 22 }),
+          new D.TextRun({ text: '  ' + date, color: '6e6e73', size: 18 })
+        ]
+      }));
+      const answers = (resp.payload || {}).answers || {};
+      questions.forEach(q => {
+        children.push(new D.Paragraph({
+          spacing: { before: 60, after: 0 },
+          children: [new D.TextRun({ text: q.text, italics: true, color: '6e6e73' })]
+        }));
+        const slots = (answers[q.id] || []).filter(e => e && e.name);
+        if (slots.length === 0) {
+          children.push(new D.Paragraph({
+            indent: { left: 360 },
+            children: [new D.TextRun({ text: '(нет ответа)', italics: true, color: '6e6e73' })]
+          }));
+        } else {
+          slots.forEach((entry, idx) => {
+            const prefix = q.count > 1 ? (idx + 1) + '. ' : '';
+            children.push(new D.Paragraph({
+              indent: { left: 360 },
+              children: [new D.TextRun({ text: prefix + entry.name, bold: true })]
+            }));
+            const subs = q.sub_questions || [];
+            if (subs.length > 0 && entry.sub) {
+              subs.forEach(sq => {
+                const val = entry.sub[sq.id];
+                if (val) {
+                  children.push(new D.Paragraph({
+                    indent: { left: 720 },
+                    children: [
+                      new D.TextRun({ text: sq.text + ' ', italics: true, color: '6e6e73' }),
+                      new D.TextRun({ text: val })
+                    ]
+                  }));
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+  }
+
+  return new D.Document({ sections: [{ children }] });
+}
+
+// Хелпер: ячейка-шапка для DOCX-таблицы
+function docxHeaderCell(D, text) {
+  return new D.TableCell({
+    shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: 'F0F0F0' },
+    children: [new D.Paragraph({
+      children: [new D.TextRun({ text, bold: true })]
+    })]
+  });
+}
+
+// Хелпер: обычная ячейка для DOCX-таблицы
+function docxCell(D, text) {
+  return new D.TableCell({
+    children: [new D.Paragraph({
+      children: [new D.TextRun({ text: text || '' })]
+    })]
+  });
+}
+
+// ---------- V1 ZIP-АРХИВ С ОТЧЁТОМ НА КАЖДОГО ----------
+
+async function downloadV1ZipReport() {
+  if (!isDocxLibAvailable()) {
+    alert('Библиотека для DOCX не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  if (typeof window.JSZip !== 'function') {
+    alert('Библиотека для ZIP не загрузилась. Проверьте интернет-соединение и обновите страницу.');
+    return;
+  }
+  const s = currentSurvey;
+  const questions = s.settings?.questions || [];
+  const responses = cachedAllResponses || [];
+
+  // Кого включаем: всех, кого упомянули хоть в одном вопросе ИЛИ кто голосовал
+  const perName = buildV1PerNameData(responses, questions);
+  // Отфильтровываем тех, у кого нет ни asSubject, ни asRespondent (в реальности не должно быть)
+  const names = Array.from(perName.keys())
+    .filter(n => {
+      const r = perName.get(n);
+      return (r.asSubject && r.asSubject.length > 0) || (r.asRespondent && r.asRespondent.length > 0);
+    })
+    .sort((a, b) => a.localeCompare(b, 'ru'));
+
+  if (names.length === 0) {
+    alert('В этом опросе никого не выбрали и никто не голосовал — нет файлов для архива.');
+    return;
+  }
+
+  try {
+    const zip = new window.JSZip();
+    for (const name of names) {
+      const rec = perName.get(name);
+      const doc = await buildV1PersonalDocxDocument(name, rec, questions, s);
+      const blob = await window.docx.Packer.toBlob(doc);
+      const fname = 'Отчёт_' + safeFileName(name) + '.docx';
+      zip.file(fname, blob);
+    }
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const zipName = 'Отчёты_по_участникам_' + safeFileName(s.title || 'опрос') + '.zip';
+    downloadBlob(zipBlob, zipName);
+  } catch (e) {
+    console.error('[v1-zip] failed:', e);
+    alert('Не удалось сформировать ZIP: ' + (e.message || e));
+  }
+}
+
+// DOCX по одному человеку: что про него сказали + что он сам выбрал
+async function buildV1PersonalDocxDocument(personName, rec, questions, survey) {
+  const D = window.docx;
+  const useTone = survey.settings?.use_tone === true;
+  const monthYear = formatMonthYear(new Date());
+
+  const children = [];
+
+  // Шапка: дата слева, имя справа
+  children.push(new D.Table({
+    rows: [new D.TableRow({
+      children: [
+        new D.TableCell({
+          borders: noBorders(D),
+          children: [new D.Paragraph({ children: [new D.TextRun({ text: monthYear })] })]
+        }),
+        new D.TableCell({
+          borders: noBorders(D),
+          children: [new D.Paragraph({
+            alignment: D.AlignmentType.RIGHT,
+            children: [new D.TextRun({ text: personName, bold: true })]
+          })]
+        })
+      ]
+    })],
+    width: { size: 100, type: D.WidthType.PERCENTAGE }
+  }));
+
+  // Заголовок отчёта
+  children.push(new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { before: 240, after: 240 },
+    children: [new D.TextRun({ text: survey.title || '', bold: true, size: 28 })]
+  }));
+
+  // Раздел 1: Что про вас сказали
+  children.push(new D.Paragraph({
+    spacing: { before: 120, after: 80 },
+    children: [new D.TextRun({ text: 'Что про вас сказали', bold: true, size: 26 })]
+  }));
+
+  const subjectRecs = (rec.asSubject || []).filter(r => r.count > 0);
+  if (subjectRecs.length === 0) {
+    children.push(new D.Paragraph({
+      children: [new D.TextRun({
+        text: 'В этом опросе вас не выбрали ни в одном вопросе.',
+        italics: true, color: '6e6e73'
+      })]
+    }));
+  } else {
+    subjectRecs.forEach(r => {
+      const q = r.question;
+      const toneSuffix = useTone && q.tone === 'positive' ? ' (сближение)'
+        : useTone && q.tone === 'negative' ? ' (отторжение)' : '';
+      children.push(new D.Paragraph({
+        spacing: { before: 160, after: 40 },
+        children: [new D.TextRun({ text: q.text + toneSuffix, bold: true, size: 22 })]
+      }));
+      children.push(new D.Paragraph({
+        spacing: { after: 40 },
+        children: [new D.TextRun({
+          text: 'Вас выбрали: ' + r.count + ' ' + pluralResponses(r.count),
+          color: '6e6e73', size: 18
+        })]
+      }));
+
+      // Описания, если есть под-вопросы
+      const subs = q.sub_questions || [];
+      if (subs.length > 0 && r.descriptions && r.descriptions.length > 0) {
+        r.descriptions.forEach(desc => {
+          children.push(new D.Paragraph({
+            spacing: { before: 60, after: 0 },
+            children: [new D.TextRun({ text: desc.respondent, bold: true })]
+          }));
+          subs.forEach(sq => {
+            const val = desc.sub?.[sq.id];
+            if (val) {
+              children.push(new D.Paragraph({
+                indent: { left: 360 },
+                children: [
+                  new D.TextRun({ text: sq.text + ' ', italics: true, color: '6e6e73' }),
+                  new D.TextRun({ text: val })
+                ]
+              }));
+            }
+          });
+        });
+      }
+    });
+  }
+
+  // Раздел 2: Кого выбрали вы
+  children.push(new D.Paragraph({
+    spacing: { before: 320, after: 80 },
+    children: [new D.TextRun({ text: 'Кого выбрали вы', bold: true, size: 26 })]
+  }));
+
+  const respondentRecs = rec.asRespondent || [];
+  if (respondentRecs.length === 0) {
+    children.push(new D.Paragraph({
+      children: [new D.TextRun({
+        text: 'Вы не голосовали в этом опросе.',
+        italics: true, color: '6e6e73'
+      })]
+    }));
+  } else {
+    respondentRecs.forEach(r => {
+      const q = r.question;
+      const toneSuffix = useTone && q.tone === 'positive' ? ' (сближение)'
+        : useTone && q.tone === 'negative' ? ' (отторжение)' : '';
+      children.push(new D.Paragraph({
+        spacing: { before: 160, after: 40 },
+        children: [new D.TextRun({ text: q.text + toneSuffix, bold: true, size: 22 })]
+      }));
+      r.picks.forEach((p, idx) => {
+        const prefix = q.count > 1 ? (idx + 1) + '. ' : '';
+        children.push(new D.Paragraph({
+          spacing: { after: 0 },
+          indent: { left: 360 },
+          children: [new D.TextRun({ text: prefix + p.name, bold: true })]
+        }));
+        const subs = q.sub_questions || [];
+        if (subs.length > 0 && p.sub) {
+          subs.forEach(sq => {
+            const val = p.sub[sq.id];
+            if (val) {
+              children.push(new D.Paragraph({
+                indent: { left: 720 },
+                children: [
+                  new D.TextRun({ text: sq.text + ' ', italics: true, color: '6e6e73' }),
+                  new D.TextRun({ text: val })
+                ]
+              }));
+            }
+          });
+        }
+      });
+    });
+  }
+
+  return new D.Document({ sections: [{ children }] });
+}
+
 async function renderResultsV1ForOrganizer() {
   const body = document.getElementById('survey-body');
   body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
@@ -4394,6 +5199,12 @@ async function renderResultsV1ForOrganizer() {
     html += '<button class="secondary" id="btn-archive-here">Архивировать опрос</button>';
   }
   html += '</div>';
+
+  // Тулбар экспорта всего опроса (📋 Копировать / 📄 Сводный DOCX / 📦 ZIP).
+  // Показываем только если есть хоть один ответ — иначе нечего экспортировать.
+  if (responses.length > 0) {
+    html += renderV1FullExportToolbar(true);
+  }
 
   // Явка
   html += '<h3 style="margin-top:0;">Явка</h3>';
@@ -4500,6 +5311,12 @@ async function renderResultsV1ForOrganizer() {
   // Обработчики кнопок экспорта сводной таблицы — если она присутствует
   if (s.settings?.show_summary_table === true) {
     bindV1SummaryExportToolbar();
+  }
+
+  // Обработчики кнопок экспорта всего опроса (📋 / 📄 / 📦) — только если
+  // есть хоть один ответ (иначе тулбар не рендерили).
+  if (responses.length > 0) {
+    bindV1FullExportToolbar();
   }
 
   // Обработчики кнопок «Опубликовать / Отозвать» баннера публикации
@@ -8187,11 +9004,155 @@ function buildV5ResultsText(isOrganizer) {
   return lines.join('\n');
 }
 
+// HTML-версия результатов V5 для буфера обмена. Word, Google Docs, Telegram
+// при вставке распознают <table>, <h2>, <ul> и вставят настоящую таблицу
+// рейтинга и аккуратные списки. Стили инлайн, потому что в буфере обмена
+// внешние CSS не работают.
+//
+// Структура повторяет buildV5ResultsText один в один — те же данные, тот же
+// порядок, та же группировка ответов по кандидатам. Отличается только
+// презентация (HTML вместо отступов пробелами).
+function buildV5ResultsHtml(isOrganizer) {
+  const s = currentSurvey;
+  const settings = s.settings || {};
+  const nominations = settings.nominations || [];
+  const all = allGroupParticipantsV3 || [];
+  const nameById = new Map(all.map(p => [p.user_id, p.pseudonym]));
+  const responses = cachedAllResponses || [];
+  const totalParticipants = all.length;
+  const agg = aggregateResponsesV5(responses, settings);
+
+  const tdStyle = 'border:1px solid #888; padding:6px 10px; vertical-align:top;';
+  const thStyle = tdStyle + ' background:#f0f0f0; font-weight:bold; text-align:left;';
+
+  let html = '';
+  html += `<h2 style="margin:0 0 4px 0;">${escapeHtml(s.title)}</h2>`;
+  html += `<p style="margin:0 0 12px 0; color:#555;">Вариант 3 — Номинации. Проголосовало: ${responses.length} из ${totalParticipants}</p>`;
+
+  if (isOrganizer) {
+    nominations.forEach(n => {
+      const nAgg = agg.per_nomination[n.id];
+      html += `<h3 style="margin:18px 0 6px 0;">${escapeHtml(n.title)}</h3>`;
+      if (n.description) {
+        html += `<p style="margin:0 0 8px 0; color:#555;">${escapeHtml(n.description)}</p>`;
+      }
+      html += `<p style="margin:0 0 6px 0; color:#555;">Голосовали: ${nAgg.voted_count}; пропустили: ${nAgg.skipped_count}.</p>`;
+
+      const ranking = Array.from(nAgg.counts.entries())
+        .map(([uid, c]) => ({ uid, name: nameById.get(uid) || '(удалён)', count: c }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+
+      if (ranking.length === 0) {
+        html += '<p style="margin:0 0 8px 0; color:#888; font-style:italic;">(никого не выбрали)</p>';
+      } else {
+        html += '<table style="border-collapse:collapse; border:1px solid #888; margin:0 0 10px 0;"><thead><tr>';
+        html += `<th style="${thStyle}">№</th>`;
+        html += `<th style="${thStyle}">Кандидат</th>`;
+        html += `<th style="${thStyle}">Голосов</th>`;
+        html += '</tr></thead><tbody>';
+        let prevCount = null;
+        let rank = 0;
+        ranking.forEach((row, idx) => {
+          if (row.count !== prevCount) {
+            rank = idx + 1;
+            prevCount = row.count;
+          }
+          html += '<tr>';
+          html += `<td style="${tdStyle}">${rank}</td>`;
+          html += `<td style="${tdStyle}">${escapeHtml(row.name)}</td>`;
+          html += `<td style="${tdStyle}">${row.count}</td>`;
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      (n.questions || []).forEach(q => {
+        const arr = nAgg.texts[q.id] || [];
+        if (arr.length === 0) return;
+
+        html += `<h4 style="margin:12px 0 4px 0;">${escapeHtml(q.text)}</h4>`;
+
+        // Группируем по кандидату — та же логика, что в text-версии
+        const grouped = new Map();
+        arr.forEach(item => {
+          const key = item.candidate_id || '__legacy__';
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key).push(item.text);
+        });
+        const rankedUids = ranking.map(r => r.uid);
+        const orderedKeys = [];
+        rankedUids.forEach(uid => { if (grouped.has(uid)) orderedKeys.push(uid); });
+        Array.from(grouped.keys()).forEach(k => {
+          if (k !== '__legacy__' && !orderedKeys.includes(k)) orderedKeys.push(k);
+        });
+        if (grouped.has('__legacy__')) orderedKeys.push('__legacy__');
+
+        orderedKeys.forEach(key => {
+          const head = (key === '__legacy__')
+            ? '(без указания кандидата — старый формат)'
+            : (nameById.get(key) || '(удалён)');
+          html += `<p style="margin:6px 0 2px 0;"><strong>${escapeHtml(head)}</strong></p>`;
+          html += '<ul style="margin:0 0 6px 20px; padding:0;">';
+          (grouped.get(key) || []).forEach(t => {
+            html += `<li>${escapeHtml(t)}</li>`;
+          });
+          html += '</ul>';
+        });
+      });
+    });
+  } else {
+    // Личный отчёт participant'а
+    const myId = currentUser?.id;
+    const myAgg = agg.per_user[myId];
+    html += '<h3 style="margin:18px 0 6px 0;">Что про вас сказали</h3>';
+    if (!myAgg || (Object.keys(myAgg.mentions || {}).length === 0 && Object.keys(myAgg.texts || {}).length === 0)) {
+      html += '<p style="color:#555;">В этом опросе вас не выбрали ни в одной номинации.</p>';
+    } else {
+      nominations.forEach(n => {
+        const count = (myAgg.mentions || {})[n.id] || 0;
+        const texts = (myAgg.texts || {})[n.id] || {};
+        const hasTexts = Object.keys(texts).length > 0;
+        if (count === 0 && !hasTexts) return;
+        html += `<h4 style="margin:12px 0 4px 0;">${escapeHtml(n.title)}</h4>`;
+        html += `<p style="margin:0 0 6px 0; color:#555;">Вас выбрали: ${count} ${pluralize(count, 'раз', 'раза', 'раз')}</p>`;
+        (n.questions || []).forEach(q => {
+          const arr = texts[q.id] || [];
+          if (arr.length === 0) return;
+          html += `<p style="margin:6px 0 2px 0;"><strong>${escapeHtml(q.text)}</strong></p>`;
+          html += '<ul style="margin:0 0 6px 20px; padding:0;">';
+          arr.forEach(t => { html += `<li>${escapeHtml(t)}</li>`; });
+          html += '</ul>';
+        });
+      });
+    }
+  }
+  return html;
+}
+
 async function copyV5ResultsToClipboard(isOrganizer) {
   const text = buildV5ResultsText(isOrganizer);
+  const html = buildV5ResultsHtml(isOrganizer);
+
+  // Современный API: кладём оба формата сразу. Word/Google Docs/Telegram
+  // возьмут HTML и вставят настоящую таблицу. Блокнот/консоль возьмут plain text.
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      alert('Результаты скопированы в буфер обмена.');
+      return;
+    }
+  } catch (err) {
+    console.warn('[v5-copy] clipboard.write failed, falling back to writeText:', err);
+  }
+
+  // Fallback: только plain text (старые браузеры или приватный режим)
   try {
     await navigator.clipboard.writeText(text);
-    alert('Результаты скопированы в буфер обмена.');
+    alert('Результаты скопированы в буфер обмена (только текстом).');
   } catch (e) {
     console.warn('[v5-copy] failed:', e);
     alert('Не удалось скопировать. Попробуйте выделить и скопировать вручную.');
