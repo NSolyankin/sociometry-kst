@@ -26,6 +26,10 @@
     --accent-hover: #0077ed;
     --danger: #ff3b30;
     --success: #34c759;
+    /* Алиас для совместимости: в нескольких местах кода используется var(--primary)
+       (заливка прогресс-бара явки и галочка активной группы в переключателе).
+       Раньше эта переменная не была определена и стили отрабатывали без цвета. */
+    --primary: var(--accent);
   }
   * { box-sizing: border-box; }
   body {
@@ -2022,6 +2026,38 @@ function escapeHtml(s) {
 }
 
 // ============================================================
+// ЗАЩИТА ОТ ДВОЙНОГО КЛИКА ПО КНОПКЕ
+// ============================================================
+// Берёт элемент кнопки по id, на время выполнения работы блокирует её
+// (disabled = true), потом возвращает в исходное состояние. Текст кнопки
+// на время операции можно подменить (busyText), это даёт пользователю
+// визуальный сигнал «идёт сохранение», особенно важный на медленном
+// мобильном соединении через прокси. Если кнопка к моменту finally
+// уже исчезла из DOM (экран перерисовался) — операция тихо игнорируется.
+async function withButtonLock(buttonId, busyText, work) {
+  const btn = document.getElementById(buttonId);
+  let originalText = '';
+  let originalDisabled = false;
+  if (btn) {
+    originalText = btn.textContent;
+    originalDisabled = btn.disabled;
+    btn.disabled = true;
+    if (busyText) btn.textContent = busyText;
+  }
+  try {
+    return await work();
+  } finally {
+    // Перепроверяем, что кнопка всё ещё в DOM — экран мог быть перерисован
+    // за время работы (например, после успешной передачи роли).
+    const stillThere = document.getElementById(buttonId);
+    if (stillThere) {
+      stillThere.disabled = originalDisabled;
+      if (busyText) stillThere.textContent = originalText;
+    }
+  }
+}
+
+// ============================================================
 // ПУБЛИКАЦИЯ РЕЗУЛЬТАТОВ — ХЕЛПЕРЫ
 // ============================================================
 // Опрос имеет настройку settings.require_manual_publish (boolean).
@@ -2171,7 +2207,15 @@ async function archiveSurvey(id) {
 async function deleteSurvey(id) {
   if (!confirm('Полностью удалить опрос и все ответы? Это действие нельзя отменить.')) return;
   console.log('[delete] ' + id);
-  await sb.from('responses').delete().eq('survey_id', id);
+  // Сначала удаляем ответы. Если RLS-политика по какой-то причине не пропустит
+  // удаление (например, у одного из ответов изменены права) — лучше остановиться
+  // здесь и показать понятное сообщение, чем падать на следующем шаге по FK.
+  const { error: respErr } = await sb.from('responses').delete().eq('survey_id', id);
+  if (respErr) {
+    console.error('[delete] responses error:', respErr);
+    alert('Не удалось удалить ответы опроса: ' + respErr.message + '\n\nОпрос не удалён.');
+    return;
+  }
   const { error } = await sb.from('surveys').delete().eq('id', id);
   if (error) {
     alert('Ошибка удаления: ' + error.message);
@@ -8579,33 +8623,35 @@ let groupMembers = []; // кэш участников группы
 let transferTargetId = null; // id пользователя, которому передаём главную роль
 
 async function openGroupSettings() {
-  console.log('[group] open settings');
-  stopPolling();
-  showScreen('loading');
+  await withButtonLock('btn-group-settings', null, async () => {
+    console.log('[group] open settings');
+    stopPolling();
+    showScreen('loading');
 
-  // Подменяем тексты заголовков в зависимости от роли
-  const myRole = currentProfile?.role;
-  const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
-  const subtitle = document.getElementById('group-screen-subtitle');
-  const membersHint = document.getElementById('group-members-hint');
-  const guideCard = document.getElementById('organizer-guide-card');
-  if (isOrganizer) {
-    subtitle.textContent = 'Управление участниками и ролями';
-    membersHint.textContent = 'Главный организатор всегда один. Назначать и снимать со-организаторов могут как главный, так и сами со-организаторы. Передать главную роль другому участнику может только главный организатор.';
-    if (guideCard) guideCard.classList.remove('hidden');
-  } else {
-    subtitle.textContent = 'Состав группы и управление своим участием';
-    membersHint.textContent = 'Состав группы: кто в ней состоит, в каких ролях. Управлять участниками может только организатор.';
-    if (guideCard) guideCard.classList.add('hidden');
-  }
+    // Подменяем тексты заголовков в зависимости от роли
+    const myRole = currentProfile?.role;
+    const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
+    const subtitle = document.getElementById('group-screen-subtitle');
+    const membersHint = document.getElementById('group-members-hint');
+    const guideCard = document.getElementById('organizer-guide-card');
+    if (isOrganizer) {
+      subtitle.textContent = 'Управление участниками и ролями';
+      membersHint.textContent = 'Главный организатор всегда один. Назначать и снимать со-организаторов могут как главный, так и сами со-организаторы. Передать главную роль другому участнику может только главный организатор.';
+      if (guideCard) guideCard.classList.remove('hidden');
+    } else {
+      subtitle.textContent = 'Состав группы и управление своим участием';
+      membersHint.textContent = 'Состав группы: кто в ней состоит, в каких ролях. Управлять участниками может только организатор.';
+      if (guideCard) guideCard.classList.add('hidden');
+    }
 
-  await loadGroupMembers();
-  renderGroupMembers();
-  await loadPseudonymsAndExcluded();
-  renderPseudonymsBlock();
-  renderExcludedBlock();
-  renderMyMembershipBlock();
-  showScreen('group');
+    await loadGroupMembers();
+    renderGroupMembers();
+    await loadPseudonymsAndExcluded();
+    renderPseudonymsBlock();
+    renderExcludedBlock();
+    renderMyMembershipBlock();
+    showScreen('group');
+  });
 }
 
 function backFromGroup() {
@@ -9183,117 +9229,122 @@ async function confirmTransfer() {
     return;
   }
   const myNewRole = document.querySelector('input[name="transfer-new-role"]:checked').value;
-  console.log('[group] transfer main to ' + transferTargetId + ', my new role: ' + myNewRole);
 
-  const { error } = await sb.rpc('transfer_main_organizer', {
-    new_main_id: transferTargetId,
-    my_new_role: myNewRole,
-    gid: currentGroupId
+  await withButtonLock('btn-confirm-transfer', 'Передача...', async () => {
+    console.log('[group] transfer main to ' + transferTargetId + ', my new role: ' + myNewRole);
+
+    const { error } = await sb.rpc('transfer_main_organizer', {
+      new_main_id: transferTargetId,
+      my_new_role: myNewRole,
+      gid: currentGroupId
+    });
+    if (error) {
+      console.error('[group] transfer error:', error);
+      errorBox.textContent = 'Ошибка передачи: ' + error.message;
+      errorBox.classList.remove('hidden');
+      return;
+    }
+    console.log('[group] transfer ok');
+    closeTransferModal();
+
+    // Перезагружаем свой профиль — роль изменилась
+    currentProfile = await loadProfile(currentUser.id);
+
+    // Если я больше не организатор — возвращаемся на дашборд
+    if (currentProfile?.role !== 'main_organizer' && currentProfile?.role !== 'co_organizer') {
+      alert('Роль главного организатора передана. Вы теперь обычный участник.');
+      backFromGroup();
+      return;
+    }
+
+    // Если я стал со-организатором — остаюсь на экране, но перерисовываю с учётом новой роли
+    await loadGroupMembers();
+    renderGroupMembers();
+    // Псевдонимы тоже перерисовать — изменилась моя роль, может скрыться/показаться блок «Добавить»
+    renderPseudonymsBlock();
+    alert('Роль главного организатора передана.');
   });
-  if (error) {
-    console.error('[group] transfer error:', error);
-    errorBox.textContent = 'Ошибка передачи: ' + error.message;
-    errorBox.classList.remove('hidden');
-    return;
-  }
-  console.log('[group] transfer ok');
-  closeTransferModal();
-
-  // Перезагружаем свой профиль — роль изменилась
-  currentProfile = await loadProfile(currentUser.id);
-
-  // Если я больше не организатор — возвращаемся на дашборд
-  if (currentProfile?.role !== 'main_organizer' && currentProfile?.role !== 'co_organizer') {
-    alert('Роль главного организатора передана. Вы теперь обычный участник.');
-    backFromGroup();
-    return;
-  }
-
-  // Если я стал со-организатором — остаюсь на экране, но перерисовываю с учётом новой роли
-  await loadGroupMembers();
-  renderGroupMembers();
-  // Псевдонимы тоже перерисовать — изменилась моя роль, может скрыться/показаться блок «Добавить»
-  renderPseudonymsBlock();
-  alert('Роль главного организатора передана.');
 }
 
 async function openNewSurveyModal() {
-  console.log('[new-survey] open modal');
-  document.getElementById('ns-title').value = '';
-  const deadlineEl = document.getElementById('ns-deadline');
-  if (deadlineEl) deadlineEl.value = '';
-  const reqPubEl = document.getElementById('ns-require-manual-publish');
-  if (reqPubEl) reqPubEl.checked = false;
-  document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
+  await withButtonLock('btn-new-survey', null, async () => {
+    console.log('[new-survey] open modal');
+    document.getElementById('ns-title').value = '';
+    const deadlineEl = document.getElementById('ns-deadline');
+    if (deadlineEl) deadlineEl.value = '';
+    const reqPubEl = document.getElementById('ns-require-manual-publish');
+    if (reqPubEl) reqPubEl.checked = false;
+    document.querySelector('input[name="ns-type"][value="variant_1"]').checked = true;
 
-  // Сброс V1
-  document.getElementById('ns-v1-allow-self').checked = false;
-  document.getElementById('ns-v1-use-tone').checked = false;
-  document.getElementById('ns-v1-show-summary-table').checked = false;
-  document.getElementById('ns-v1-show-summary-table-to-participants').checked = false;
-  document.getElementById('ns-v1-questions-list').innerHTML = '';
-  v1QuestionCounter = 0;
+    // Сброс V1
+    document.getElementById('ns-v1-allow-self').checked = false;
+    document.getElementById('ns-v1-use-tone').checked = false;
+    document.getElementById('ns-v1-show-summary-table').checked = false;
+    document.getElementById('ns-v1-show-summary-table-to-participants').checked = false;
+    document.getElementById('ns-v1-questions-list').innerHTML = '';
+    v1QuestionCounter = 0;
 
-  // Сброс V2
-  document.querySelector('input[name="ns-v2-subjects-mode"][value="all"]').checked = true;
-  document.getElementById('ns-v2-allow-self').checked = false;
-  document.querySelector('input[name="ns-visibility"][value="full"]').checked = true;
-  document.getElementById('new-survey-error').classList.add('hidden');
-  document.getElementById('ns-v2-questions-list').innerHTML = '';
-  questionCounter = 0;
+    // Сброс V2
+    document.querySelector('input[name="ns-v2-subjects-mode"][value="all"]').checked = true;
+    document.getElementById('ns-v2-allow-self').checked = false;
+    document.querySelector('input[name="ns-visibility"][value="full"]').checked = true;
+    document.getElementById('new-survey-error').classList.add('hidden');
+    document.getElementById('ns-v2-questions-list').innerHTML = '';
+    questionCounter = 0;
 
-  // Сброс V3
-  document.getElementById('ns-v3-questions-list').innerHTML = '';
-  v3QuestionCounter = 0;
-  document.querySelector('input[name="ns-v3-text-visibility"][value="self_only"]').checked = true;
+    // Сброс V3
+    document.getElementById('ns-v3-questions-list').innerHTML = '';
+    v3QuestionCounter = 0;
+    document.querySelector('input[name="ns-v3-text-visibility"][value="self_only"]').checked = true;
 
-  // Сброс V4
-  document.querySelector('input[name="ns-v4-subjects-mode"][value="all"]').checked = true;
-  document.getElementById('ns-v4-allow-self').checked = false;
-  document.querySelector('input[name="ns-v4-yesno-visibility"][value="organizer_only"]').checked = true;
-  document.getElementById('ns-v4-show-aggregate').checked = false;
-  document.getElementById('ns-v4-reveal-voters').checked = false;
-  document.getElementById('ns-v4-show-intersections').checked = false;
-  document.getElementById('ns-v4-questions-list').innerHTML = '';
-  v4QuestionCounter = 0;
+    // Сброс V4
+    document.querySelector('input[name="ns-v4-subjects-mode"][value="all"]').checked = true;
+    document.getElementById('ns-v4-allow-self').checked = false;
+    document.querySelector('input[name="ns-v4-yesno-visibility"][value="organizer_only"]').checked = true;
+    document.getElementById('ns-v4-show-aggregate').checked = false;
+    document.getElementById('ns-v4-reveal-voters').checked = false;
+    document.getElementById('ns-v4-show-intersections').checked = false;
+    document.getElementById('ns-v4-questions-list').innerHTML = '';
+    v4QuestionCounter = 0;
 
-  // Сброс V5
-  document.getElementById('ns-v5-allow-self').checked = false;
-  document.getElementById('ns-v5-show-personal').checked = true;
-  document.getElementById('ns-v5-nominations-list').innerHTML = '';
-  v5NominationCounter = 0;
+    // Сброс V5
+    document.getElementById('ns-v5-allow-self').checked = false;
+    document.getElementById('ns-v5-show-personal').checked = true;
+    document.getElementById('ns-v5-nominations-list').innerHTML = '';
+    v5NominationCounter = 0;
 
-  if (allPseudonyms.length === 0) {
-    allPseudonyms = await loadPseudonyms();
-  }
-  renderSubjectsGrid();
+    if (allPseudonyms.length === 0) {
+      allPseudonyms = await loadPseudonyms();
+    }
+    renderSubjectsGrid();
 
-  // Для V4 grid нужны реальные participant'ы (с user_id) — те же, что используются в V3
-  if (!allGroupParticipantsV3 || allGroupParticipantsV3.length === 0) {
-    allGroupParticipantsV3 = await loadGroupParticipantsV3();
-  }
-  renderV4SubjectsGrid();
+    // Для V4 grid нужны реальные participant'ы (с user_id) — те же, что используются в V3
+    if (!allGroupParticipantsV3 || allGroupParticipantsV3.length === 0) {
+      allGroupParticipantsV3 = await loadGroupParticipantsV3();
+    }
+    renderV4SubjectsGrid();
 
-  // По умолчанию добавляем один пустой V1-вопрос
-  addV1Question();
+    // По умолчанию добавляем один пустой V1-вопрос
+    addV1Question();
 
-  // По умолчанию — три пустых V3-вопроса (готовый каркас анкеты)
-  addV3Question();
-  addV3Question();
-  addV3Question();
+    // По умолчанию — три пустых V3-вопроса (готовый каркас анкеты)
+    addV3Question();
+    addV3Question();
+    addV3Question();
 
-  // По умолчанию — один пустой V4-вопрос
-  addV4Question();
+    // По умолчанию — один пустой V4-вопрос
+    addV4Question();
 
-  // По умолчанию — одна пустая V5-номинация
-  addV5Nomination();
+    // По умолчанию — одна пустая V5-номинация
+    addV5Nomination();
 
-  updateTypeVisibility();
-  updateSubjectsListVisibility();
-  updateV4SubjectsListVisibility();
-  updateV1ToneVisibility();
+    updateTypeVisibility();
+    updateSubjectsListVisibility();
+    updateV4SubjectsListVisibility();
+    updateV1ToneVisibility();
 
-  document.getElementById('modal-new-survey').classList.remove('hidden');
+    document.getElementById('modal-new-survey').classList.remove('hidden');
+  });
 }
 
 function closeNewSurveyModal() {
@@ -9946,25 +9997,27 @@ async function saveNewSurvey() {
     return;
   }
 
-  console.log('[new-survey] saving:', data);
-  const { error } = await sb.from('surveys').insert({
-    title: data.title,
-    type: data.type,
-    status: 'active',
-    visibility: data.visibility,
-    settings: data.settings,
-    created_by: currentUser.id,
-    group_id: currentGroupId
+  await withButtonLock('btn-save-survey', 'Сохранение...', async () => {
+    console.log('[new-survey] saving:', data);
+    const { error } = await sb.from('surveys').insert({
+      title: data.title,
+      type: data.type,
+      status: 'active',
+      visibility: data.visibility,
+      settings: data.settings,
+      created_by: currentUser.id,
+      group_id: currentGroupId
+    });
+    if (error) {
+      console.error('[new-survey] error:', error);
+      errorBox.textContent = 'Ошибка сохранения: ' + error.message;
+      errorBox.classList.remove('hidden');
+      return;
+    }
+    console.log('[new-survey] saved');
+    closeNewSurveyModal();
+    loadSurveys();
   });
-  if (error) {
-    console.error('[new-survey] error:', error);
-    errorBox.textContent = 'Ошибка сохранения: ' + error.message;
-    errorBox.classList.remove('hidden');
-    return;
-  }
-  console.log('[new-survey] saved');
-  closeNewSurveyModal();
-  loadSurveys();
 }
 
 // ============================================================
@@ -10154,26 +10207,28 @@ async function doLogin() {
     return;
   }
 
-  console.log('[login] attempt for ' + email);
-  hardLocalLogout();
+  await withButtonLock('btn-login', 'Вход...', async () => {
+    console.log('[login] attempt for ' + email);
+    hardLocalLogout();
 
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) {
-    console.error('[login] error:', error);
-    errorBox.textContent = 'Ошибка входа: ' + error.message;
-    errorBox.classList.remove('hidden');
-    return;
-  }
-  console.log('[login] success');
-  currentUser = data.user;
-  currentProfile = await loadProfile(currentUser.id);
-  if (!currentProfile) {
-    errorBox.textContent = 'Вы не состоите ни в одной активной группе. Обратитесь к организатору вашей группы.';
-    errorBox.classList.remove('hidden');
-    return;
-  }
-  startPolling();
-  renderDashboard();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.error('[login] error:', error);
+      errorBox.textContent = 'Ошибка входа: ' + error.message;
+      errorBox.classList.remove('hidden');
+      return;
+    }
+    console.log('[login] success');
+    currentUser = data.user;
+    currentProfile = await loadProfile(currentUser.id);
+    if (!currentProfile) {
+      errorBox.textContent = 'Вы не состоите ни в одной активной группе. Обратитесь к организатору вашей группы.';
+      errorBox.classList.remove('hidden');
+      return;
+    }
+    startPolling();
+    renderDashboard();
+  });
 }
 
 function doLogout() {
@@ -10196,22 +10251,24 @@ async function doForgotPassword() {
     errorBox.scrollIntoView({block:'center', behavior:'smooth'});
     return;
   }
-  console.log('[forgot] requesting reset for ' + email);
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: 'https://nsolyankin.github.io/sociometry-kst/portal.html'
-  });
-  if (error) {
-    console.error('[forgot] error:', error);
-    errorBox.textContent = 'Ошибка: ' + error.message;
+  await withButtonLock('btn-forgot', null, async () => {
+    console.log('[forgot] requesting reset for ' + email);
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://nsolyankin.github.io/sociometry-kst/portal.html'
+    });
+    if (error) {
+      console.error('[forgot] error:', error);
+      errorBox.textContent = 'Ошибка: ' + error.message;
+      errorBox.classList.remove('hidden');
+      errorBox.scrollIntoView({block:'center', behavior:'smooth'});
+      return;
+    }
+    console.log('[forgot] sent to ' + email);
+    errorBox.className = 'info';
+    errorBox.textContent = 'Письмо для сброса пароля отправлено на ' + email + '. Проверьте почту, в том числе папку «Спам».';
     errorBox.classList.remove('hidden');
     errorBox.scrollIntoView({block:'center', behavior:'smooth'});
-    return;
-  }
-  console.log('[forgot] sent to ' + email);
-  errorBox.className = 'info';
-  errorBox.textContent = 'Письмо для сброса пароля отправлено на ' + email + '. Проверьте почту, в том числе папку «Спам».';
-  errorBox.classList.remove('hidden');
-  errorBox.scrollIntoView({block:'center', behavior:'smooth'});
+  });
 }
 
 function showResetError(msg) {
@@ -10241,44 +10298,46 @@ async function doResetPassword() {
     return;
   }
 
-  // Проверяем, что у нас есть recovery-сессия
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
-    console.error('[reset] no session — recovery token expired or invalid');
-    showResetError('Сессия восстановления пароля недействительна. Запросите письмо для сброса пароля заново на экране входа.');
-    return;
-  }
+  await withButtonLock('btn-reset-password', 'Сохранение...', async () => {
+    // Проверяем, что у нас есть recovery-сессия
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      console.error('[reset] no session — recovery token expired or invalid');
+      showResetError('Сессия восстановления пароля недействительна. Запросите письмо для сброса пароля заново на экране входа.');
+      return;
+    }
 
-  console.log('[reset] updating password for ' + session.user.email);
-  const { error } = await sb.auth.updateUser({ password: password });
-  if (error) {
-    console.error('[reset] updateUser error:', error);
-    showResetError('Ошибка: ' + error.message);
-    return;
-  }
+    console.log('[reset] updating password for ' + session.user.email);
+    const { error } = await sb.auth.updateUser({ password: password });
+    if (error) {
+      console.error('[reset] updateUser error:', error);
+      showResetError('Ошибка: ' + error.message);
+      return;
+    }
 
-  console.log('[reset] password updated successfully');
+    console.log('[reset] password updated successfully');
 
-  // Очищаем хеш из URL, чтобы при F5 не попадали снова на экран сброса
-  try {
-    history.replaceState(null, '', window.location.pathname + window.location.search);
-  } catch (e) {
-    console.error('[reset] history.replaceState error:', e);
-  }
+    // Очищаем хеш из URL, чтобы при F5 не попадали снова на экран сброса
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch (e) {
+      console.error('[reset] history.replaceState error:', e);
+    }
 
-  // Полный локальный логаут — это очистит recovery-сессию и пересоздаст клиент
-  hardLocalLogout();
+    // Полный локальный логаут — это очистит recovery-сессию и пересоздаст клиент
+    hardLocalLogout();
 
-  // Очищаем поля
-  document.getElementById('reset-password').value = '';
-  document.getElementById('reset-password2').value = '';
+    // Очищаем поля
+    document.getElementById('reset-password').value = '';
+    document.getElementById('reset-password2').value = '';
 
-  // Переходим на экран входа с info-сообщением
-  showScreen('login');
-  const loginErr = document.getElementById('login-error');
-  loginErr.className = 'info';
-  loginErr.textContent = 'Пароль успешно изменён. Войдите со своим email и новым паролем.';
-  loginErr.classList.remove('hidden');
+    // Переходим на экран входа с info-сообщением
+    showScreen('login');
+    const loginErr = document.getElementById('login-error');
+    loginErr.className = 'info';
+    loginErr.textContent = 'Пароль успешно изменён. Войдите со своим email и новым паролем.';
+    loginErr.classList.remove('hidden');
+  });
 }
 
 function cancelReset() {
