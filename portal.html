@@ -564,6 +564,10 @@
 
   <div id="screen-login" class="card hidden">
     <h1>Портал опросов КСТ</h1>
+    <div id="proxy-warning" class="error hidden" style="background:#fff3cd; border-color:#ffe082; color:#856404;">
+      <strong>Не удалось подключиться к серверу.</strong>
+      Проверьте, есть ли интернет. Если есть — возможно, ваш провайдер временно блокирует портал. Попробуйте включить VPN или открыть портал с мобильного интернета.
+    </div>
     <div id="login-error" class="error hidden"></div>
     <label>Email</label>
     <input type="email" id="login-email" autocomplete="email">
@@ -1305,6 +1309,13 @@ let SUPABASE_URL = PROXY_LIST[0].url;     // дефолт до выполнен�
 let ACTIVE_PROXY = PROXY_LIST[0];
 const SUPABASE_KEY = 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY';
 
+// Флаг: ни один прокси не ответил на health-check за отведённое время.
+// Это либо все прокси действительно недоступны (например, ТСПУ ужесточился),
+// либо у пользователя нет интернета вообще. На экране логина при наличии
+// этого флага показываем подсказку, чтобы пользователь не недоумевал почему
+// логин не работает.
+let allProxiesFailedHealthCheck = false;
+
 // Загрузить из localStorage последний выбранный прокси (если есть и кэш свежий).
 function loadProxyFromCache() {
   try {
@@ -1414,10 +1425,12 @@ async function selectProxy() {
       const winner = results[i];
       console.log('[proxy] selected: ' + winner.id);
       saveProxyToCache(winner);
+      allProxiesFailedHealthCheck = false;
       return winner;
     }
   }
   console.warn('[proxy] no proxy responded, falling back to default: ' + PROXY_LIST[0].id);
+  allProxiesFailedHealthCheck = true;
   return PROXY_LIST[0];
 }
 
@@ -1694,6 +1707,19 @@ function showScreen(name) {
   document.getElementById('screen-survey').classList.add('hidden');
   document.getElementById('screen-group').classList.add('hidden');
   document.getElementById('screen-' + name).classList.remove('hidden');
+
+  // На экране логина — показать жёлтый баннер, если ни один прокси не ответил.
+  // Это предупреждает пользователя заранее, что проблема не в его пароле.
+  if (name === 'login') {
+    const warn = document.getElementById('proxy-warning');
+    if (warn) {
+      if (allProxiesFailedHealthCheck) {
+        warn.classList.remove('hidden');
+      } else {
+        warn.classList.add('hidden');
+      }
+    }
+  }
 }
 
 async function loadProfile(userId) {
@@ -2601,6 +2627,9 @@ async function switchGroup(gid) {
   allGroupParticipants = [];
   allGroupParticipantsV3 = [];
   allPseudonyms = [];
+  // Сбрасываем сортировку таблицы участников — для новой группы начинаем
+  // с дефолтного порядка (роль + алфавит)
+  groupMembersSortBy = 'default';
 
   console.log('[group-switch] switched to ' + currentGroupId + ' (' + currentGroupName + '), role=' + target.role);
 
@@ -4036,9 +4065,7 @@ function renderV1SummaryTable(rows, questions, useTone) {
 // HTML-таблица с инлайновыми стилями — для копирования в буфер и для печати.
 // Аналог buildV4CompactHtml: вставляется в Word/Outlook как настоящая таблица.
 function buildV1SummaryHtmlForExport(rows, questions, surveyTitle, groupName, respondentsCount, dateStr, useTone) {
-  const escapeForHtml = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const tdStyle = 'border:1px solid #555; padding:5px 10px; text-align:center; vertical-align:middle;';
   const tdLeft = tdStyle.replace('text-align:center;', 'text-align:left;');
@@ -4050,12 +4077,12 @@ function buildV1SummaryHtmlForExport(rows, questions, surveyTitle, groupName, re
   const headerLine = (groupName ? groupName + ' ' : '') + surveyTitle;
 
   let html = '<table style="border-collapse:collapse; border:1px solid #555; font-family:sans-serif; font-size:13px;">';
-  html += `<tr><td colspan="${totalCols}" style="${headerCellStyle}">${escapeForHtml(headerLine)}</td></tr>`;
+  html += `<tr><td colspan="${totalCols}" style="${headerCellStyle}">${escapeHtml(headerLine)}</td></tr>`;
   if (totalCols >= 2) {
     html += `<tr><td colspan="${totalCols - 1}" style="${headerCellStyle.replace('text-align:center;', 'text-align:left;')}">В исследовании приняли участие: ${respondentsCount} ${pluralize(respondentsCount, 'человек', 'человека', 'человек')}</td>`;
-    html += `<td style="${headerCellStyle}">${escapeForHtml(dateStr)}</td></tr>`;
+    html += `<td style="${headerCellStyle}">${escapeHtml(dateStr)}</td></tr>`;
   } else {
-    html += `<tr><td style="${headerCellStyle}">В исследовании приняли участие: ${respondentsCount} · ${escapeForHtml(dateStr)}</td></tr>`;
+    html += `<tr><td style="${headerCellStyle}">В исследовании приняли участие: ${respondentsCount} · ${escapeHtml(dateStr)}</td></tr>`;
   }
 
   // Шапка таблицы
@@ -4064,14 +4091,14 @@ function buildV1SummaryHtmlForExport(rows, questions, surveyTitle, groupName, re
   questions.forEach(q => {
     const header = getV1ColumnHeader(q);
     const toneSuffix = useTone && q.tone === 'negative' ? ' (–)' : '';
-    html += `<th style="${thStyle}">${escapeForHtml(header + toneSuffix)}</th>`;
+    html += `<th style="${thStyle}">${escapeHtml(header + toneSuffix)}</th>`;
   });
   html += '</tr>';
 
   // Строки субъектов
   rows.forEach(r => {
     html += '<tr>';
-    html += `<td style="${tdLeft}"><strong>${escapeForHtml(r.name)}</strong></td>`;
+    html += `<td style="${tdLeft}"><strong>${escapeHtml(r.name)}</strong></td>`;
     questions.forEach(q => {
       const v = r.counts[q.id] || 0;
       if (v === 0) {
@@ -5208,12 +5235,7 @@ function buildV3ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
 // при вставке распознают <table> и вставят настоящую таблицу с границами.
 // Стили инлайн, потому что в буфере обмена внешние CSS не работают.
 function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCount, hideTextsFn) {
-  const escapeForHtml = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   const textQuestions = questions.filter(q => q.kind === 'text');
@@ -5222,7 +5244,7 @@ function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
   const thStyle = tdStyle + ' background:#f0f0f0; font-weight:bold; text-align:left;';
 
   let html = '';
-  html += `<h2 style="margin:0 0 4px 0;">${escapeForHtml(surveyTitle)}</h2>`;
+  html += `<h2 style="margin:0 0 4px 0;">${escapeHtml(surveyTitle)}</h2>`;
   html += `<p style="margin:0 0 12px 0; color:#555;">Вариант 3 — Анкета по участникам. Проголосовало: ${responsesCount} из ${subjects.length}</p>`;
 
   if (yesnoQuestions.length > 0) {
@@ -5230,12 +5252,12 @@ function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
     html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
     html += `<th style="${thStyle}">Участник</th>`;
     yesnoQuestions.forEach(q => {
-      html += `<th style="${thStyle}">${escapeForHtml(q.text)}</th>`;
+      html += `<th style="${thStyle}">${escapeHtml(q.text)}</th>`;
     });
     html += '</tr></thead><tbody>';
     subjects.forEach(subj => {
       html += '<tr>';
-      html += `<td style="${tdStyle}"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+      html += `<td style="${tdStyle}"><strong>${escapeHtml(subj.pseudonym)}</strong></td>`;
       yesnoQuestions.forEach(q => {
         const cell = agg[subj.user_id]?.[q.id];
         const total = (cell?.yes || 0) + (cell?.no || 0);
@@ -5253,11 +5275,11 @@ function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
   if (textQuestions.length > 0) {
     html += '<h3 style="margin:20px 0 6px 0;">Свободные ответы</h3>';
     textQuestions.forEach(q => {
-      html += `<h4 style="margin:12px 0 4px 0;">${escapeForHtml(q.text)}</h4>`;
+      html += `<h4 style="margin:12px 0 4px 0;">${escapeHtml(q.text)}</h4>`;
       html += '<table style="border-collapse:collapse; border:1px solid #888; width:100%;"><tbody>';
       subjects.forEach(subj => {
         html += '<tr>';
-        html += `<td style="${tdStyle} width:25%; white-space:nowrap;"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+        html += `<td style="${tdStyle} width:25%; white-space:nowrap;"><strong>${escapeHtml(subj.pseudonym)}</strong></td>`;
         if (hideTextsFn(subj)) {
           html += `<td style="${tdStyle} color:#888; font-style:italic;">(скрыто настройкой видимости)</td>`;
         } else {
@@ -5265,10 +5287,10 @@ function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
           if (texts.length === 0) {
             html += `<td style="${tdStyle} color:#888;">нет ответов</td>`;
           } else if (texts.length === 1) {
-            html += `<td style="${tdStyle}">${escapeForHtml(texts[0])}</td>`;
+            html += `<td style="${tdStyle}">${escapeHtml(texts[0])}</td>`;
           } else {
             html += `<td style="${tdStyle}"><ul style="margin:0; padding-left:20px;">`;
-            texts.forEach(t => { html += `<li>${escapeForHtml(t)}</li>`; });
+            texts.forEach(t => { html += `<li>${escapeHtml(t)}</li>`; });
             html += '</ul></td>';
           }
         }
@@ -6454,9 +6476,7 @@ function buildV4ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
 }
 
 function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, rowFilterFn, questionVisibleFn, showAggregate) {
-  const escapeForHtml = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   const textQuestions = questions.filter(q => q.kind === 'text');
@@ -6466,13 +6486,13 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
   const thStyle = tdStyle + ' background:#f0f0f0; font-weight:bold; text-align:left;';
 
   let html = '';
-  html += `<h2 style="margin:0 0 4px 0;">${escapeForHtml(surveyTitle)}</h2>`;
+  html += `<h2 style="margin:0 0 4px 0;">${escapeHtml(surveyTitle)}</h2>`;
   html += `<p style="margin:0 0 12px 0; color:#555;">Вариант 2 — Универсальная анкета. Проголосовало: ${responsesCount} из ${totalParticipants}</p>`;
 
   if (showAggregate && yesnoQuestions.length > 0 && visibleSubjects.length > 0) {
     html += '<h3 style="margin:16px 0 6px 0;">Сводный рейтинг</h3>';
     yesnoQuestions.forEach(q => {
-      html += `<h4 style="margin:12px 0 4px 0;">${escapeForHtml(q.text)}</h4>`;
+      html += `<h4 style="margin:12px 0 4px 0;">${escapeHtml(q.text)}</h4>`;
       const rows = computeV4AggregateByQuestion(visibleSubjects, q, agg);
       html += '<table style="border-collapse:collapse; border:1px solid #888;"><thead><tr>';
       html += `<th style="${thStyle}">Участник</th><th style="${thStyle}">«Да»</th><th style="${thStyle}">«Нет»</th>`;
@@ -6480,9 +6500,9 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
       rows.forEach(r => {
         const isNoVotes = (r.yes + r.no) === 0;
         if (isNoVotes) {
-          html += `<tr><td style="${tdStyle}"><strong>${escapeForHtml(r.pseudonym)}</strong></td><td style="${tdStyle} color:#888;" colspan="2">—</td></tr>`;
+          html += `<tr><td style="${tdStyle}"><strong>${escapeHtml(r.pseudonym)}</strong></td><td style="${tdStyle} color:#888;" colspan="2">—</td></tr>`;
         } else {
-          html += `<tr><td style="${tdStyle}"><strong>${escapeForHtml(r.pseudonym)}</strong></td><td style="${tdStyle}"><strong>${r.yes}</strong></td><td style="${tdStyle}">${r.no}</td></tr>`;
+          html += `<tr><td style="${tdStyle}"><strong>${escapeHtml(r.pseudonym)}</strong></td><td style="${tdStyle}"><strong>${r.yes}</strong></td><td style="${tdStyle}">${r.no}</td></tr>`;
         }
       });
       html += '</tbody></table>';
@@ -6496,7 +6516,7 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
     html += `<th style="${thStyle}">Участник</th>`;
     yesnoQuestions.forEach(q => {
       const colHeader = q.short_label || q.text;
-      html += `<th style="${thStyle}">${escapeForHtml(colHeader)}</th>`;
+      html += `<th style="${thStyle}">${escapeHtml(colHeader)}</th>`;
     });
     if (showIntersections) {
       html += `<th style="${thStyle}">все Да</th>`;
@@ -6505,7 +6525,7 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
     html += '</tr></thead><tbody>';
     visibleSubjects.forEach(subj => {
       html += '<tr>';
-      html += `<td style="${tdStyle}"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+      html += `<td style="${tdStyle}"><strong>${escapeHtml(subj.pseudonym)}</strong></td>`;
       yesnoQuestions.forEach(q => {
         const cell = agg[subj.user_id]?.[q.id];
         const total = (cell?.yes || 0) + (cell?.no || 0);
@@ -6530,19 +6550,19 @@ function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCoun
   if (visibleTextQuestions.length > 0) {
     html += '<h3 style="margin:20px 0 6px 0;">Свободные ответы</h3>';
     visibleTextQuestions.forEach(q => {
-      html += `<h4 style="margin:12px 0 4px 0;">${escapeForHtml(q.text)}</h4>`;
+      html += `<h4 style="margin:12px 0 4px 0;">${escapeHtml(q.text)}</h4>`;
       html += '<table style="border-collapse:collapse; border:1px solid #888; width:100%;"><tbody>';
       subjects.forEach(subj => {
         html += '<tr>';
-        html += `<td style="${tdStyle} width:25%; white-space:nowrap;"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+        html += `<td style="${tdStyle} width:25%; white-space:nowrap;"><strong>${escapeHtml(subj.pseudonym)}</strong></td>`;
         const texts = agg[subj.user_id]?.[q.id]?.texts || [];
         if (texts.length === 0) {
           html += `<td style="${tdStyle} color:#888;">нет ответов</td>`;
         } else if (texts.length === 1) {
-          html += `<td style="${tdStyle}">${escapeForHtml(texts[0])}</td>`;
+          html += `<td style="${tdStyle}">${escapeHtml(texts[0])}</td>`;
         } else {
           html += `<td style="${tdStyle}"><ul style="margin:0; padding-left:20px;">`;
-          texts.forEach(t => { html += `<li>${escapeForHtml(t)}</li>`; });
+          texts.forEach(t => { html += `<li>${escapeHtml(t)}</li>`; });
           html += '</ul></td>';
         }
         html += '</tr>';
@@ -6584,9 +6604,7 @@ function formatV4ReportDate(survey) {
 // в каждой ячейке. Если в опросе включены пересечения — добавляются колонки
 // «все +» и «все –». Прочерк ставится, если про субъекта вообще никто не голосовал.
 function buildV4CompactHtml(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, settings, rowFilterFn) {
-  const escapeForHtml = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   if (yesnoQuestions.length === 0) return '';
@@ -6607,16 +6625,16 @@ function buildV4CompactHtml(subjects, questions, agg, surveyTitle, responsesCoun
   // Метаданные сверху — отдельной таблицей в две строки, как в эталонном PDF
   const totalCols = 1 + yesnoQuestions.length + (showIntersections ? 2 : 0);
   html += '<table style="border-collapse:collapse; border:1px solid #555; margin-bottom:0; font-family:sans-serif; font-size:13px;">';
-  html += `<tr><td colspan="${totalCols}" style="${headerCellStyle}">${escapeForHtml(surveyTitle)}</td></tr>`;
+  html += `<tr><td colspan="${totalCols}" style="${headerCellStyle}">${escapeHtml(surveyTitle)}</td></tr>`;
   html += `<tr><td colspan="${totalCols - 1}" style="${headerCellStyle.replace('text-align:center;', 'text-align:left;')}">В исследовании приняло участие: ${responsesCount} ${pluralize(responsesCount, 'человек', 'человека', 'человек')}</td>`;
-  html += `<td style="${headerCellStyle}">${escapeForHtml(dateStr)}</td></tr>`;
+  html += `<td style="${headerCellStyle}">${escapeHtml(dateStr)}</td></tr>`;
 
   // Шапка таблицы с вопросами
   html += '<tr>';
   html += `<th style="${thStyle} text-align:left;">&nbsp;</th>`;
   yesnoQuestions.forEach(q => {
     const colHeader = q.short_label || q.text;
-    html += `<th style="${thStyle}">${escapeForHtml(colHeader)}</th>`;
+    html += `<th style="${thStyle}">${escapeHtml(colHeader)}</th>`;
   });
   if (showIntersections) {
     html += `<th style="${thStyle}">все +</th>`;
@@ -6627,7 +6645,7 @@ function buildV4CompactHtml(subjects, questions, agg, surveyTitle, responsesCoun
   // Строки субъектов
   sortedSubjects.forEach(subj => {
     html += '<tr>';
-    html += `<td style="${tdLeft}"><strong>${escapeForHtml(subj.pseudonym)}</strong></td>`;
+    html += `<td style="${tdLeft}"><strong>${escapeHtml(subj.pseudonym)}</strong></td>`;
     // Проверим, голосовал ли вообще кто-то про этого субъекта по подсчётным вопросам.
     // Если нет — во всех колонках будет прочерк.
     let totalAnswers = 0;
@@ -8704,6 +8722,10 @@ function buildTurnoutHtml(responses, participants) {
 // ЭКРАН НАСТРОЕК ГРУППЫ — УПРАВЛЕНИЕ РОЛЯМИ
 // ============================================================
 let groupMembers = []; // кэш участников группы
+// Сортировка таблицы участников. По умолчанию — стандартная (роль + алфавит).
+// Переключается кликом по заголовку столбца «Последний визит».
+// Значения: 'default' | 'last_seen_desc' | 'last_seen_asc'
+let groupMembersSortBy = 'default';
 let transferTargetId = null; // id пользователя, которому передаём главную роль
 
 async function openGroupSettings() {
@@ -9204,13 +9226,41 @@ function renderGroupMembers() {
     return;
   }
 
+  // Применяем выбранную сортировку. groupMembers уже отсортирован «по умолчанию»
+  // в loadGroupMembers (главный → со-организаторы → участники, внутри по алфавиту).
+  // Здесь либо рендерим в этом порядке, либо пересортируем по last_seen_at.
+  let displayMembers;
+  if (groupMembersSortBy === 'last_seen_desc' || groupMembersSortBy === 'last_seen_asc') {
+    const dir = groupMembersSortBy === 'last_seen_desc' ? -1 : 1;
+    displayMembers = [...groupMembers].sort((a, b) => {
+      // null/undefined в last_seen_at — всегда в конце, независимо от направления
+      const aHas = !!a.last_seen_at;
+      const bHas = !!b.last_seen_at;
+      if (!aHas && !bHas) return (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru');
+      if (!aHas) return 1;
+      if (!bHas) return -1;
+      // Оба с датой — сравниваем как строки ISO (это работает для ISO-формата)
+      const cmp = a.last_seen_at.localeCompare(b.last_seen_at);
+      return cmp * dir;
+    });
+  } else {
+    displayMembers = groupMembers;
+  }
+
+  // Стрелка-индикатор для заголовка «Последний визит»
+  let lastSeenArrow = '';
+  if (groupMembersSortBy === 'last_seen_desc') lastSeenArrow = ' ↓';
+  else if (groupMembersSortBy === 'last_seen_asc') lastSeenArrow = ' ↑';
+
   let html = '<div class="members-table-wrapper"><table class="members-table">';
   html += '<thead><tr><th>Игровое имя</th><th>Email</th><th>Роль</th>';
-  if (isOrganizer) html += '<th>Последний визит</th>';
+  if (isOrganizer) {
+    html += `<th id="th-last-seen" style="cursor:pointer; user-select:none;" title="Кликните для сортировки">Последний визит${lastSeenArrow}</th>`;
+  }
   if (isOrganizer) html += '<th>Действия</th>';
   html += '</tr></thead><tbody>';
 
-  groupMembers.forEach(m => {
+  displayMembers.forEach(m => {
     const isSelf = m.id === myId;
     const rowClass = isSelf ? 'member-self' : '';
     let roleLabel = 'Участник';
@@ -9265,6 +9315,21 @@ function renderGroupMembers() {
       else if (action === 'exclude') excludeMember(id, name);
     });
   });
+
+  // Клик по заголовку «Последний визит» — циклическое переключение сортировки:
+  // default → desc (свежие сверху) → asc (давние сверху) → default.
+  // Только для организаторов, т.к. сам столбец показан только им.
+  if (isOrganizer) {
+    const th = container.querySelector('#th-last-seen');
+    if (th) {
+      th.addEventListener('click', () => {
+        if (groupMembersSortBy === 'default') groupMembersSortBy = 'last_seen_desc';
+        else if (groupMembersSortBy === 'last_seen_desc') groupMembersSortBy = 'last_seen_asc';
+        else groupMembersSortBy = 'default';
+        renderGroupMembers();
+      });
+    }
+  }
 }
 
 async function promoteMember(id, name) {
