@@ -1833,10 +1833,13 @@ async function loadSurveysInner() {
   // ДВУХСТАДИЙНЫЙ РЕНДЕР:
   // 1. Сразу рисуем список опросов (без счётчиков и флагов «я голосовал»),
   //    чтобы пользователь видел дашборд через ~0.5 секунды, а не ждал
-  //    20+ секунд медленных HEAD-запросов через прокси.
-  // 2. Запускаем fire-and-forget все count-запросы параллельно. Когда они
-  //    приходят — обновляем числа на уже отрисованных карточках.
-  // 3. Ошибки в count-запросах не блокируют дашборд: пустые числа лучше
+  //    20+ секунд медленных запросов через прокси.
+  // 2. Загружаем все ответы по всем опросам ОДНИМ запросом и считаем
+  //    числа на клиенте. Раньше для каждого опроса делалось 2 отдельных
+  //    HEAD-запроса с count: 'exact' — при 10 опросах получалось 20
+  //    круговых запросов по сети, каждый ~500 мс через VPN. Теперь
+  //    запрос всего один.
+  // 3. Ошибки в count-запросе не блокируют дашборд: пустые числа лучше
   //    чем «Загрузка...» бесконечно.
 
   renderSurveys(data, counts, voted, totalP); // первый рендер — мгновенно
@@ -1853,23 +1856,37 @@ async function loadSurveysInner() {
       console.warn('[surveys] totalParticipants exception:', e);
     });
 
-  const surveyTasks = data
+  // Один запрос на все ответы по всем интересным опросам.
+  // Выбираем только survey_id и user_id — этого достаточно для подсчёта
+  // counts (число строк по survey_id) и voted (есть ли строка для myId).
+  const surveyIds = data
     .filter(s => interestingTypes.includes(s.type))
-    .map(s => Promise.all([
-      sb.from('responses').select('id', { count: 'exact', head: true })
-        .eq('survey_id', s.id)
-        .then(r => { counts[s.id] = r.count || 0; },
-              e => { counts[s.id] = 0; console.warn('[surveys] count exception for ' + s.id + ':', e); }),
-      myId
-        ? sb.from('responses').select('id', { count: 'exact', head: true })
-            .eq('survey_id', s.id).eq('user_id', myId)
-            .then(r => { if (!r.error) voted[s.id] = (r.count || 0) > 0; },
-                  e => { console.warn('[surveys] myVoted exception for ' + s.id + ':', e); })
-        : Promise.resolve()
-    ]));
+    .map(s => s.id);
 
-  // Ждём все count-запросы и перерисовываем с актуальными числами
-  await Promise.all([totalPTask, ...surveyTasks]);
+  const countsTask = surveyIds.length === 0
+    ? Promise.resolve()
+    : sb.from('responses')
+        .select('survey_id, user_id')
+        .in('survey_id', surveyIds)
+        .then(r => {
+          if (r.error) {
+            console.warn('[surveys] counts query error:', r.error.message);
+            return;
+          }
+          // Инициализируем нулями для всех — иначе опросы без ответов
+          // не попадут в объект и при чтении будет undefined.
+          surveyIds.forEach(id => { counts[id] = 0; voted[id] = false; });
+          (r.data || []).forEach(row => {
+            counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
+            if (myId && row.user_id === myId) voted[row.survey_id] = true;
+          });
+          console.log('[surveys] counts computed locally from ' + (r.data || []).length + ' rows');
+        }, e => {
+          console.warn('[surveys] counts exception:', e);
+        });
+
+  // Ждём оба запроса и перерисовываем с актуальными числами
+  await Promise.all([totalPTask, countsTask]);
   renderSurveys(data, counts, voted, totalP);
 }
 
