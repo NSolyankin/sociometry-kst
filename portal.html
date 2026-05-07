@@ -10547,16 +10547,38 @@ function renderGroupMembers() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 
-  // Привязка обработчиков кнопок
+  // Привязка обработчиков кнопок.
+  // Кнопки в таблице динамические (создаются через innerHTML), поэтому
+  // withButtonLock(buttonId, ...) к ним не применить — нет фиксированного id.
+  // Используем локальную try/finally-обёртку прямо на ссылке btn.
+  // Особенность: после успешного действия таблица перерисовывается, и кнопка
+  // исчезает из DOM — проверяем btn.isConnected перед сбросом состояния.
+  // Действие 'transfer' только открывает модалку (синхронно), его не блокируем.
   container.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const action = btn.dataset.action;
       const id = btn.dataset.id;
       const name = btn.dataset.name;
-      if (action === 'promote') promoteMember(id, name);
-      else if (action === 'demote') demoteMember(id, name);
-      else if (action === 'transfer') openTransferModal(id, name);
-      else if (action === 'exclude') excludeMember(id, name);
+      // 'transfer' — только открытие модалки, защищать нечего
+      if (action === 'transfer') {
+        openTransferModal(id, name);
+        return;
+      }
+      if (btn.disabled) return;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        if (action === 'promote') await promoteMember(id, name);
+        else if (action === 'demote') await demoteMember(id, name);
+        else if (action === 'exclude') await excludeMember(id, name);
+      } finally {
+        // Кнопка может уже исчезнуть после перерисовки таблицы
+        if (btn.isConnected) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      }
     });
   });
 
