@@ -1628,10 +1628,52 @@ let excludedMembers = [];       // [{id, pseudonym, email}]
 
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
+// ============================================================
+// ОБРАБОТКА ИСТЕЧЕНИЯ СЕССИИ (пункт 5 ревью)
+// ============================================================
+// Флаг занятости логаута: пока истинен, новые события onAuthStateChange
+// от старых клиентов игнорируются. Иначе при пересоздании sb внутри
+// hardLocalLogout мы получили бы каскад вызовов от каждого «осиротевшего»
+// клиента, чьи listener'ы продолжают жить в памяти и реагировать на события.
+let _isHandlingLogout = false;
+
+// Универсальный обработчик потери сессии. Вызывается из listener'а
+// при SIGNED_OUT, TOKEN_REFRESHED с пустой сессией и т.п. Делает
+// корректный logout и показывает экран входа с пояснительным сообщением.
+function handleSessionExpired(reason) {
+  if (_isHandlingLogout) {
+    console.log('[auth] session expired event ignored (already logging out): ' + reason);
+    return;
+  }
+  // Если currentUser уже null, значит logout уже случился штатно — нечего делать.
+  // Это защита от срабатывания listener'а при ручном logout пользователя.
+  if (!currentUser) {
+    console.log('[auth] session expired event ignored (no current user): ' + reason);
+    return;
+  }
+  console.log('[auth] handling session expired: ' + reason);
+  _isHandlingLogout = true;
+  try {
+    hardLocalLogout();
+    showScreen('login');
+    const loginErr = document.getElementById('login-error');
+    if (loginErr) {
+      loginErr.className = 'info';
+      loginErr.textContent = 'Сессия истекла. Войдите заново.';
+      loginErr.classList.remove('hidden');
+    }
+  } finally {
+    // Сбрасываем флаг после небольшой задержки — чтобы успели прийти
+    // все каскадные события от старого клиента (которые мы хотим
+    // проглотить молча).
+    setTimeout(() => { _isHandlingLogout = false; }, 500);
+  }
+}
+
 function createSbClient() {
   const uniqueKey = 'sb-portal-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   console.log('[boot] creating sb client with storageKey=' + uniqueKey);
-  return supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {
       storageKey: uniqueKey,
       persistSession: false,
@@ -1639,6 +1681,27 @@ function createSbClient() {
       detectSessionInUrl: false
     }
   });
+
+  // Listener для отслеживания истечения сессии.
+  // Реагируем только на события, означающие потерю сессии:
+  //  - SIGNED_OUT — токен инвалидирован сервером или явный logout.
+  //  - TOKEN_REFRESHED с пустой session — refresh не удался.
+  // События SIGNED_IN, INITIAL_SESSION, PASSWORD_RECOVERY, USER_UPDATED
+  // не трогаем — это нормальные состояния, не повод выкидывать пользователя.
+  try {
+    client.auth.onAuthStateChange((event, session) => {
+      console.log('[auth] state change: ' + event + ' (session=' + (!!session) + ')');
+      if (event === 'SIGNED_OUT') {
+        handleSessionExpired('SIGNED_OUT');
+      } else if (event === 'TOKEN_REFRESHED' && !session) {
+        handleSessionExpired('TOKEN_REFRESH_FAILED');
+      }
+    });
+  } catch (e) {
+    console.warn('[auth] failed to attach onAuthStateChange listener:', e);
+  }
+
+  return client;
 }
 
 // Удаляет накопившиеся в localStorage ключи sb-portal-*, оставшиеся от прошлых
