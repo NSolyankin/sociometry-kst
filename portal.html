@@ -1622,7 +1622,7 @@ function createSbClient() {
   return supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {
       storageKey: uniqueKey,
-      persistSession: true,
+      persistSession: false,
       autoRefreshToken: true,
       detectSessionInUrl: false
     }
