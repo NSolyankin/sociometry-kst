@@ -1698,6 +1698,25 @@ function handleSessionExpired(reason) {
   }
 }
 
+// ============================================================
+// АРХИТЕКТУРНОЕ РЕШЕНИЕ: сессия не сохраняется между заходами.
+// ============================================================
+// Сочетание уникального storageKey + persistSession:false + detectSessionInUrl:false
+// сделано НАМЕРЕННО. Это значит, что пользователь логинится при каждом заходе.
+// Причины:
+//   1. Защита от шеринга устройств. Несколько участников группы могут заходить
+//      с чужого ноутбука (например, на встрече). Если бы сессия сохранялась,
+//      следующий пользователь зашёл бы под предыдущим.
+//   2. Обход багов supabase-js с Web Locks API. При persistSession:true и общем
+//      storageKey между вкладками библиотека брала локи на обновление токена,
+//      которые иногда зависали и блокировали загрузку портала на 30+ секунд.
+//   3. detectSessionInUrl:false — чтобы старые токены из адресной строки
+//      (после recovery-flow или перехода по ссылке) не «оживали» и не
+//      перезаписывали актуальную сессию.
+// Цена решения: пользователь логинится при каждом заходе. Это сознательный
+// trade-off в пользу безопасности и надёжности против UX. Не «чинить»
+// без понимания причин.
+// ============================================================
 function createSbClient() {
   const uniqueKey = 'sb-portal-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   console.log('[boot] creating sb client with storageKey=' + uniqueKey);
@@ -2131,14 +2150,18 @@ function renderSurveyItem(s, count, isOrganizer, iVoted, totalParticipants) {
   const deadline = s.settings?.deadline;
   if (deadline) {
     const dlDate = new Date(deadline);
-    const dlLabel = dlDate.toLocaleDateString('ru-RU');
-    // Сравниваем по концу дня дедлайна — чтобы «до 17 апреля» означало «включая весь 17-й»
-    const endOfDl = new Date(dlDate.getFullYear(), dlDate.getMonth(), dlDate.getDate(), 23, 59, 59);
-    const isOverdue = Date.now() > endOfDl.getTime();
-    if (isActive && isOverdue) {
-      overdueBadge = ' <span class="badge overdue" title="Срок прошёл, голосовать можно">Просрочен</span>';
+    // Если дедлайн в БД испорчен (например, посторонний текст), просто
+    // не показываем ничего вместо "до Invalid Date".
+    if (!isNaN(dlDate.getTime())) {
+      const dlLabel = dlDate.toLocaleDateString('ru-RU');
+      // Сравниваем по концу дня дедлайна — чтобы «до 17 апреля» означало «включая весь 17-й»
+      const endOfDl = new Date(dlDate.getFullYear(), dlDate.getMonth(), dlDate.getDate(), 23, 59, 59);
+      const isOverdue = Date.now() > endOfDl.getTime();
+      if (isActive && isOverdue) {
+        overdueBadge = ' <span class="badge overdue" title="Срок прошёл, голосовать можно">Просрочен</span>';
+      }
+      deadlineInfo = ' · до ' + dlLabel;
     }
-    deadlineInfo = ' · до ' + dlLabel;
   }
 
   // Индикатор «я уже проголосовал» — только для participant и только для активных опросов
@@ -2479,7 +2502,7 @@ async function deleteSurvey(id) {
     alert('Ошибка удаления: ' + error.message);
     return;
   }
-  loadSurveys();
+  await loadSurveys();
 }
 
 // Создать новый опрос как копию существующего — загружаем настройки и вопросы
@@ -3118,15 +3141,14 @@ async function loadGroupParticipants() {
     .select('pseudonym, role')
     .eq('group_id', currentGroupId)
     .eq('active', true)
+    .eq('role', 'participant')
     .order('pseudonym');
   if (error) {
     console.error('[participants] error:', error);
     return [];
   }
-  // Исключаем организаторов — они не участвуют в голосовании
-  const participants = data
-    .filter(p => p.role === 'participant')
-    .map(p => p.pseudonym);
+  // Организаторы отфильтрованы на сервере (role='participant' в WHERE).
+  const participants = (data || []).map(p => p.pseudonym);
   console.log('[participants] loaded ' + participants.length);
   return participants;
 }
@@ -4222,7 +4244,6 @@ function renderV1SummaryTable(rows, questions, useTone) {
 // HTML-таблица с инлайновыми стилями — для копирования в буфер и для печати.
 // Аналог buildV4CompactHtml: вставляется в Word/Outlook как настоящая таблица.
 function buildV1SummaryHtmlForExport(rows, questions, surveyTitle, groupName, respondentsCount, dateStr, useTone) {
-  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const tdStyle = 'border:1px solid #555; padding:5px 10px; text-align:center; vertical-align:middle;';
   const tdLeft = tdStyle.replace('text-align:center;', 'text-align:left;');
@@ -4857,8 +4878,8 @@ async function downloadV1FullDocxReport() {
   }
   const includeDetails = confirm(
     'Включить в отчёт детализацию по респондентам (полные ответы каждого участника)?\n\n' +
-    'OK — включить (получится подробный документ для анализа)\n' +
-    'Отмена — без детализации (компактный документ для архива)'
+    'Подтвердите для подробного варианта (документ для анализа).\n' +
+    'Отмените для компактного варианта (документ для архива).'
   );
   try {
     const doc = await buildV1FullDocxDocument(includeDetails);
@@ -6213,7 +6234,6 @@ function buildV3ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
 // при вставке распознают <table> и вставят настоящую таблицу с границами.
 // Стили инлайн, потому что в буфере обмена внешние CSS не работают.
 function buildV3ResultsHtml(subjects, questions, agg, surveyTitle, responsesCount, hideTextsFn) {
-  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   const textQuestions = questions.filter(q => q.kind === 'text');
@@ -7456,7 +7476,6 @@ function buildV4ResultsText(subjects, questions, agg, surveyTitle, responsesCoun
 }
 
 function buildV4ResultsHtml(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, rowFilterFn, questionVisibleFn, showAggregate) {
-  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   const textQuestions = questions.filter(q => q.kind === 'text');
@@ -7584,7 +7603,6 @@ function formatV4ReportDate(survey) {
 // в каждой ячейке. Если в опросе включены пересечения — добавляются колонки
 // «все +» и «все –». Прочерк ставится, если про субъекта вообще никто не голосовал.
 function buildV4CompactHtml(subjects, questions, agg, surveyTitle, responsesCount, totalParticipants, settings, rowFilterFn) {
-  // Локальный escapeForHtml убран — используется глобальная функция escapeHtml.
 
   const yesnoQuestions = questions.filter(q => q.kind === 'yesno');
   if (yesnoQuestions.length === 0) return '';
@@ -7756,7 +7774,8 @@ async function copyV4CompactToClipboard(rowFilterFn) {
     showOk();
   } catch (err) {
     console.error('[v4-compact] error:', err);
-    alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст результатов:\n\n' + text);
+    // prompt позволяет выделить и скопировать вручную, в отличие от alert.
+    prompt('Не удалось скопировать в буфер обмена автоматически. Выделите текст ниже и скопируйте вручную (Ctrl+A, Ctrl+C):', text);
   }
 }
 
@@ -7799,7 +7818,8 @@ async function copyV4ResultsToClipboard(rowFilterFn, questionVisibleFn, showAggr
     showOk();
   } catch (err) {
     console.error('[v4-copy] error:', err);
-    alert('Не удалось скопировать в буфер обмена: ' + err.message + '\n\nТекст результатов:\n\n' + text);
+    // prompt позволяет выделить и скопировать вручную, в отличие от alert.
+    prompt('Не удалось скопировать в буфер обмена автоматически. Выделите текст ниже и скопируйте вручную (Ctrl+A, Ctrl+C):', text);
   }
 }
 
@@ -10905,7 +10925,6 @@ function renumberV1Questions() {
 
 function addV1SubQuestion(questionItem) {
   const subqList = questionItem.querySelector('[data-subq-list]');
-  const idx = subqList.children.length + 1;
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:6px; align-items:center; margin-bottom:4px;';
   row.innerHTML = `
@@ -11619,14 +11638,16 @@ async function doRegister() {
       infoBox.textContent = 'Регистрация прошла успешно! Сейчас переведу вас на экран входа…';
       infoBox.classList.remove('hidden');
 
-      setTimeout(() => {
-        goToLogin();
-        document.getElementById('login-email').value = email;
-        const loginInfo = document.getElementById('login-error');
-        loginInfo.className = 'info';
-        loginInfo.textContent = 'Регистрация завершена. Войдите со своим email и паролем.';
-        loginInfo.classList.remove('hidden');
-      }, 1500);
+      // Ждём 1.5 секунды внутри withButtonLock, чтобы кнопка «Зарегистрироваться»
+      // оставалась заблокированной и пользователь не успел кликнуть второй раз
+      // (повторный signUp падает с «User already registered»).
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      goToLogin();
+      document.getElementById('login-email').value = email;
+      const loginInfo = document.getElementById('login-error');
+      loginInfo.className = 'info';
+      loginInfo.textContent = 'Регистрация завершена. Войдите со своим email и паролем.';
+      loginInfo.classList.remove('hidden');
     } catch (e) {
       console.error('[register] unexpected:', e);
       showRegisterError('Неожиданная ошибка: ' + (e.message || e));
