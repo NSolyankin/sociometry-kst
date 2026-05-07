@@ -1629,6 +1629,28 @@ function createSbClient() {
   });
 }
 
+// Удаляет накопившиеся в localStorage ключи sb-portal-*, оставшиеся от прошлых
+// сессий портала. Вызывается при загрузке. Пропускает текущий storageKey клиента,
+// если он есть (для совместимости со старыми сборками, где persistSession был true).
+function cleanupStaleSbKeys(currentStorageKey) {
+  try {
+    const keepKey = currentStorageKey ? (currentStorageKey + '-auth-token') : null;
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sb-portal-') && k !== keepKey) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => {
+      console.log('[boot] cleanup stale key: ' + k);
+      localStorage.removeItem(k);
+    });
+  } catch (e) {
+    console.warn('[boot] cleanup error:', e);
+  }
+}
+
 // Отметка визита: запоминаем, для каких групп уже отметили last_seen_at в этом
 // сеансе. Без этого touchLastSeen вызывается на каждую навигацию по дашборду
 // (выход с экрана опроса, выход из Настроек) — это лишние RPC-запросы.
@@ -11502,6 +11524,9 @@ async function init() {
   // ШАГ 2. Создание Supabase-клиента
   // ============================================================
   sb = createSbClient();
+  // Чистим в localStorage возможный мусор от прошлых сессий
+  // (sb-portal-*-auth-token со старыми storageKey).
+  cleanupStaleSbKeys(sb && sb.storageKey ? sb.storageKey : null);
 
   // Проверяем, не пришёл ли пользователь по ссылке восстановления пароля.
   // Supabase кладёт токены в хеш URL: #access_token=...&refresh_token=...&type=recovery&...
