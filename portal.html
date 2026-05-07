@@ -1626,6 +1626,11 @@ let transferTargetId = null;    // id пользователя, которому
 let groupPseudonyms = [];       // [{name, takenBy: {pseudonym, active} | null}]
 let excludedMembers = [];       // [{id, pseudonym, email}]
 
+// Кэш имён исключённых subjects для архивных V4-отчётов (см. пункт 4 ревью).
+// Объявлен здесь, потому что используется в hardLocalLogout раньше, чем
+// в основном блоке V4-функций ниже по файлу.
+let v4ExtraSubjectsCache = {};
+
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
 // ============================================================
@@ -1778,6 +1783,7 @@ function hardLocalLogout() {
   currentSurvey = null;
   currentOwnResponse = null;
   cachedAllResponses = null;
+  v4ExtraSubjectsCache = {};
   allGroupParticipants = [];
   allGroupParticipantsV3 = [];
   allPseudonyms = [];
@@ -3141,6 +3147,11 @@ async function openSurvey(id) {
   console.log('[survey] opening ' + id);
   stopPolling();
   showScreen('loading');
+
+  // Сбрасываем кэш имён исключённых subjects от предыдущего опроса.
+  // Будет заполнен заново через ensureV4SubjectsCacheForCurrentSurvey()
+  // при рендере результатов архивного V4.
+  v4ExtraSubjectsCache = {};
 
   // Загружаем сам опрос
   const { data: survey, error: err1 } = await sb
@@ -7786,16 +7797,138 @@ async function copyV4ResultsToClipboard(rowFilterFn, questionVisibleFn, showAggr
   }
 }
 
+// Кэш игровых имён для исключённых участников, оценённых в текущем V4-опросе.
+// Заполняется через ensureV4SubjectsCacheForCurrentSurvey() при открытии
+// архивного отчёта. Ключ — user_id, значение — {user_id, pseudonym}.
+// Сбрасывается при открытии другого опроса и при hardLocalLogout.
+// Нужен потому, что allGroupParticipantsV3 содержит только active=true,
+// а в архивных опросах могут быть голоса про тех, кого после архивации
+// исключили из группы.
+// (объявление переменной v4ExtraSubjectsCache находится в блоке
+//  глобальных переменных в начале скрипта)
+
+// Догружает имена subjects, упомянутых в payload ответов текущего опроса,
+// но отсутствующих в allGroupParticipantsV3 (исключённых после архивации).
+// Делает максимум один SQL-запрос к memberships с фильтром по списку user_id.
+// Если все subjects уже есть в allGroupParticipantsV3 — никаких запросов не делает.
+// Должна вызываться ПОСЛЕ загрузки cachedAllResponses, ПЕРЕД первым вызовом
+// getV4SubjectsForResults() в текущем рендере.
+async function ensureV4SubjectsCacheForCurrentSurvey() {
+  // Сбрасываем кэш — он привязан к конкретному опросу.
+  v4ExtraSubjectsCache = {};
+
+  const responses = cachedAllResponses || [];
+  if (responses.length === 0) return; // нет ответов — нечего догружать
+
+  // Собираем все user_id, упомянутые в payload.answers.
+  const idsInPayload = new Set();
+  responses.forEach(r => {
+    const answers = r.payload?.answers || {};
+    Object.keys(answers).forEach(uid => idsInPayload.add(uid));
+  });
+
+  // Также учитываем settings.subjects (на случай subjects_mode='selected'
+  // — там могут быть user_id, которых уже нет в allGroupParticipantsV3,
+  // даже если про них почему-то нет голосов в payload).
+  const settings = currentSurvey?.settings || {};
+  if (settings.subjects_mode === 'selected' && Array.isArray(settings.subjects)) {
+    settings.subjects.forEach(uid => idsInPayload.add(uid));
+  }
+
+  if (idsInPayload.size === 0) return;
+
+  // Кого из этих user_id нет в allGroupParticipantsV3? Это и есть исключённые.
+  const activeIds = new Set((allGroupParticipantsV3 || []).map(p => p.user_id));
+  const missingIds = [];
+  idsInPayload.forEach(uid => {
+    if (!activeIds.has(uid)) missingIds.push(uid);
+  });
+
+  if (missingIds.length === 0) {
+    console.log('[v4-extra] no excluded subjects in this survey');
+    return;
+  }
+
+  console.log('[v4-extra] loading pseudonyms for ' + missingIds.length + ' excluded subjects');
+  // Один запрос к memberships с фильтром по списку user_id.
+  // active не фильтруем — берём в любом состоянии (active=false для исключённых).
+  const { data, error } = await sb
+    .from('memberships')
+    .select('user_id, pseudonym')
+    .eq('group_id', currentGroupId)
+    .in('user_id', missingIds);
+  if (error) {
+    console.error('[v4-extra] error loading excluded pseudonyms:', error);
+    return;
+  }
+  (data || []).forEach(m => {
+    v4ExtraSubjectsCache[m.user_id] = { user_id: m.user_id, pseudonym: m.pseudonym };
+  });
+  console.log('[v4-extra] cached ' + Object.keys(v4ExtraSubjectsCache).length + ' excluded subjects');
+}
+
 // Subjects для результатов V4: учитываем subjects_mode из settings,
 // НО НЕ учитываем allow_self (это про голосующего, а в результатах
 // мы показываем всех оцениваемых — самооценка была опцией для каждого голосующего отдельно).
+//
+// ВАЖНО: эта функция должна возвращать ВСЕХ subjects, реально оценённых в опросе,
+// включая тех, кого исключили из группы после архивации. Иначе их голоса (которые
+// в БД сохраняются) пропадут из визуализации архивного отчёта.
+//
+// Источники subjects (в порядке слияния):
+//   1. allGroupParticipantsV3 — все активные сейчас участники. Базовый набор.
+//   2. settings.subjects — для subjects_mode='selected' дополнительно ограничивает
+//      набор только выбранными user_id (по этому списку идёт фильтр).
+//   3. cachedAllResponses — все user_id из payload.answers. Если кого-то оценивали,
+//      он должен быть в отчёте даже если сейчас исключён.
+//   4. v4ExtraSubjectsCache — игровые имена для исключённых (заполняется
+//      через ensureV4SubjectsCacheForCurrentSurvey).
 function getV4SubjectsForResults() {
   const s = currentSurvey;
   const settings = s.settings || {};
+  const all = allGroupParticipantsV3 || [];
+  const byId = new Map(all.map(p => [p.user_id, p]));
+
+  // Базовый набор user_id: либо явно выбранные subjects, либо все активные.
+  let baseIds;
   if (settings.subjects_mode === 'selected' && Array.isArray(settings.subjects)) {
-    return (allGroupParticipantsV3 || []).filter(p => settings.subjects.includes(p.user_id));
+    baseIds = new Set(settings.subjects);
+  } else {
+    baseIds = new Set(all.map(p => p.user_id));
   }
-  return [...(allGroupParticipantsV3 || [])];
+
+  // Дополняем набор реально оценёнными в payload — на случай если кого-то исключили
+  // после архивации. Если subjects_mode='selected' и тот, кого оценивали, не в списке —
+  // всё равно показываем (организатор видит всех, кого реально оценили).
+  const responses = cachedAllResponses || [];
+  responses.forEach(r => {
+    const answers = r.payload?.answers || {};
+    Object.keys(answers).forEach(uid => baseIds.add(uid));
+  });
+
+  // Превращаем в массив объектов с pseudonym.
+  // Активные — берём как есть из allGroupParticipantsV3.
+  // Исключённые — из v4ExtraSubjectsCache, добавляем пометку «(исключен)».
+  // Если ни там ни там нет (теоретически невозможно после ensureV4SubjectsCache,
+  // но на всякий случай) — показываем как «(удален)» с самим user_id.
+  const result = [];
+  baseIds.forEach(uid => {
+    const active = byId.get(uid);
+    if (active) {
+      result.push(active);
+      return;
+    }
+    const cached = v4ExtraSubjectsCache[uid];
+    if (cached) {
+      result.push({ user_id: uid, pseudonym: cached.pseudonym + ' (исключен)' });
+      return;
+    }
+    result.push({ user_id: uid, pseudonym: '(удален)' });
+  });
+
+  // Стабильный порядок — по pseudonym, как и раньше при загрузке allGroupParticipantsV3.
+  result.sort((a, b) => (a.pseudonym || '').localeCompare(b.pseudonym || '', 'ru'));
+  return result;
 }
 
 async function renderResultsV4ForOrganizer() {
@@ -7803,6 +7936,9 @@ async function renderResultsV4ForOrganizer() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  // Догружаем имена для исключённых subjects, реально оценённых в этом опросе
+  // (страховка от потери данных в архивных отчётах после исключения участников).
+  await ensureV4SubjectsCacheForCurrentSurvey();
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -7811,7 +7947,7 @@ async function renderResultsV4ForOrganizer() {
   const showAggregate = !!s.settings?.show_aggregate;
 
   if (subjects.length === 0) {
-    body.innerHTML = '<div class="card"><div class="empty-state">Нет оцениваемых participant\'ов в этом опросе.</div></div>';
+    body.innerHTML = '<div class="card"><div class="empty-state">Нет оцениваемых участников в этом опросе.</div></div>';
     return;
   }
 
@@ -7858,6 +7994,8 @@ async function renderResultsV4ForParticipant() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  // Догружаем имена для исключённых subjects, реально оценённых в этом опросе.
+  await ensureV4SubjectsCacheForCurrentSurvey();
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const settings = s.settings || {};
@@ -7869,7 +8007,7 @@ async function renderResultsV4ForParticipant() {
   const showAggregate = !!settings.show_aggregate;
 
   if (subjects.length === 0) {
-    body.innerHTML = '<div class="card"><div class="empty-state">Нет оцениваемых participant\'ов в этом опросе.</div></div>';
+    body.innerHTML = '<div class="card"><div class="empty-state">Нет оцениваемых участников в этом опросе.</div></div>';
     return;
   }
 
