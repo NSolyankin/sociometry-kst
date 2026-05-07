@@ -1,0 +1,73 @@
+name: Keep services alive
+
+on:
+  schedule:
+    # Каждые 5 дней в 13:00 UTC = 21:00 по Иркутску (UTC+8)
+    # Cron не умеет "каждые 5 дней" напрямую, поэтому перечисляем дни месяца:
+    # 1, 6, 11, 16, 21, 26 числа каждого месяца
+    - cron: '0 13 1,6,11,16,21,26 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Vercel proxy healthcheck
+        run: |
+          echo "[1/4] Pinging Vercel proxy local healthcheck..."
+          curl --fail --show-error --silent --max-time 30 \
+            https://probe-vercel-kappa.vercel.app/healthcheck
+          echo ""
+          echo "Vercel proxy alive"
+
+      - name: Ping Deno proxy healthcheck
+        run: |
+          echo "[2/4] Pinging Deno proxy local healthcheck..."
+          curl --fail --show-error --silent --max-time 30 \
+            https://probe-deno.nsolyankin.deno.net/healthcheck
+          echo ""
+          echo "Deno proxy alive"
+
+      - name: Wake up Supabase via Vercel proxy
+        env:
+          SUPABASE_KEY: 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY'
+        run: |
+          echo "[3/4] Waking up Supabase via Vercel proxy..."
+          HTTP_CODE=$(curl --silent --show-error --max-time 30 \
+            --output /tmp/response.txt \
+            --write-out "%{http_code}" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "https://probe-vercel-kappa.vercel.app/rest/v1/")
+          echo "HTTP code: $HTTP_CODE"
+          echo "Response (first 200 chars):"
+          head -c 200 /tmp/response.txt
+          echo ""
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
+            echo "Supabase responded (any code 2xx-4xx means project is awake)"
+          else
+            echo "Supabase did not respond properly"
+            exit 1
+          fi
+
+      - name: Wake up Supabase via Deno proxy
+        env:
+          SUPABASE_KEY: 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY'
+        run: |
+          echo "[4/4] Waking up Supabase via Deno proxy..."
+          HTTP_CODE=$(curl --silent --show-error --max-time 30 \
+            --output /tmp/response.txt \
+            --write-out "%{http_code}" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "https://probe-deno.nsolyankin.deno.net/rest/v1/")
+          echo "HTTP code: $HTTP_CODE"
+          echo "Response (first 200 chars):"
+          head -c 200 /tmp/response.txt
+          echo ""
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
+            echo "Supabase responded via Deno proxy"
+          else
+            echo "Supabase did not respond via Deno proxy"
+            exit 1
+          fi
