@@ -1682,6 +1682,23 @@ function hardLocalLogout() {
   currentGroupId = null;
   currentGroupName = '';
   currentUserMemberships = [];
+  // Дополнительные сбросы: чтобы при смене пользователя в той же вкладке
+  // (без перезагрузки страницы) у нового юзера не оставалось ничего
+  // от предыдущего в оперативной памяти.
+  currentSurvey = null;
+  currentOwnResponse = null;
+  cachedAllResponses = null;
+  allGroupParticipants = [];
+  allGroupParticipantsV3 = [];
+  allPseudonyms = [];
+  groupMembers = [];
+  groupMembersSortBy = 'default';
+  groupPseudonyms = [];
+  excludedMembers = [];
+  transferTargetId = null;
+  _proxyMarkedBad = false;
+  _proxyConnectionFailures = 0;
+  _firstFailureAt = 0;
   // Сбрасываем кэш отметок визита — при следующем логине отметим заново
   touchedGroupsThisSession.clear();
   console.log('[hardLogout] done');
