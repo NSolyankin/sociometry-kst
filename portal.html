@@ -10807,7 +10807,6 @@ function updateV1ToneVisibility() {
 function addV1Question() {
   v1QuestionCounter++;
   const id = 'v1q-' + v1QuestionCounter;
-  const num = v1QuestionCounter;
   // Максимум выборов = число активных participant'ов группы (без организаторов).
   // Берём allGroupParticipantsV3 — он гарантированно загружен при открытии формы
   // создания опроса. allPseudonyms.length брать нельзя: это размер справочника
@@ -10821,7 +10820,7 @@ function addV1Question() {
   const html = `
     <div class="question-item" data-v1qid="${id}">
       <div class="question-item-header">
-        <span class="question-item-num">Вопрос ${num}</span>
+        <span class="question-item-num" data-v1-num>Вопрос —</span>
         <button class="link-btn" data-remove-v1q="${id}">✕ удалить вопрос</button>
       </div>
       <textarea placeholder="Текст вопроса (например: «С кем бы стал делать в первую очередь?»)" data-field="text"></textarea>
@@ -10861,11 +10860,23 @@ function addV1Question() {
   const list = document.getElementById('ns-v1-questions-list');
   list.insertAdjacentHTML('beforeend', html);
   const item = list.querySelector(`[data-v1qid="${id}"]`);
-  item.querySelector('[data-remove-v1q]').addEventListener('click', () => item.remove());
+  item.querySelector('[data-remove-v1q]').addEventListener('click', () => {
+    item.remove();
+    renumberV1Questions();
+  });
   item.querySelector('[data-add-subq]').addEventListener('click', () => addV1SubQuestion(item));
   // Применить текущее состояние тональности
   const useTone = document.getElementById('ns-v1-use-tone').checked;
   item.querySelector('[data-tone-block]').style.display = useTone ? 'block' : 'none';
+  renumberV1Questions();
+}
+
+function renumberV1Questions() {
+  const items = document.querySelectorAll('#ns-v1-questions-list .question-item');
+  items.forEach((item, idx) => {
+    const numEl = item.querySelector('[data-v1-num]');
+    if (numEl) numEl.textContent = 'Вопрос ' + (idx + 1);
+  });
 }
 
 function addV1SubQuestion(questionItem) {
