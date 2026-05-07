@@ -16,7 +16,7 @@ jobs:
         run: |
           echo "[1/4] Pinging Vercel proxy local healthcheck..."
           curl --fail --show-error --silent --max-time 30 \
-            https://probe-vercel-kappa.vercel.app/healthcheck
+            https://probe-vercel-kappa.vercel.app/this-does-not-exist-test-12345
           echo ""
           echo "Vercel proxy alive"
 
