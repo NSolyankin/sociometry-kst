@@ -2907,53 +2907,48 @@ async function doJoinGroup() {
 
   console.log('[join] attempt:', { gid, ps });
 
-  const btn = document.getElementById('btn-confirm-join');
-  btn.disabled = true;
-  btn.textContent = 'Вступаем…';
-
-  try {
-    const { error } = await sb.rpc('join_group', { gid: gid, ps: ps });
-    if (error) {
-      console.error('[join] rpc error:', error);
-      let msg = error.message || 'Ошибка вступления';
-      // Дружественные сообщения для типовых исключений из функции
-      if (msg.includes('already a member')) {
-        msg = 'Вы уже состоите в этой группе.';
-      } else if (msg.includes('already taken')) {
-        msg = 'Это игровое имя уже занято. Выберите другое.';
-        // Перезагрузить список свободных игровых имён, вдруг кто-то успел занять
-        await loadFreePseudonymsForJoin();
-      } else if (msg.includes('not in the pseudonym list')) {
-        msg = 'Это игровое имя не найдено в справочнике группы. Выберите из списка.';
+  await withButtonLock('btn-confirm-join', 'Вступаем...', async () => {
+    try {
+      const { error } = await sb.rpc('join_group', { gid: gid, ps: ps });
+      if (error) {
+        console.error('[join] rpc error:', error);
+        let msg = error.message || 'Ошибка вступления';
+        // Дружественные сообщения для типовых исключений из функции
+        if (msg.includes('already a member')) {
+          msg = 'Вы уже состоите в этой группе.';
+        } else if (msg.includes('already taken')) {
+          msg = 'Это игровое имя уже занято. Выберите другое.';
+          // Перезагрузить список свободных игровых имён, вдруг кто-то успел занять
+          await loadFreePseudonymsForJoin();
+        } else if (msg.includes('not in the pseudonym list')) {
+          msg = 'Это игровое имя не найдено в справочнике группы. Выберите из списка.';
+        }
+        showJoinError(msg);
+        return;
       }
-      showJoinError(msg);
-      return;
+      console.log('[join] success, reloading profile with new group as current');
+
+      // Переключить текущую группу на новую до перезагрузки профиля,
+      // чтобы loadProfile выбрал её как активную
+      try { localStorage.setItem(LS_CURRENT_GROUP_KEY, gid); } catch(e) {}
+
+      // Перезагрузить профиль — это подтянет новый membership и обновит
+      // currentUserMemberships, currentGroupId, currentGroupName, currentProfile
+      const newProfile = await loadProfile(currentUser.id);
+      if (!newProfile) {
+        showJoinError('Вступление прошло, но не удалось перезагрузить профиль. Попробуйте перелогиниться.');
+        return;
+      }
+      currentProfile = newProfile;
+
+      // Закрыть модалку и перерисовать дашборд — теперь он в новой группе
+      closeJoinGroupModal();
+      renderDashboard();
+    } catch (e) {
+      console.error('[join] unexpected:', e);
+      showJoinError('Неожиданная ошибка: ' + (e.message || e));
     }
-    console.log('[join] success, reloading profile with new group as current');
-
-    // Переключить текущую группу на новую до перезагрузки профиля,
-    // чтобы loadProfile выбрал её как активную
-    try { localStorage.setItem(LS_CURRENT_GROUP_KEY, gid); } catch(e) {}
-
-    // Перезагрузить профиль — это подтянет новый membership и обновит
-    // currentUserMemberships, currentGroupId, currentGroupName, currentProfile
-    const newProfile = await loadProfile(currentUser.id);
-    if (!newProfile) {
-      showJoinError('Вступление прошло, но не удалось перезагрузить профиль. Попробуйте перелогиниться.');
-      return;
-    }
-    currentProfile = newProfile;
-
-    // Закрыть модалку и перерисовать дашборд — теперь он в новой группе
-    closeJoinGroupModal();
-    renderDashboard();
-  } catch (e) {
-    console.error('[join] unexpected:', e);
-    showJoinError('Неожиданная ошибка: ' + (e.message || e));
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Вступить';
-  }
+  });
 }
 
 function openCreateGroupModal() {
@@ -3010,72 +3005,67 @@ async function doCreateGroup() {
 
   console.log('[create-group] attempt:', { gid, name, ps });
 
-  const btn = document.getElementById('btn-confirm-create-group');
-  btn.disabled = true;
-  btn.textContent = 'Создаём…';
-
-  try {
-    const { data, error } = await sb.rpc('create_group', {
-      new_gid: gid,
-      new_name: name,
-      my_pseudonym: ps
-    });
-    if (error) {
-      console.error('[create-group] rpc error:', error);
-      let msg = error.message || 'Ошибка создания группы';
-      // Дружественные сообщения для типовых исключений
-      if (msg.includes('Not authenticated')) {
-        msg = 'Сессия истекла. Перезайдите в портал.';
-      } else if (msg.includes('Только главный организатор')) {
-        msg = 'Создавать группы может только главный организатор. У вас сейчас нет этой роли ни в одной группе.';
-      } else if (msg.includes('уже существует')) {
-        msg = 'Группа с таким идентификатором уже существует. Выберите другой id.';
-      } else if (msg.match(/[Пп]севдоним/)) {
-        // Серверное сообщение содержит слово «Псевдоним» в любой форме —
-        // заменяем на «Игровое имя» в видимом пользователю тексте
-        // (миграция БД-функции отдельно, здесь правим только UI).
-        msg = msg
-          .replace(/Псевдонимы/g, 'Игровые имена')
-          .replace(/Псевдонима/g, 'Игрового имени')
-          .replace(/Псевдониму/g, 'Игровому имени')
-          .replace(/Псевдонимом/g, 'Игровым именем')
-          .replace(/Псевдониме/g, 'Игровом имени')
-          .replace(/Псевдоним/g, 'Игровое имя')
-          .replace(/псевдонимы/g, 'игровые имена')
-          .replace(/псевдонима/g, 'игрового имени')
-          .replace(/псевдониму/g, 'игровому имени')
-          .replace(/псевдонимом/g, 'игровым именем')
-          .replace(/псевдониме/g, 'игровом имени')
-          .replace(/псевдоним/g, 'игровое имя');
+  await withButtonLock('btn-confirm-create-group', 'Создаём...', async () => {
+    try {
+      const { data, error } = await sb.rpc('create_group', {
+        new_gid: gid,
+        new_name: name,
+        my_pseudonym: ps
+      });
+      if (error) {
+        console.error('[create-group] rpc error:', error);
+        let msg = error.message || 'Ошибка создания группы';
+        // Дружественные сообщения для типовых исключений
+        if (msg.includes('Not authenticated')) {
+          msg = 'Сессия истекла. Перезайдите в портал.';
+        } else if (msg.includes('Только главный организатор')) {
+          msg = 'Создавать группы может только главный организатор. У вас сейчас нет этой роли ни в одной группе.';
+        } else if (msg.includes('уже существует')) {
+          msg = 'Группа с таким идентификатором уже существует. Выберите другой id.';
+        } else if (msg.match(/[Пп]севдоним/)) {
+          // Серверное сообщение содержит слово «Псевдоним» в любой форме —
+          // заменяем на «Игровое имя» в видимом пользователю тексте
+          // (миграция БД-функции отдельно, здесь правим только UI).
+          msg = msg
+            .replace(/Псевдонимы/g, 'Игровые имена')
+            .replace(/Псевдонима/g, 'Игрового имени')
+            .replace(/Псевдониму/g, 'Игровому имени')
+            .replace(/Псевдонимом/g, 'Игровым именем')
+            .replace(/Псевдониме/g, 'Игровом имени')
+            .replace(/Псевдоним/g, 'Игровое имя')
+            .replace(/псевдонимы/g, 'игровые имена')
+            .replace(/псевдонима/g, 'игрового имени')
+            .replace(/псевдониму/g, 'игровому имени')
+            .replace(/псевдонимом/g, 'игровым именем')
+            .replace(/псевдониме/g, 'игровом имени')
+            .replace(/псевдоним/g, 'игровое имя');
+        }
+        showCreateGroupError(msg);
+        return;
       }
-      showCreateGroupError(msg);
-      return;
+      console.log('[create-group] success, new group id: ' + data + ', switching to it');
+
+      // Переключаем активную группу на новую до перезагрузки профиля,
+      // чтобы loadProfile выбрал её как текущую
+      try { localStorage.setItem(LS_CURRENT_GROUP_KEY, data); } catch(e) {}
+
+      // Перезагружаем профиль — это подтянет новый membership и обновит
+      // currentUserMemberships, currentGroupId, currentGroupName, currentProfile
+      const newProfile = await loadProfile(currentUser.id);
+      if (!newProfile) {
+        showCreateGroupError('Группа создана, но не удалось перезагрузить профиль. Попробуйте перелогиниться.');
+        return;
+      }
+      currentProfile = newProfile;
+
+      // Закрываем модалку и перерисовываем дашборд — теперь он в новой группе
+      closeCreateGroupModal();
+      renderDashboard();
+    } catch (e) {
+      console.error('[create-group] unexpected:', e);
+      showCreateGroupError('Неожиданная ошибка: ' + (e.message || e));
     }
-    console.log('[create-group] success, new group id: ' + data + ', switching to it');
-
-    // Переключаем активную группу на новую до перезагрузки профиля,
-    // чтобы loadProfile выбрал её как текущую
-    try { localStorage.setItem(LS_CURRENT_GROUP_KEY, data); } catch(e) {}
-
-    // Перезагружаем профиль — это подтянет новый membership и обновит
-    // currentUserMemberships, currentGroupId, currentGroupName, currentProfile
-    const newProfile = await loadProfile(currentUser.id);
-    if (!newProfile) {
-      showCreateGroupError('Группа создана, но не удалось перезагрузить профиль. Попробуйте перелогиниться.');
-      return;
-    }
-    currentProfile = newProfile;
-
-    // Закрываем модалку и перерисовываем дашборд — теперь он в новой группе
-    closeCreateGroupModal();
-    renderDashboard();
-  } catch (e) {
-    console.error('[create-group] unexpected:', e);
-    showCreateGroupError('Неожиданная ошибка: ' + (e.message || e));
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Создать';
-  }
+  });
 }
 
 function renderDashboard() {
@@ -10432,44 +10422,40 @@ async function addPseudonymToGroup() {
   }
 
   console.log('[group-ps] add pseudonym: ' + name);
-  const btn = document.getElementById('btn-add-pseudonym');
-  btn.disabled = true;
-  btn.textContent = 'Добавляем…';
 
-  try {
-    const { error } = await sb.rpc('add_pseudonym', {
-      new_name: name,
-      gid: currentGroupId
-    });
-    if (error) {
-      console.error('[group-ps] add error:', error);
-      let msg = error.message || 'Ошибка добавления';
-      if (msg.includes('already exists')) {
-        msg = 'Такое имя уже есть в справочнике этой группы';
-      } else if (msg.includes('too long')) {
-        msg = 'Имя слишком длинное (максимум 50 символов)';
-      } else if (msg.includes('cannot be empty')) {
-        msg = 'Имя не может быть пустым';
+  await withButtonLock('btn-add-pseudonym', 'Добавляем...', async () => {
+    try {
+      const { error } = await sb.rpc('add_pseudonym', {
+        new_name: name,
+        gid: currentGroupId
+      });
+      if (error) {
+        console.error('[group-ps] add error:', error);
+        let msg = error.message || 'Ошибка добавления';
+        if (msg.includes('already exists')) {
+          msg = 'Такое имя уже есть в справочнике этой группы';
+        } else if (msg.includes('too long')) {
+          msg = 'Имя слишком длинное (максимум 50 символов)';
+        } else if (msg.includes('cannot be empty')) {
+          msg = 'Имя не может быть пустым';
+        }
+        errorBox.textContent = msg;
+        errorBox.classList.remove('hidden');
+        return;
       }
-      errorBox.textContent = msg;
+      console.log('[group-ps] add ok');
+      input.value = '';
+      infoBox.textContent = 'Имя «' + name + '» добавлено в справочник.';
+      infoBox.classList.remove('hidden');
+      // Перезагружаем список псевдонимов
+      await loadPseudonymsAndExcluded();
+      renderPseudonymsBlock();
+    } catch (e) {
+      console.error('[group-ps] unexpected:', e);
+      errorBox.textContent = 'Неожиданная ошибка: ' + (e.message || e);
       errorBox.classList.remove('hidden');
-      return;
     }
-    console.log('[group-ps] add ok');
-    input.value = '';
-    infoBox.textContent = 'Имя «' + name + '» добавлено в справочник.';
-    infoBox.classList.remove('hidden');
-    // Перезагружаем список псевдонимов
-    await loadPseudonymsAndExcluded();
-    renderPseudonymsBlock();
-  } catch (e) {
-    console.error('[group-ps] unexpected:', e);
-    errorBox.textContent = 'Неожиданная ошибка: ' + (e.message || e);
-    errorBox.classList.remove('hidden');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Добавить';
-  }
+  });
 }
 
 function renderGroupMembers() {
@@ -11579,57 +11565,51 @@ async function doRegister() {
 
   console.log('[register] attempt:', { email, groupId, pseudonym });
 
-  // Отключаем кнопку, чтобы не было двойных кликов
-  const btn = document.getElementById('btn-register');
-  btn.disabled = true;
-  btn.textContent = 'Регистрация…';
-
-  try {
-    const { data, error } = await sb.auth.signUp({
-      email: email,
-      password: password,
-      options: {
-        data: {
-          pseudonym: pseudonym,
-          group_id: groupId
+  await withButtonLock('btn-register', 'Регистрация...', async () => {
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: {
+            pseudonym: pseudonym,
+            group_id: groupId
+          }
         }
+      });
+      if (error) {
+        console.error('[register] signUp error:', error);
+        // handle_new_user() кидает исключения с текстом, Supabase оборачивает их
+        // в сообщение вида "Database error saving new user". Покажем оригинал если есть.
+        let msg = error.message || 'Ошибка регистрации';
+        if (msg.includes('pseudonym') && msg.includes('already taken')) {
+          msg = 'Это игровое имя уже занято в выбранной группе. Обновите страницу и выберите другое.';
+        } else if (msg.includes('already registered') || msg.includes('User already')) {
+          msg = 'Пользователь с таким email уже зарегистрирован. Попробуйте войти.';
+        }
+        showRegisterError(msg);
+        return;
       }
-    });
-    if (error) {
-      console.error('[register] signUp error:', error);
-      // handle_new_user() кидает исключения с текстом, Supabase оборачивает их
-      // в сообщение вида "Database error saving new user". Покажем оригинал если есть.
-      let msg = error.message || 'Ошибка регистрации';
-      if (msg.includes('pseudonym') && msg.includes('already taken')) {
-        msg = 'Это игровое имя уже занято в выбранной группе. Обновите страницу и выберите другое.';
-      } else if (msg.includes('already registered') || msg.includes('User already')) {
-        msg = 'Пользователь с таким email уже зарегистрирован. Попробуйте войти.';
-      }
-      showRegisterError(msg);
-      return;
+      console.log('[register] signUp success:', data);
+
+      // Успех: показать сообщение и вернуть на экран входа с заполненным email
+      const infoBox = document.getElementById('register-info');
+      infoBox.textContent = 'Регистрация прошла успешно! Сейчас переведу вас на экран входа…';
+      infoBox.classList.remove('hidden');
+
+      setTimeout(() => {
+        goToLogin();
+        document.getElementById('login-email').value = email;
+        const loginInfo = document.getElementById('login-error');
+        loginInfo.className = 'info';
+        loginInfo.textContent = 'Регистрация завершена. Войдите со своим email и паролем.';
+        loginInfo.classList.remove('hidden');
+      }, 1500);
+    } catch (e) {
+      console.error('[register] unexpected:', e);
+      showRegisterError('Неожиданная ошибка: ' + (e.message || e));
     }
-    console.log('[register] signUp success:', data);
-
-    // Успех: показать сообщение и вернуть на экран входа с заполненным email
-    const infoBox = document.getElementById('register-info');
-    infoBox.textContent = 'Регистрация прошла успешно! Сейчас переведу вас на экран входа…';
-    infoBox.classList.remove('hidden');
-
-    setTimeout(() => {
-      goToLogin();
-      document.getElementById('login-email').value = email;
-      const loginInfo = document.getElementById('login-error');
-      loginInfo.className = 'info';
-      loginInfo.textContent = 'Регистрация завершена. Войдите со своим email и паролем.';
-      loginInfo.classList.remove('hidden');
-    }, 1500);
-  } catch (e) {
-    console.error('[register] unexpected:', e);
-    showRegisterError('Неожиданная ошибка: ' + (e.message || e));
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Зарегистрироваться';
-  }
+  });
 }
 
 function goToLogin() {
