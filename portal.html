@@ -11371,7 +11371,7 @@ async function doForgotPassword() {
   await withButtonLock('btn-forgot', null, async () => {
     console.log('[forgot] requesting reset for ' + email);
     const { error } = await sb.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://nsolyankin.github.io/sociometry-kst/portal.html'
+      redirectTo: window.location.origin + window.location.pathname
     });
     if (error) {
       console.error('[forgot] error:', error);
