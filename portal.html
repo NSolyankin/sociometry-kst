@@ -1614,6 +1614,18 @@ let v3QuestionCounter = 0;
 let v4QuestionCounter = 0;
 let v5NominationCounter = 0;
 
+// ============================================================
+// СОСТОЯНИЕ ЭКРАНА «НАСТРОЙКИ ГРУППЫ»
+// (объявления сюда вынесены из глубины скрипта, чтобы все глобальные
+// переменные были в одном месте; реально используются в loadGroupMembers,
+// renderGroupMembers, loadPseudonymsAndExcluded и т.д.)
+// ============================================================
+let groupMembers = [];          // кэш участников группы
+let groupMembersSortBy = 'default'; // 'default' | 'last_seen_desc' | 'last_seen_asc'
+let transferTargetId = null;    // id пользователя, которому передаем главную роль
+let groupPseudonyms = [];       // [{name, takenBy: {pseudonym, active} | null}]
+let excludedMembers = [];       // [{id, pseudonym, email}]
+
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
 function createSbClient() {
@@ -9730,13 +9742,9 @@ function buildTurnoutHtml(responses, participants) {
 
 // ============================================================
 // ЭКРАН НАСТРОЕК ГРУППЫ — УПРАВЛЕНИЕ РОЛЯМИ
+// (переменные groupMembers, groupMembersSortBy, transferTargetId
+//  объявлены в блоке глобальных переменных в начале скрипта)
 // ============================================================
-let groupMembers = []; // кэш участников группы
-// Сортировка таблицы участников. По умолчанию — стандартная (роль + алфавит).
-// Переключается кликом по заголовку столбца «Последний визит».
-// Значения: 'default' | 'last_seen_desc' | 'last_seen_asc'
-let groupMembersSortBy = 'default';
-let transferTargetId = null; // id пользователя, которому передаём главную роль
 
 async function openGroupSettings() {
   await withButtonLock('btn-group-settings', null, async () => {
@@ -9824,10 +9832,9 @@ async function loadGroupMembers() {
 
 // ============================================================
 // БЛОК "ПСЕВДОНИМЫ ГРУППЫ" в Настройках
+// (переменные groupPseudonyms и excludedMembers объявлены
+//  в блоке глобальных переменных в начале скрипта)
 // ============================================================
-
-let groupPseudonyms = [];   // [{name, takenBy: {pseudonym, active} | null}]
-let excludedMembers = [];   // [{id, pseudonym, email}]
 
 async function loadPseudonymsAndExcluded() {
   console.log('[group-ps] loading pseudonyms and excluded for ' + currentGroupId);
