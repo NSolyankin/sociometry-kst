@@ -1631,6 +1631,14 @@ let excludedMembers = [];       // [{id, pseudonym, email}]
 // в основном блоке V4-функций ниже по файлу.
 let v4ExtraSubjectsCache = {};
 
+// Token-счётчики для защиты от race condition в loadFreePseudonymsForJoin
+// и loadFreePseudonymsForRegister (пункт 13 ревью). Если пользователь
+// быстро переключает группы, ответы RPC могут прийти не в том порядке
+// — каждый вызов запоминает свой номер и игнорирует ответ, если за время
+// await был запущен ещё один вызов.
+let _joinFreePsToken = 0;
+let _registerFreePsToken = 0;
+
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
 // ============================================================
@@ -2835,7 +2843,11 @@ function closeJoinGroupModal() {
   document.getElementById('modal-join-group').classList.add('hidden');
 }
 
+// Token-счётчик для защиты от race condition при выборе группы:
+// см. блок глобальных let-переменных в начале скрипта.
+
 async function loadFreePseudonymsForJoin() {
+  const myToken = ++_joinFreePsToken;
   const gid = document.getElementById('join-group').value;
   const psSel = document.getElementById('join-pseudonym');
   document.getElementById('join-error').classList.add('hidden');
@@ -2844,11 +2856,15 @@ async function loadFreePseudonymsForJoin() {
     psSel.disabled = true;
     return;
   }
-  console.log('[join] loading free pseudonyms for ' + gid);
+  console.log('[join] loading free pseudonyms for ' + gid + ' (token ' + myToken + ')');
   psSel.innerHTML = '<option value="">— Загрузка… —</option>';
   psSel.disabled = true;
 
   const { data, error } = await sb.rpc('free_pseudonyms', { gid: gid });
+  if (myToken !== _joinFreePsToken) {
+    console.log('[join] stale free_pseudonyms response for token ' + myToken + ', ignoring');
+    return;
+  }
   if (error) {
     console.error('[join] free_pseudonyms error:', error);
     psSel.innerHTML = '<option value="">— Ошибка загрузки —</option>';
@@ -11488,7 +11504,11 @@ async function loadGroupsForRegister() {
   });
 }
 
+// Token-счётчик для защиты от race condition при выборе группы:
+// см. блок глобальных let-переменных в начале скрипта.
+
 async function loadFreePseudonymsForRegister() {
+  const myToken = ++_registerFreePsToken;
   const groupId = document.getElementById('register-group').value;
   const psSel = document.getElementById('register-pseudonym');
   if (!groupId) {
@@ -11496,11 +11516,15 @@ async function loadFreePseudonymsForRegister() {
     psSel.disabled = true;
     return;
   }
-  console.log('[register] loading free pseudonyms for ' + groupId);
+  console.log('[register] loading free pseudonyms for ' + groupId + ' (token ' + myToken + ')');
   psSel.innerHTML = '<option value="">— Загрузка… —</option>';
   psSel.disabled = true;
 
   const { data, error } = await sb.rpc('free_pseudonyms', { gid: groupId });
+  if (myToken !== _registerFreePsToken) {
+    console.log('[register] stale free_pseudonyms response for token ' + myToken + ', ignoring');
+    return;
+  }
   if (error) {
     console.error('[register] free_pseudonyms error:', error);
     psSel.innerHTML = '<option value="">— Ошибка загрузки —</option>';
