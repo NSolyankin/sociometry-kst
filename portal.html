@@ -10583,8 +10583,16 @@ function addV1Question() {
   v1QuestionCounter++;
   const id = 'v1q-' + v1QuestionCounter;
   const num = v1QuestionCounter;
-  // Максимум выборов = число participant-профилей (без организаторов)
-  const maxCount = allPseudonyms.length || 10;
+  // Максимум выборов = число активных participant'ов группы (без организаторов).
+  // Берём allGroupParticipantsV3 — он гарантированно загружен при открытии формы
+  // создания опроса. allPseudonyms.length брать нельзя: это размер справочника
+  // имён, который может быть больше числа реально зарегистрированных людей.
+  // Поправка на allow_self не нужна на уровне атрибута max у <input>: organizator
+  // вводит count до того, как ставит галочку allow_self, так что верхняя
+  // граница — общее число participant'ов. Финальная проверка с учётом
+  // allow_self делается в collectFormData.
+  const totalParticipants = (allGroupParticipantsV3 || []).length;
+  const maxCount = Math.max(1, totalParticipants);
   const html = `
     <div class="question-item" data-v1qid="${id}">
       <div class="question-item-header">
@@ -10885,7 +10893,12 @@ function collectFormData() {
   if (type === 'variant_1') {
     const allowSelf = document.getElementById('ns-v1-allow-self').checked;
     const useTone = document.getElementById('ns-v1-use-tone').checked;
-    const maxCount = allPseudonyms.length || 10;
+    // Максимум выборов = число активных participant'ов с поправкой на allow_self.
+    // Если голосование запрещено за себя — реально доступно (N - 1) кандидатов.
+    // Использовать allPseudonyms.length нельзя: это размер справочника имён,
+    // он может быть больше числа реально зарегистрированных участников.
+    const totalParticipants = (allGroupParticipantsV3 || []).length;
+    const maxCount = Math.max(1, totalParticipants - (allowSelf ? 0 : 1));
 
     // Сброс подсветки ошибок с прошлой попытки сохранения
     document.querySelectorAll('#ns-v1-questions-list [data-tone-block]').forEach(el => {
@@ -10908,7 +10921,7 @@ function collectFormData() {
         return { error: 'Укажите количество имён для вопроса ' + qNum + ' (минимум 1)' };
       }
       if (countVal > maxCount) {
-        return { error: 'В вопросе ' + qNum + ' количество имён (' + countVal + ') превышает число участников группы (' + maxCount + ')' };
+        return { error: 'В вопросе ' + qNum + ' количество имён (' + countVal + ') превышает число доступных кандидатов (' + maxCount + '). Учитываются только активные participant\'ы группы' + (allowSelf ? '' : ' за вычетом самого голосующего') + '.' };
       }
 
       // Под-вопросы
