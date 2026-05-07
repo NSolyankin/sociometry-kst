@@ -3716,7 +3716,9 @@ function renderVoteFormV1() {
   body.innerHTML = html;
 
   document.getElementById('btn-vote-cancel').addEventListener('click', backToList);
-  document.getElementById('btn-vote-submit').addEventListener('click', submitVoteV1);
+  document.getElementById('btn-vote-submit').addEventListener('click', () => {
+    withButtonLock('btn-vote-submit', 'Отправка...', submitVoteV1);
+  });
 
   // Автосохранение черновика на изменение любого поля (с debounce)
   body.querySelectorAll('.v1-slot select, .v1-slot textarea').forEach(inp => {
@@ -5656,7 +5658,9 @@ function renderVoteFormV2() {
   body.innerHTML = html;
 
   document.getElementById('btn-vote-cancel').addEventListener('click', backToList);
-  document.getElementById('btn-vote-submit').addEventListener('click', submitVoteV2);
+  document.getElementById('btn-vote-submit').addEventListener('click', () => {
+    withButtonLock('btn-vote-submit', 'Отправка...', submitVoteV2);
+  });
 }
 
 async function submitVoteV2() {
@@ -5861,7 +5865,9 @@ function renderVoteFormV3() {
   body.innerHTML = html;
 
   document.getElementById('btn-vote-cancel-v3').addEventListener('click', backToList);
-  document.getElementById('btn-vote-submit-v3').addEventListener('click', submitVoteV3);
+  document.getElementById('btn-vote-submit-v3').addEventListener('click', () => {
+    withButtonLock('btn-vote-submit-v3', 'Отправка...', submitVoteV3);
+  });
 }
 
 async function submitVoteV3() {
@@ -6759,7 +6765,9 @@ function renderVoteFormV4() {
   body.innerHTML = html;
 
   document.getElementById('btn-vote-cancel-v4').addEventListener('click', backToList);
-  document.getElementById('btn-vote-submit-v4').addEventListener('click', submitVoteV4);
+  document.getElementById('btn-vote-submit-v4').addEventListener('click', () => {
+    withButtonLock('btn-vote-submit-v4', 'Отправка...', submitVoteV4);
+  });
 
   // Автосохранение черновика на изменение любого поля (с debounce)
   const table = document.getElementById('vote-table-v4');
@@ -8114,7 +8122,9 @@ function renderVoteFormV5() {
   body.innerHTML = html;
 
   document.getElementById('btn-vote-cancel-v5').addEventListener('click', backToList);
-  document.getElementById('btn-vote-submit-v5').addEventListener('click', submitVoteV5);
+  document.getElementById('btn-vote-submit-v5').addEventListener('click', () => {
+    withButtonLock('btn-vote-submit-v5', 'Отправка...', submitVoteV5);
+  });
 
   // Биндинг переключателей «пропустить»
   document.querySelectorAll('[data-v5-skip]').forEach(check => {
