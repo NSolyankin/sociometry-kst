@@ -1622,9 +1622,14 @@ let v5NominationCounter = 0;
 // ============================================================
 let groupMembers = [];          // кэш участников группы
 let groupMembersSortBy = 'default'; // 'default' | 'last_seen_desc' | 'last_seen_asc'
+let groupMembersError = null;   // сообщение об ошибке загрузки memberships, null если всё ок
 let transferTargetId = null;    // id пользователя, которому передаем главную роль
 let groupPseudonyms = [];       // [{name, takenBy: {pseudonym, active} | null}]
 let excludedMembers = [];       // [{id, pseudonym, email}]
+// Сообщение об ошибке загрузки в loadPseudonymsAndExcluded — null если всё ок.
+// Одна общая переменная для обоих блоков (псевдонимы и исключённые), потому что
+// функция загружает оба списка одним проходом и отказ БД задевает оба сразу.
+let pseudonymsError = null;
 
 // Кэш имён исключённых subjects для архивных V4-отчётов (см. пункт 4 ревью).
 // Объявлен здесь, потому что используется в hardLocalLogout раньше, чем
@@ -1638,6 +1643,12 @@ let v4ExtraSubjectsCache = {};
 // await был запущен ещё один вызов.
 let _joinFreePsToken = 0;
 let _registerFreePsToken = 0;
+// Глобальный счётчик переключений группы. Инкрементируется в switchGroup
+// и проверяется в loadSurveysInner перед записью результатов в DOM.
+// Если за время await пользователь успел переключиться на другую группу,
+// результат старой загрузки игнорируется. Защита от мерцания списка
+// опросов чужой группы при быстром клике по переключателю.
+let _groupSwitchToken = 0;
 
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
@@ -1816,8 +1827,10 @@ function hardLocalLogout() {
   allPseudonyms = [];
   groupMembers = [];
   groupMembersSortBy = 'default';
+  groupMembersError = null;
   groupPseudonyms = [];
   excludedMembers = [];
+  pseudonymsError = null;
   transferTargetId = null;
   _proxyMarkedBad = false;
   _proxyConnectionFailures = 0;
@@ -1997,12 +2010,22 @@ async function loadSurveys() {
 }
 
 async function loadSurveysInner() {
+  // Запоминаем токен переключения группы и id группы, для которой делаем
+  // запрос. Если за время await пользователь переключился на другую группу,
+  // мы НЕ должны отрисовать результаты старой группы поверх новой.
+  const myToken = _groupSwitchToken;
+  const myGroupId = currentGroupId;
   console.log('[surveys] loading for group ' + currentGroupId);
   const { data, error } = await sb
     .from('surveys')
     .select('*')
     .eq('group_id', currentGroupId)
     .order('created_at', { ascending: false });
+  // Если за время запроса переключились на другую группу — выходим.
+  if (myToken !== _groupSwitchToken || myGroupId !== currentGroupId) {
+    console.log('[surveys] stale response, group switched, ignoring');
+    return;
+  }
   if (error) {
     console.error('[surveys] error:', error);
     // Детектор истечения сессии (страховка к onAuthStateChange).
@@ -2084,6 +2107,13 @@ async function loadSurveysInner() {
 
   // Ждём оба запроса и перерисовываем с актуальными числами
   await Promise.all([totalPTask, countsTask]);
+  // Повторная проверка токена: за время Promise.all пользователь мог
+  // переключить группу, тогда счётчики уже не соответствуют отображаемому
+  // списку, рисовать их поверх новой группы нельзя.
+  if (myToken !== _groupSwitchToken || myGroupId !== currentGroupId) {
+    console.log('[surveys] stale counts, group switched, ignoring');
+    return;
+  }
   renderSurveys(data, counts, voted, totalP);
 }
 
@@ -2140,7 +2170,11 @@ function renderSurveyItem(s, count, isOrganizer, iVoted, totalParticipants) {
   const typeLabel = SURVEY_TYPES[s.type]?.label || s.type;
   const statusLabel = s.status === 'active' ? 'активен' : 'архив';
   const statusClass = s.status === 'active' ? 'active' : 'archived';
-  const date = new Date(s.created_at).toLocaleDateString('ru-RU');
+  // Защита от битого created_at: если поле в БД испорчено или отсутствует,
+  // toLocaleDateString вернёт «Invalid Date». Показываем прочерк, чтобы не пугать
+  // пользователя сырым техническим сообщением.
+  const createdAtDate = new Date(s.created_at);
+  const date = isNaN(createdAtDate.getTime()) ? '-' : createdAtDate.toLocaleDateString('ru-RU');
   const isActive = s.status === 'active';
 
   // Дедлайн — если задан и прошёл, показываем «Просрочен» у активного опроса.
@@ -2249,6 +2283,24 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ============================================================
+// БЕЗОПАСНЫЙ ПАРСИНГ dataset.cands В V5 (НОМИНАЦИИ)
+// ============================================================
+// В формах V5 список кандидатов хранится сериализованным в data-атрибуте
+// [data-v5-slots]. Если по какой-то причине JSON окажется битым (повреждение
+// в БД, ручное вмешательство DevTools, ошибка миграции settings), прямой
+// JSON.parse выбросит SyntaxError и сломает рендер всей формы.
+// Эта обёртка возвращает пустой массив вместо исключения и пишет
+// предупреждение в консоль, чтобы проблема была видна разработчику.
+function safeParseV5Cands(raw) {
+  try {
+    return JSON.parse(raw || '[]');
+  } catch (e) {
+    console.warn('[v5] не удалось распарсить dataset.cands:', e);
+    return [];
+  }
 }
 
 // ============================================================
@@ -2783,6 +2835,10 @@ async function switchGroup(gid) {
     console.error('[group-switch] target membership not found for ' + gid);
     return;
   }
+
+  // Инкрементируем токен — все запущенные ранее загрузки опросов/участников,
+  // которые ещё не дописали результат в DOM, отвалятся по проверке токена.
+  _groupSwitchToken++;
 
   // Обновить глобальные переменные
   currentGroupId = target.group_id;
@@ -4199,7 +4255,11 @@ function getV1ColumnHeader(q) {
   return text.slice(0, 30) + '…';
 }
 
-// Дата создания опроса в формате ДД.ММ.ГГГГ
+// Дата создания опроса в формате ДД.ММ.ГГГГ.
+// СОЗНАТЕЛЬНОЕ РЕШЕНИЕ: дата опроса = дата создания (Николай, май 2026).
+// Не дата архивации, не дата формирования отчёта. Если когда-нибудь придёт
+// идея «а давайте показывать архивацию» — этот комментарий напомнит, что
+// решение уже принято и менять его без обсуждения не нужно.
 function formatV1ReportDate(survey) {
   let d;
   if (survey?.created_at) {
@@ -4599,9 +4659,15 @@ function buildV1PerNameData(responses, questions) {
     return data.get(name);
   };
 
-  // 1. asSubject — сначала по агрегату
+  // 1. asSubject — один общий вызов aggregateResponsesV1 на все вопросы сразу.
+  //    Раньше функция вызывалась Q раз в цикле (по разу на вопрос), каждый раз
+  //    обходя все responses заново. Сложность по большому-O та же O(R×Q×S), но
+  //    устраняется Q-кратный overhead на вызов функции и пересборку объекта agg.
+  //    Поведение эквивалентно: возвращаемый Map тот же, порядок вопросов сохранён
+  //    через questions.forEach ниже. Заметно при росте группы до 30+ человек.
+  const fullAgg = aggregateResponsesV1(responses, questions);
   questions.forEach(q => {
-    const qAgg = aggregateResponsesV1(responses, [q])[q.id];
+    const qAgg = fullAgg[q.id] || {};
     Object.entries(qAgg).forEach(([name, info]) => {
       const rec = ensure(name);
       rec.asSubject.push({
@@ -5191,16 +5257,40 @@ async function downloadV1ZipReport() {
 
   try {
     const zip = new window.JSZip();
-    for (const name of names) {
+    // Параллельная сборка персональных DOCX через Promise.allSettled.
+    // allSettled (а не all) — чтобы один сбойный отчёт не уронил весь архив:
+    // успешные собираются в ZIP, проблемные логируются и идут в alert
+    // отдельным сообщением. На группе 50+ участников ускорение в разы
+    // относительно последовательной for...await версии.
+    const results = await Promise.allSettled(names.map(async (name) => {
       const rec = perName.get(name);
       const doc = await buildV1PersonalDocxDocument(name, rec, questions, s);
       const blob = await window.docx.Packer.toBlob(doc);
-      const fname = 'Отчёт_' + safeFileName(name) + '.docx';
-      zip.file(fname, blob);
+      return { name, blob };
+    }));
+    let added = 0;
+    const failed = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        const fname = 'Отчёт_' + safeFileName(r.value.name) + '.docx';
+        zip.file(fname, r.value.blob);
+        added++;
+      } else {
+        const failedName = names[i];
+        console.warn('[v1-zip] не удалось собрать отчёт по ' + failedName + ':', r.reason);
+        failed.push(failedName);
+      }
+    });
+    if (added === 0) {
+      alert('Не удалось сформировать ни одного персонального отчёта.');
+      return;
     }
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     const zipName = 'Отчёты_по_участникам_' + safeFileName(s.title || 'опрос') + '.zip';
     downloadBlob(zipBlob, zipName);
+    if (failed.length > 0) {
+      alert('Архив сформирован, но не удалось собрать отчёты по: ' + failed.join(', '));
+    }
   } catch (e) {
     console.error('[v1-zip] failed:', e);
     alert('Не удалось сформировать ZIP: ' + (e.message || e));
@@ -8277,7 +8367,7 @@ function applyDraftV5(draft) {
       const cont = card.querySelector('[data-v5-slots]');
       const minVal = parseInt(cont?.dataset.min || '1', 10);
       const maxVal = parseInt(cont?.dataset.max || '0', 10);
-      const candArr = JSON.parse(cont?.dataset.cands || '[]');
+      const candArr = safeParseV5Cands(cont?.dataset.cands);
 
       // Сколько слотов нужно: max(minVal, draft.length), но не больше maxVal
       const needed = Math.min(maxVal, Math.max(minVal, cands.length));
@@ -8490,7 +8580,7 @@ function initV5Slots(card) {
   const cont = card.querySelector('[data-v5-slots]');
   if (!cont) return;
   const minVal = parseInt(cont.dataset.min || '1', 10);
-  const cands = JSON.parse(cont.dataset.cands || '[]');
+  const cands = safeParseV5Cands(cont.dataset.cands);
   cont.innerHTML = '';
   for (let i = 0; i < minVal; i++) {
     cont.insertAdjacentHTML('beforeend', v5SlotHtml(i, cands));
@@ -8543,7 +8633,7 @@ function bindV5SlotEvents(card) {
     addBtn.addEventListener('click', () => {
       const cont = card.querySelector('[data-v5-slots]');
       const maxVal = parseInt(cont?.dataset.max || '0', 10);
-      const cands = JSON.parse(cont?.dataset.cands || '[]');
+      const cands = safeParseV5Cands(cont?.dataset.cands);
       const cur = card.querySelectorAll('[data-v5-slot-row]').length;
       if (cur >= maxVal) return;
       cont.insertAdjacentHTML('beforeend', v5SlotHtml(cur, cands));
@@ -8602,7 +8692,7 @@ function rebuildV5QuestionsBlock(card) {
   }
 
   // Имена для надписей
-  const candArr = JSON.parse(card.querySelector('[data-v5-slots]')?.dataset.cands || '[]');
+  const candArr = safeParseV5Cands(card.querySelector('[data-v5-slots]')?.dataset.cands);
   const nameById = new Map(candArr.map(c => [c.id, c.name]));
 
   let html = '<strong style="font-size:14px;">Вопросы про каждого выбранного:</strong>';
@@ -9947,17 +10037,39 @@ async function downloadV5ZipReport() {
 
   try {
     const zip = new window.JSZip();
-    for (const u of usersToInclude) {
+    // Параллельная сборка персональных DOCX через Promise.allSettled
+    // (см. комментарий в downloadV1ZipReport — та же логика graceful degradation:
+    // один сбойный отчёт не блокирует выгрузку остальных).
+    const results = await Promise.allSettled(usersToInclude.map(async (u) => {
       const doc = await buildV5PersonalDocxDocument(
         u.id, u.name, settings, agg, currentSurvey.title || ''
       );
       const blob = await window.docx.Packer.toBlob(doc);
-      const fname = 'Отчёт_' + safeFileName(u.name) + '.docx';
-      zip.file(fname, blob);
+      return { name: u.name, blob };
+    }));
+    let added = 0;
+    const failed = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        const fname = 'Отчёт_' + safeFileName(r.value.name) + '.docx';
+        zip.file(fname, r.value.blob);
+        added++;
+      } else {
+        const failedName = usersToInclude[i].name;
+        console.warn('[v5-docx-zip] не удалось собрать отчёт по ' + failedName + ':', r.reason);
+        failed.push(failedName);
+      }
+    });
+    if (added === 0) {
+      alert('Не удалось сформировать ни одного персонального отчёта.');
+      return;
     }
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     const zipName = 'Отчёты_по_участникам_' + safeFileName(currentSurvey.title || 'опрос') + '.zip';
     downloadBlob(zipBlob, zipName);
+    if (failed.length > 0) {
+      alert('Архив сформирован, но не удалось собрать отчёты по: ' + failed.join(', '));
+    }
   } catch (e) {
     console.error('[v5-docx-zip] failed:', e);
     alert('Не удалось сформировать ZIP: ' + (e.message || e));
@@ -10037,6 +10149,10 @@ function backFromGroup() {
 
 async function loadGroupMembers() {
   console.log('[group] loading members for group ' + currentGroupId);
+  // Сбрасываем ошибку прошлой загрузки в самом начале — иначе при успешной
+  // повторной загрузке renderGroupMembers продолжал бы показывать старое
+  // сообщение об ошибке.
+  groupMembersError = null;
   // 1. Все ACTIVE memberships текущей группы (исключённые здесь не показываются)
   const { data: members, error: mErr } = await sb
     .from('memberships')
@@ -10046,6 +10162,9 @@ async function loadGroupMembers() {
   if (mErr) {
     console.error('[group] error loading memberships:', mErr);
     groupMembers = [];
+    // Запоминаем текст ошибки для renderGroupMembers — пункт 23 ревью.
+    // Раньше пользователь видел пустую таблицу без объяснений.
+    groupMembersError = mErr.message || 'неизвестная ошибка';
     return;
   }
   // 2. Email'ы из profiles (одним запросом по списку id)
@@ -10089,6 +10208,10 @@ async function loadGroupMembers() {
 
 async function loadPseudonymsAndExcluded() {
   console.log('[group-ps] loading pseudonyms and excluded for ' + currentGroupId);
+  // Сбрасываем ошибку прошлой загрузки в самом начале, иначе при успешной
+  // повторной загрузке renderPseudonymsBlock и renderExcludedBlock продолжали
+  // бы показывать старое сообщение. Аналогично groupMembersError в loadGroupMembers.
+  pseudonymsError = null;
 
   // 1. Все имена справочника
   const { data: psList, error: psErr } = await sb
@@ -10100,6 +10223,9 @@ async function loadPseudonymsAndExcluded() {
     console.error('[group-ps] pseudonyms error:', psErr);
     groupPseudonyms = [];
     excludedMembers = [];
+    // Запоминаем текст ошибки для рендеров. Раньше организатор видел молча
+    // пустой блок и не понимал, удалили все имена или загрузка упала.
+    pseudonymsError = psErr.message || 'неизвестная ошибка';
     return;
   }
 
@@ -10113,6 +10239,7 @@ async function loadPseudonymsAndExcluded() {
     console.error('[group-ps] memberships error:', mErr);
     groupPseudonyms = [];
     excludedMembers = [];
+    pseudonymsError = mErr.message || 'неизвестная ошибка';
     return;
   }
 
@@ -10163,6 +10290,17 @@ function renderPseudonymsBlock() {
   const container = document.getElementById('group-pseudonyms-list');
   const myRole = currentProfile?.role;
   const isOrganizer = (myRole === 'main_organizer' || myRole === 'co_organizer');
+
+  // Если loadPseudonymsAndExcluded упала с ошибкой — показываем её пользователю
+  // в стиле других ошибок портала (.error в CSS), а не молча пустую таблицу.
+  // По шаблону groupMembersError в renderGroupMembers.
+  if (pseudonymsError) {
+    container.innerHTML = '<div class="error">Не удалось загрузить список имён: ' +
+      escapeHtml(pseudonymsError) + '</div>';
+    // Блок добавления имени тоже скрываем — добавлять некуда без актуального справочника.
+    document.getElementById('add-pseudonym-block').classList.add('hidden');
+    return;
+  }
 
   if (!groupPseudonyms || groupPseudonyms.length === 0) {
     container.innerHTML = '<div class="empty-state">В этой группе пока нет игровых имён.</div>';
@@ -10222,6 +10360,15 @@ function renderExcludedBlock() {
   // Participant не должен видеть, кого исключали (это внутренняя кухня группы).
   if (!isOrganizer) {
     card.classList.add('hidden');
+    return;
+  }
+
+  // Если loadPseudonymsAndExcluded упала с ошибкой — показываем карточку
+  // с сообщением, чтобы организатор не подумал, что список просто пуст.
+  if (pseudonymsError) {
+    card.classList.remove('hidden');
+    container.innerHTML = '<div class="error">Не удалось загрузить список исключённых: ' +
+      escapeHtml(pseudonymsError) + '</div>';
     return;
   }
 
@@ -10484,6 +10631,15 @@ function renderGroupMembers() {
   const isMain = myRole === 'main_organizer';
   const isOrganizer = isMain || myRole === 'co_organizer';
   const myId = currentUser?.id;
+
+  // Если loadGroupMembers упала с ошибкой — показываем её пользователю
+  // в стиле других ошибок портала (.error в CSS), а не молча пустую таблицу.
+  // Пункт 23 ревью.
+  if (groupMembersError) {
+    container.innerHTML = '<div class="error">Не удалось загрузить состав группы: ' +
+      escapeHtml(groupMembersError) + '</div>';
+    return;
+  }
 
   if (groupMembers.length === 0) {
     container.innerHTML = '<div class="empty-state">Участников нет.</div>';
