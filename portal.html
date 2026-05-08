@@ -3696,6 +3696,7 @@ async function renderResultsV2ForOrganizer() {
   body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v2-org] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -3849,11 +3850,13 @@ async function archiveSurveyFromScreen() {
 async function renderResultsV2ForParticipant() {
   const body = document.getElementById('survey-body');
   const s = currentSurvey;
+  if (!s) { console.log('[render-v2-part] currentSurvey is null, abort'); return; }
   const visibility = s.visibility || 'self_only';
 
   body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v2-part] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
   const questions = s.settings?.questions || [];
   const subjects = getSubjectsForResults();
@@ -5579,6 +5582,7 @@ async function renderResultsV1ForOrganizer() {
   body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v1-org] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -5762,11 +5766,13 @@ function renderOneV1ResponseForOrganizer(payload, questions) {
 async function renderResultsV1ForParticipant() {
   const body = document.getElementById('survey-body');
   const s = currentSurvey;
+  if (!s) { console.log('[render-v1-part] currentSurvey is null, abort'); return; }
   const visibility = s.visibility || 'self_only';
 
   body.innerHTML = '<div class="card"><p>Загрузка результатов…</p></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v1-part] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
   const questions = s.settings?.questions || [];
   const useTone = s.settings?.use_tone === true;
@@ -6112,6 +6118,7 @@ function getV3Subjects() {
 async function renderOrganizerViewV3() {
   const body = document.getElementById('survey-body');
   const s = currentSurvey;
+  if (!s) { console.log('[render-org-v3] currentSurvey is null, abort'); return; }
   const questions = s.settings?.questions || [];
   const textVisibility = s.settings?.text_visibility || 'self_only';
 
@@ -6125,6 +6132,7 @@ async function renderOrganizerViewV3() {
 
   // Загрузим ответы, чтобы показать явку
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-org-v3] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
 
   const isMain = currentProfile?.role === 'main_organizer';
@@ -6668,6 +6676,7 @@ async function renderResultsV3ForOrganizer() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v3-org] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -6711,6 +6720,7 @@ async function renderResultsV3ForParticipant() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v3-part] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -6774,6 +6784,7 @@ async function renderResultsV3ForParticipant() {
 
 async function renderOrganizerViewV4() {
   const s = currentSurvey;
+  if (!s) { console.log('[render-org-v4] currentSurvey is null, abort'); return; }
   const body = document.getElementById('survey-body');
   const isMain = currentProfile?.role === 'main_organizer';
   const isOrganizer = isMain || currentProfile?.role === 'co_organizer';
@@ -6789,6 +6800,7 @@ async function renderOrganizerViewV4() {
 
   // Загрузим ответы для явки
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-org-v4] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
 
   // Активный V4 — показываем сводку настроек (аналогично V3)
@@ -8186,9 +8198,11 @@ async function renderResultsV4ForOrganizer() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v4-org] currentSurvey is null after load, abort'); return; }
   // Догружаем имена для исключённых subjects, реально оценённых в этом опросе
   // (страховка от потери данных в архивных отчётах после исключения участников).
   await ensureV4SubjectsCacheForCurrentSurvey();
+  if (!currentSurvey) { console.log('[render-v4-org] currentSurvey is null after subjects cache, abort'); return; }
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const questions = s.settings?.questions || [];
@@ -8244,8 +8258,10 @@ async function renderResultsV4ForParticipant() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v4-part] currentSurvey is null after load, abort'); return; }
   // Догружаем имена для исключённых subjects, реально оценённых в этом опросе.
   await ensureV4SubjectsCacheForCurrentSurvey();
+  if (!currentSurvey) { console.log('[render-v4-part] currentSurvey is null after subjects cache, abort'); return; }
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const settings = s.settings || {};
@@ -8386,6 +8402,7 @@ function getV5CandidatesFor(userId) {
 
 async function renderOrganizerViewV5() {
   const s = currentSurvey;
+  if (!s) { console.log('[render-org-v5] currentSurvey is null, abort'); return; }
   const body = document.getElementById('survey-body');
   const isMain = currentProfile?.role === 'main_organizer';
   const isOrganizer = isMain || currentProfile?.role === 'co_organizer';
@@ -8399,6 +8416,7 @@ async function renderOrganizerViewV5() {
   body.innerHTML = '<div class="card"><p>Загрузка…</p></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-org-v5] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses;
 
   let html = '<div class="card">';
@@ -9190,6 +9208,7 @@ async function renderResultsV5ForOrganizer() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v5-org] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const settings = s.settings || {};
@@ -9233,6 +9252,7 @@ async function renderResultsV5ForParticipant() {
   body.innerHTML = '<div class="card"><div class="loading-text">Загружаем результаты...</div></div>';
 
   cachedAllResponses = await loadAllResponses();
+  if (!currentSurvey) { console.log('[render-v5-part] currentSurvey is null after load, abort'); return; }
   const responses = cachedAllResponses || [];
   const s = currentSurvey;
   const settings = s.settings || {};
