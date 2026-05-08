@@ -1650,6 +1650,13 @@ let _registerFreePsToken = 0;
 // опросов чужой группы при быстром клике по переключателю.
 let _groupSwitchToken = 0;
 
+// Счётчик открытий опроса. Инкрементируется при каждом вызове openSurvey
+// и проверяется после каждого await внутри. Защита от гонки: если
+// пользователь быстро переключил группу или открыл другой опрос за время
+// загрузки, результаты старой загрузки игнорируются и форма голосования
+// не показывается с данными чужой группы.
+let _openSurveyToken = 0;
+
 const LS_CURRENT_GROUP_KEY = 'sb-current-group';
 
 // ============================================================
@@ -1835,6 +1842,11 @@ function hardLocalLogout() {
   _proxyMarkedBad = false;
   _proxyConnectionFailures = 0;
   _firstFailureAt = 0;
+  // Инкрементируем токены — все идущие await в loadSurveysInner и openSurvey
+  // дропнутся через проверку и не попытаются работать с уже очищенным
+  // currentUser/currentGroupId.
+  _groupSwitchToken++;
+  _openSurveyToken++;
   // Сбрасываем кэш отметок визита — при следующем логине отметим заново
   touchedGroupsThisSession.clear();
   console.log('[hardLogout] done');
@@ -2534,6 +2546,9 @@ async function archiveSurvey(id) {
     alert('Ошибка архивации: ' + error.message);
     return;
   }
+  // Инвалидируем кэш ответов: при следующем открытии нужны актуальные данные
+  // (во время активного периода голоса могли продолжать приходить).
+  invalidateResponsesCache(id);
   loadSurveys();
 }
 
@@ -2554,6 +2569,8 @@ async function deleteSurvey(id) {
     alert('Ошибка удаления: ' + error.message);
     return;
   }
+  // Опрос удалён — чистим кэш ответов, чтобы освободить sessionStorage
+  invalidateResponsesCache(id);
   await loadSurveys();
 }
 
@@ -3232,6 +3249,34 @@ async function openSurvey(id) {
   stopPolling();
   showScreen('loading');
 
+  // Запоминаем токен и id группы для защиты от гонки.
+  // Если за время await пользователь переключит группу или откроет другой
+  // опрос — наш токен устареет, и мы не должны записать результаты старой
+  // загрузки в глобальные переменные. Это защита от ситуации:
+  //   1. Юзер в группе 161 кликнул на «Опрос А»;
+  //   2. Пока опрос А грузился через медленный прокси — переключил
+  //      группу на test или кликнул на «Опрос Б»;
+  //   3. Без этой проверки в currentSurvey попадёт «Опрос А», а в
+  //      allGroupParticipants — состав группы test. Форма покажет кашу.
+  const myToken = ++_openSurveyToken;
+  const myGroupId = currentGroupId;
+  const myGroupSwitchToken = _groupSwitchToken;
+
+  // Хелпер: проверяет, не устарел ли наш контекст. Если устарел —
+  // выходим тихо, не трогая глобальные переменные и не показывая экран.
+  // Возвращает true если контекст всё ещё актуален, false если нет.
+  function stillFresh() {
+    if (myToken !== _openSurveyToken) {
+      console.log('[survey] stale (newer openSurvey started), aborting load of ' + id);
+      return false;
+    }
+    if (myGroupSwitchToken !== _groupSwitchToken || myGroupId !== currentGroupId) {
+      console.log('[survey] stale (group switched), aborting load of ' + id);
+      return false;
+    }
+    return true;
+  }
+
   // Сбрасываем кэш имён исключённых subjects от предыдущего опроса.
   // Будет заполнен заново через ensureV4SubjectsCacheForCurrentSurvey()
   // при рендере результатов архивного V4.
@@ -3243,6 +3288,7 @@ async function openSurvey(id) {
     .select('*')
     .eq('id', id)
     .maybeSingle();
+  if (!stillFresh()) return;
   if (err1 || !survey) {
     alert('Ошибка загрузки опроса: ' + (err1?.message || 'не найден'));
     backToList();
@@ -3257,15 +3303,20 @@ async function openSurvey(id) {
     .eq('survey_id', id)
     .eq('user_id', currentUser.id)
     .maybeSingle();
+  if (!stillFresh()) return;
   currentOwnResponse = ownResp || null;
 
   // Загружаем список участников группы — всегда заново, не из кеша.
   // Если кто-то только что добавлен/исключён, форма должна это учитывать.
-  allGroupParticipants = await loadGroupParticipants();
+  const groupParticipants = await loadGroupParticipants();
+  if (!stillFresh()) return;
+  allGroupParticipants = groupParticipants;
 
   // Для Варианта 3, 4 и 5 нужен отдельный список с user_id — тоже свежий
   if (survey.type === 'variant_3' || survey.type === 'variant_4' || survey.type === 'variant_5') {
-    allGroupParticipantsV3 = await loadGroupParticipantsV3();
+    const groupParticipantsV3 = await loadGroupParticipantsV3();
+    if (!stillFresh()) return;
+    allGroupParticipantsV3 = groupParticipantsV3;
   }
 
   renderSurveyScreen();
@@ -3274,6 +3325,11 @@ async function openSurvey(id) {
 
 function backToList() {
   console.log('[survey] back to list');
+  // Инкрементируем токен — если в этот момент ещё идёт openSurvey
+  // (например, пользователь нажал «Назад» прямо во время загрузки),
+  // её await'ы дропнутся через stillFresh() и не запишут результаты
+  // поверх дашборда.
+  _openSurveyToken++;
   currentSurvey = null;
   currentOwnResponse = null;
   startPolling();
@@ -3460,18 +3516,91 @@ function renderAwaitingPublication(survey) {
 // ============================================================
 let cachedAllResponses = null; // кэш всех ответов текущего опроса
 
+// Кэш ответов архивных опросов в sessionStorage. Архивный опрос не
+// меняется, поэтому при повторном открытии можно не делать сетевой запрос.
+// Это снимает основную часть нагрузки в сценарии, когда 30-40 человек
+// одновременно смотрят результат архивного опроса: первый запрос идёт в
+// сеть, последующие открытия и переключения между секциями берут данные
+// из памяти. Также экономит трафик при сценарии «открыл, посмотрел,
+// вернулся, опять открыл».
+//
+// Ключи в sessionStorage: 'cache-responses-<survey_id>'.
+// sessionStorage (а не localStorage) — потому что данные ответов
+// чувствительные, не должны переживать закрытие вкладки.
+// При QuotaExceeded — тихо игнорируем, кэш не критичен.
+
+const RESPONSES_CACHE_PREFIX = 'cache-responses-';
+
+function getCachedResponses(surveyId) {
+  try {
+    const raw = sessionStorage.getItem(RESPONSES_CACHE_PREFIX + surveyId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch (e) {
+    console.warn('[responses-cache] read error:', e);
+    return null;
+  }
+}
+
+function setCachedResponses(surveyId, data) {
+  try {
+    sessionStorage.setItem(RESPONSES_CACHE_PREFIX + surveyId, JSON.stringify(data));
+  } catch (e) {
+    // Квота sessionStorage обычно 5-10 МБ. Если не влезло — не критично,
+    // следующее открытие просто снова сходит в сеть.
+    console.warn('[responses-cache] write error (probably quota):', e.message);
+  }
+}
+
+// Принудительная инвалидация кэша ответов конкретного опроса.
+// Вызывается после действий, которые могут изменить набор ответов:
+//   - удаление опроса (deleteSurvey);
+//   - архивация опроса (archiveSurvey, archiveSurveyFromScreen) — потому
+//     что во время активного опроса голоса могут продолжать приходить,
+//     и при последующей загрузке архива нужны актуальные данные.
+function invalidateResponsesCache(surveyId) {
+  try {
+    sessionStorage.removeItem(RESPONSES_CACHE_PREFIX + surveyId);
+  } catch (e) {}
+}
+
 async function loadAllResponses() {
-  console.log('[responses] loading all for survey ' + currentSurvey.id);
+  const s = currentSurvey;
+  if (!s) return [];
+
+  // Для архивных опросов сначала пробуем кэш. Архивные опросы не меняются,
+  // поэтому кэш гарантированно актуален (исключение — сценарий, когда
+  // организатор удалил/восстановил голоса вручную через БД, но это вне
+  // штатного workflow).
+  if (s.status === 'archived') {
+    const cached = getCachedResponses(s.id);
+    if (cached) {
+      console.log('[responses] cache hit for archived survey ' + s.id + ' (' + cached.length + ' rows)');
+      return cached;
+    }
+  }
+
+  console.log('[responses] loading all for survey ' + s.id);
   const { data, error } = await sb
     .from('responses')
     .select('*')
-    .eq('survey_id', currentSurvey.id)
+    .eq('survey_id', s.id)
     .order('created_at', { ascending: true });
   if (error) {
     console.error('[responses] error:', error);
     return [];
   }
   console.log('[responses] loaded ' + data.length);
+
+  // Кэшируем только результаты архивных опросов. Активные опросы могут
+  // прирастать новыми голосами в любой момент, кэш для них даст устаревшие
+  // данные.
+  if (s.status === 'archived') {
+    setCachedResponses(s.id, data);
+  }
+
   return data;
 }
 
@@ -3706,6 +3835,11 @@ async function archiveSurveyFromScreen() {
     alert('Ошибка архивации: ' + error.message);
     return;
   }
+  // Инвалидируем кэш ответов: при следующем открытии (уже как архивный)
+  // нужны актуальные данные. И сбрасываем в памяти кэш cachedAllResponses,
+  // чтобы текущий рендер тоже подхватил последние голоса.
+  invalidateResponsesCache(currentSurvey.id);
+  cachedAllResponses = null;
   // Перезагружаем опрос с новым статусом
   const { data: fresh } = await sb.from('surveys').select('*').eq('id', currentSurvey.id).maybeSingle();
   if (fresh) currentSurvey = fresh;
