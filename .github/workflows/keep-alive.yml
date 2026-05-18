@@ -2,10 +2,12 @@ name: Keep services alive
 
 on:
   schedule:
-    # Каждые 5 дней в 13:00 UTC = 21:00 по Иркутску (UTC+8)
-    # Cron не умеет "каждые 5 дней" напрямую, поэтому перечисляем дни месяца:
-    # 1, 6, 11, 16, 21, 26 числа каждого месяца
-    - cron: '0 13 1,6,11,16,21,26 * *'
+    # Каждые 3 дня в 13:00 UTC = 21:00 по Иркутску (UTC+8)
+    # Cron не умеет "каждые 3 дня" напрямую, поэтому перечисляем дни месяца:
+    # 1, 4, 7, 10, 13, 16, 19, 22, 25, 28 числа каждого месяца
+    # Запас от лимита Supabase 7 дней: минимум 3 дня, что даёт двойной резерв
+    # при возможных сбоях GitHub Actions или прокси.
+    - cron: '0 13 1,4,7,10,13,16,19,22,25,28 * *'
   workflow_dispatch:
 
 jobs:
@@ -28,46 +30,59 @@ jobs:
           echo ""
           echo "Deno proxy alive"
 
-      - name: Wake up Supabase via Vercel proxy
+      - name: Wake up Supabase database via Vercel proxy (real SELECT query)
         env:
           SUPABASE_KEY: 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY'
         run: |
-          echo "[3/4] Waking up Supabase via Vercel proxy..."
+          echo "[3/4] Waking up Supabase database via Vercel proxy..."
+          echo "Real SELECT query to 'groups' table (passes through PostgreSQL)"
           HTTP_CODE=$(curl --silent --show-error --max-time 30 \
             --output /tmp/response.txt \
             --write-out "%{http_code}" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "https://probe-vercel-kappa.vercel.app/rest/v1/")
+            "https://probe-vercel-kappa.vercel.app/rest/v1/groups?select=id&limit=1")
           echo "HTTP code: $HTTP_CODE"
-          echo "Response (first 200 chars):"
-          head -c 200 /tmp/response.txt
+          echo "Response body:"
+          cat /tmp/response.txt
           echo ""
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
-            echo "Supabase responded (any code 2xx-4xx means project is awake)"
-          else
-            echo "Supabase did not respond properly"
+          # Ожидаем HTTP 200 и JSON-массив (даже пустой []).
+          # 200 + массив означает что PostgreSQL реально получил SELECT-запрос,
+          # обработал его и вернул данные. Это и есть "database activity" с точки
+          # зрения Supabase, что сбрасывает таймер 7 дней.
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "ERROR: Expected HTTP 200, got $HTTP_CODE"
             exit 1
           fi
+          # Проверяем что ответ начинается с [ (JSON-массив)
+          if ! head -c 1 /tmp/response.txt | grep -q '\['; then
+            echo "ERROR: Response is not a JSON array. PostgreSQL did not respond."
+            exit 1
+          fi
+          echo "Supabase PostgreSQL responded with data - activity counted"
 
-      - name: Wake up Supabase via Deno proxy
+      - name: Wake up Supabase database via Deno proxy (real SELECT query)
         env:
           SUPABASE_KEY: 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY'
         run: |
-          echo "[4/4] Waking up Supabase via Deno proxy..."
+          echo "[4/4] Waking up Supabase database via Deno proxy..."
+          echo "Real SELECT query to 'groups' table (passes through PostgreSQL)"
           HTTP_CODE=$(curl --silent --show-error --max-time 30 \
             --output /tmp/response.txt \
             --write-out "%{http_code}" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "https://probe-deno.nsolyankin.deno.net/rest/v1/")
+            "https://probe-deno.nsolyankin.deno.net/rest/v1/groups?select=id&limit=1")
           echo "HTTP code: $HTTP_CODE"
-          echo "Response (first 200 chars):"
-          head -c 200 /tmp/response.txt
+          echo "Response body:"
+          cat /tmp/response.txt
           echo ""
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
-            echo "Supabase responded via Deno proxy"
-          else
-            echo "Supabase did not respond via Deno proxy"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "ERROR: Expected HTTP 200, got $HTTP_CODE"
             exit 1
           fi
+          if ! head -c 1 /tmp/response.txt | grep -q '\['; then
+            echo "ERROR: Response is not a JSON array. PostgreSQL did not respond."
+            exit 1
+          fi
+          echo "Supabase PostgreSQL responded with data via Deno proxy - activity counted"
