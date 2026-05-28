@@ -30,59 +30,59 @@ jobs:
           echo ""
           echo "Deno proxy alive"
 
-      - name: Wake up Supabase database via Vercel proxy (real SELECT query)
+      - name: Wake up Supabase database via Vercel proxy (real INSERT)
         env:
           SUPABASE_KEY: 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY'
         run: |
           echo "[3/4] Waking up Supabase database via Vercel proxy..."
-          echo "Real SELECT query to 'groups' table (passes through PostgreSQL)"
+          echo "Real INSERT into 'keep_alive_log' table (writes a row in PostgreSQL)"
           HTTP_CODE=$(curl --silent --show-error --max-time 30 \
             --output /tmp/response.txt \
             --write-out "%{http_code}" \
+            -X POST \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "https://probe-vercel-kappa.vercel.app/rest/v1/groups?select=id&limit=1")
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d '{}' \
+            "https://probe-vercel-kappa.vercel.app/rest/v1/keep_alive_log")
           echo "HTTP code: $HTTP_CODE"
           echo "Response body:"
           cat /tmp/response.txt
           echo ""
-          # Ожидаем HTTP 200 и JSON-массив (даже пустой []).
-          # 200 + массив означает что PostgreSQL реально получил SELECT-запрос,
-          # обработал его и вернул данные. Это и есть "database activity" с точки
-          # зрения Supabase, что сбрасывает таймер 7 дней.
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "ERROR: Expected HTTP 200, got $HTTP_CODE"
+          # Ожидаем HTTP 201 (Created). Это означает что PostgreSQL реально
+          # ВСТАВИЛ строку в таблицу - запись гарантированно доходит до базы
+          # и не может быть закэширована шлюзом. Это надёжная "database activity",
+          # которая сбрасывает таймер 7 дней (в отличие от SELECT, который может
+          # кэшироваться и не считаться активностью).
+          if [ "$HTTP_CODE" -ne 201 ]; then
+            echo "ERROR: Expected HTTP 201 (Created), got $HTTP_CODE"
             exit 1
           fi
-          # Проверяем что ответ начинается с [ (JSON-массив)
-          if ! head -c 1 /tmp/response.txt | grep -q '\['; then
-            echo "ERROR: Response is not a JSON array. PostgreSQL did not respond."
-            exit 1
-          fi
-          echo "Supabase PostgreSQL responded with data - activity counted"
+          echo "Supabase PostgreSQL inserted a row - activity counted"
 
-      - name: Wake up Supabase database via Deno proxy (real SELECT query)
+      - name: Wake up Supabase database via Deno proxy (real INSERT)
         env:
           SUPABASE_KEY: 'sb_publishable_k_Cy89H33YGxyrZn-tsJBg__b0feVAY'
         run: |
           echo "[4/4] Waking up Supabase database via Deno proxy..."
-          echo "Real SELECT query to 'groups' table (passes through PostgreSQL)"
+          echo "Real INSERT into 'keep_alive_log' table (writes a row in PostgreSQL)"
           HTTP_CODE=$(curl --silent --show-error --max-time 30 \
             --output /tmp/response.txt \
             --write-out "%{http_code}" \
+            -X POST \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "https://probe-deno.nsolyankin.deno.net/rest/v1/groups?select=id&limit=1")
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d '{}' \
+            "https://probe-deno.nsolyankin.deno.net/rest/v1/keep_alive_log")
           echo "HTTP code: $HTTP_CODE"
           echo "Response body:"
           cat /tmp/response.txt
           echo ""
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "ERROR: Expected HTTP 200, got $HTTP_CODE"
+          if [ "$HTTP_CODE" -ne 201 ]; then
+            echo "ERROR: Expected HTTP 201 (Created), got $HTTP_CODE"
             exit 1
           fi
-          if ! head -c 1 /tmp/response.txt | grep -q '\['; then
-            echo "ERROR: Response is not a JSON array. PostgreSQL did not respond."
-            exit 1
-          fi
-          echo "Supabase PostgreSQL responded with data via Deno proxy - activity counted"
+          echo "Supabase PostgreSQL inserted a row via Deno proxy - activity counted"
